@@ -1,4 +1,4 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "sige_hydra" (
     "id" TEXT NOT NULL,
     "numero" TEXT NOT NULL,

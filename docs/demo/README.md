@@ -1,5 +1,21 @@
 # Demo conceptual Hydra · agua (entregable 14)
 
+> **Demo de la app completa (recomendado):** el proyecto REAL con datos demo
+> corre desde la raíz del repo — PostgreSQL + API NestJS + frontend React,
+> con los lotes AQUACIS reales sembrados a través del esquema Prisma
+> (710 contratos, 705 medidores, 710 lecturas, 87 consumos, 106 incidencias,
+> anonimizados):
+>
+> ```bash
+> cd hydra
+> docker compose up -d --build        # FRONTEND_PORT=8081 si 8080 está ocupado
+> # → http://localhost:8080 · login demo@ctcf.local / demo123
+> ```
+>
+> El seed demo es `backend/scripts/seed-demo-aquacis.ts` (corre solo en
+> `api-migrate` tras las migraciones; idempotente). Este directorio contiene
+> además el dashboard KPI standalone de abajo.
+
 Pipeline real corriendo en Docker: lotes de lectura AQUACIS reales (archivos
 posicionales de 1,480 caracteres) → KPIs contra el modelo canónico `agua` →
 dashboard. **Ningún número está hardcodeado**: el contenedor parsea y calcula

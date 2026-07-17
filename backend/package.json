@@ -1,4 +1,5 @@
 {"name":"contract-to-cash-flow-api","version":"0.1.0","private":true,"scripts":{"build":"nest build","start":"nest start","start:dev":"nest start --watch","start:prod":"prisma migrate deploy && npx prisma db seed && node dist/src/main","lint":"eslint \"{src,apps,libs,test}/**/*.ts\"","prisma:generate":"prisma generate","prisma:migrate":"prisma migrate dev","prisma:studio":"prisma studio","prisma:seed":"ts-node prisma/seed.ts",
+    "seed:demo-aquacis":"TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-demo-aquacis.ts",
     "import-sige-hydra":"ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-sige-hydra.ts",
     "import:inegi-catalog":"ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-inegi-catalog.ts",
     "import:localidades-sige-qro":"ts-node scripts/import-localidades-sige-qro.ts",
