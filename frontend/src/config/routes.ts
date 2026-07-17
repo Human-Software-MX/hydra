@@ -195,6 +195,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
   },
   // Operaciones
   {
+    path: 'indicadores',
+    label: 'Indicadores PIGOO',
+    icon: PieChart,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN'],
+    group: 'Operaciones',
+  },
+  {
     path: 'monitoreo',
     label: 'Monitoreo',
     icon: Activity,
