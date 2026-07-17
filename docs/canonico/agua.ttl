@@ -1,0 +1,362 @@
+@prefix cal: <https://callosum.dev/ontology/agua#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix geo: <http://www.opengis.net/ont/geosparql#> .
+
+<https://callosum.dev/ontology/agua> a owl:Ontology ;
+    dcterms:title "Ontología canónica: agua"@es ;
+    owl:versionInfo "0.1.0" ;
+    dcterms:conformsTo "IWA/AWWA standard water balance (Lambert & Hirner 2000; AWWA M36 5th ed. with data validity grading) + IWA PI system (Alegre et al. 3rd ed. 2017) / IBNET / PIGOO (IMTA) for indicators; meter-to-cash core normalized from the IMTA \"Sistema comercial\" reference (comercialización, padrón, medición, facturación y cobranza) and the CIS vocabulary shared by Oracle CC&B / SAP IS-U."@es ;
+    rdfs:comment "Canonical commercial-water-utility model (meter-to-cash + water balance), curated from Hydra (CEA Querétaro), AQUACIS reading flat files, SIGE legacy catalogs, external-collector payment layouts, SAP IDOC accounting interface and the IWA/AWWA/PIGOO standards. Conventions: dates ISO 8601 (date) and timestamps ISO 8601 UTC (datetime); money as decimal MXN major units with explicit currency field where another currency is possible; volumes in m3; readings in integer register units; geometry/points as GeoJSON WGS84; ids are opaque strings; enum values snake_case English. Header/line splits are explicit (bill/bill_line, accounting_voucher/accounting_voucher_line). Regulatory note: service cuts on domestic connections must be modeled as restriction to vital minimum, never total suspension (Ley General de Aguas, DOF 2025-12-11) — hence work_order.cut_impact."@es ;
+    dcterms:source "callosum canonical model agua" .
+
+### Clase party
+cal:Party a owl:Class ; rdfs:label "Party"@es ; rdfs:comment "Person or organization holding contracts or roles (aka Persona, abonado, titular, propietario, ABONADO in AQUACIS)."@es ; skos:note "clave: id"@es .
+cal:party_id a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:party_name a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "name"@es ; rdfs:comment "requerido · Given name or razón social; aka nombre/razonSocial"@es .
+cal:party_paternal_surname a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "paternal_surname"@es ; rdfs:comment "aka apellidoPaterno"@es .
+cal:party_maternal_surname a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "maternal_surname"@es ; rdfs:comment "aka apellidoMaterno"@es .
+cal:party_type a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "type"@es ; rdfs:comment "valores: natural_person, organization · aka tipo persona Física/Moral"@es .
+cal:party_tax_id a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "tax_id"@es ; rdfs:comment "RFC (MX); aka rfc"@es .
+cal:party_national_id a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "national_id"@es ; rdfs:comment "CURP (MX); aka curp"@es .
+cal:party_tax_regime a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "tax_regime"@es ; rdfs:comment "SAT c_RegimenFiscal; aka regimenFiscal"@es .
+cal:party_email a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "email"@es .
+cal:party_phone a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "phone"@es ; rdfs:comment "aka telefono/telefonoAlt"@es .
+cal:party_id_document a owl:DatatypeProperty ; rdfs:domain cal:Party ; rdfs:range xsd:string ; rdfs:label "id_document"@es ; rdfs:comment "Identification kind+number (INE, pasaporte, licencia); aka tipoIdentificacion/numIdentificacion"@es .
+
+### Clase party_role
+cal:PartyRole a owl:Class ; rdfs:label "Party role on agreement"@es ; rdfs:comment "Links a party to a service agreement with a role and validity window (aka RolPersonaContrato; roles PROPIETARIO/FISCAL/CONTACTO)."@es ; skos:note "clave: id"@es .
+cal:party_role_id a owl:DatatypeProperty ; rdfs:domain cal:PartyRole ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:party_role_party_id a owl:ObjectProperty ; rdfs:domain cal:PartyRole ; rdfs:range cal:Party ; rdfs:label "party_id"@es ; rdfs:comment "requerido"@es .
+cal:party_role_agreement_id a owl:ObjectProperty ; rdfs:domain cal:PartyRole ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:party_role_role a owl:DatatypeProperty ; rdfs:domain cal:PartyRole ; rdfs:range xsd:string ; rdfs:label "role"@es ; rdfs:comment "requerido · valores: owner, fiscal, contact, tenant, other · aka rol PROPIETARIO/FISCAL/CONTACTO"@es .
+cal:party_role_valid_from a owl:DatatypeProperty ; rdfs:domain cal:PartyRole ; rdfs:range xsd:dateTime ; rdfs:label "valid_from"@es ; rdfs:comment "aka fechaDesde"@es .
+cal:party_role_valid_to a owl:DatatypeProperty ; rdfs:domain cal:PartyRole ; rdfs:range xsd:dateTime ; rdfs:label "valid_to"@es ; rdfs:comment "aka fechaHasta; null = current"@es .
+
+### Clase address
+cal:Address a owl:Class ; rdfs:label "Address"@es ; rdfs:comment "Normalized service/fiscal address with INEGI hierarchy and legacy Aquasis keys (aka Domicilio; AQUACIS DIR*/NCALNOMBRE/BARRIO/MUNICIPIO)."@es ; skos:note "clave: id"@es .
+cal:address_id a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:address_street a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "street"@es ; rdfs:comment "requerido · aka calle, NCALNOMBRE"@es .
+cal:address_exterior_number a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "exterior_number"@es ; rdfs:comment "aka numExterior, DIRFINCA"@es .
+cal:address_interior_number a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "interior_number"@es ; rdfs:comment "aka numInterior, DIRCOMFINCA"@es .
+cal:address_neighborhood_key a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "neighborhood_key"@es ; rdfs:comment "Colonia key; aka aquasisBarrId (Aquasis barrid), CatalogoColoniaINEGI"@es .
+cal:address_locality_key a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "locality_key"@es ; rdfs:comment "Localidad key; aka aquasisPobid (Aquasis pobid), CatalogoLocalidadINEGI; NOTE AQUACIS labels this field BARRIO in the reading file"@es .
+cal:address_municipality_key a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "municipality_key"@es ; rdfs:comment "INEGI municipio key; aka claveINEGI, SIGE proid; AQUACIS MUNICIPIO/Población"@es .
+cal:address_state_key a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "state_key"@es ; rdfs:comment "INEGI estado key (22 = Querétaro)"@es .
+cal:address_postal_code a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "postal_code"@es ; rdfs:comment "aka codigoPostal"@es .
+cal:address_between_streets a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "between_streets"@es ; rdfs:comment "aka entreCalle1/entreCalle2"@es .
+cal:address_reference_point a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:string ; rdfs:label "reference_point"@es ; rdfs:comment "GeoJSON point WGS84; aka gpsLat/gpsLng"@es .
+cal:address_inegi_validated a owl:DatatypeProperty ; rdfs:domain cal:Address ; rdfs:range xsd:boolean ; rdfs:label "inegi_validated"@es ; rdfs:comment "aka validadoINEGI"@es .
+
+### Clase service_point
+cal:ServicePoint a owl:Class ; rdfs:label "Service point"@es ; rdfs:comment "Physical connection where service is delivered (aka PuntoServicio, toma, AQUACIS PTOSID; legacy Hydra Toma folds in here). Supports parent-child hierarchy with consumption split (macro meter / condominio individualization) and the cuttability flag."@es ; skos:note "clave: id"@es .
+cal:service_point_id a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:service_point_code a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · Business code; aka codigo, PTOSID"@es .
+cal:service_point_address_id a owl:ObjectProperty ; rdfs:domain cal:ServicePoint ; rdfs:range cal:Address ; rdfs:label "address_id"@es .
+cal:service_point_service_type a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "service_type"@es ; rdfs:comment "valores: water, sewerage, sanitation, mixed · aka tipo Agua/Alcantarillado/Saneamiento"@es .
+cal:service_point_supply_type a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "supply_type"@es ; rdfs:comment "aka CatalogoTipoSuministro (reading period MENSUAL/BIMESTRAL, requiere medidor), AQUACIS TIPOSUMINISTRO"@es .
+cal:service_point_connection_diameter a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "connection_diameter"@es ; rdfs:comment "aka diametroToma"@es .
+cal:service_point_pipe_material a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "pipe_material"@es ; rdfs:comment "aka materialTuberia"@es .
+cal:service_point_location a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "location"@es ; rdfs:comment "GeoJSON point WGS84; aka gpsLat/gpsLng"@es .
+cal:service_point_cadastral_key a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "cadastral_key"@es ; rdfs:comment "Link to catastro parcel; aka claveCatastral, AQUACIS PTOSREFCAT"@es .
+cal:service_point_hydraulic_sector_id a owl:ObjectProperty ; rdfs:domain cal:ServicePoint ; rdfs:range cal:HydraulicSector ; rdfs:label "hydraulic_sector_id"@es ; rdfs:comment "DMA membership for the water balance"@es .
+cal:service_point_parent_service_point_id a owl:ObjectProperty ; rdfs:domain cal:ServicePoint ; rdfs:range cal:ServicePoint ; rdfs:label "parent_service_point_id"@es ; rdfs:comment "aka puntoServicioPadreId, AQUACIS POLIZAPADRE (macro meter)"@es .
+cal:service_point_consumption_split_pct a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:decimal ; rdfs:label "consumption_split_pct"@es ; rdfs:comment "% of parent consumption assigned to this child; aka reparticionConsumo"@es .
+cal:service_point_cuttable a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:boolean ; rdfs:label "cuttable"@es ; rdfs:comment "Whether restriction orders may target it; aka cortable/motivoNoCortable"@es .
+cal:service_point_route_code a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "route_code"@es ; rdfs:comment "Reading walk-order; aka codigoRecorrido, AQUACIS LECPTOCODR"@es .
+cal:service_point_status a owl:DatatypeProperty ; rdfs:domain cal:ServicePoint ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: active, inactive, available, assigned · aka estado"@es .
+
+### Clase service_agreement
+cal:ServiceAgreement a owl:Class ; rdfs:label "Service agreement (contract)"@es ; rdfs:comment "The commercial contract binding parties to a service point — hub of the meter-to-cash cycle (aka Contrato, AQUACIS LECCNTTNUM, SIGE cnttnum; legacy references ceaNumContrato/cnttrefant)."@es ; skos:note "clave: id"@es .
+cal:service_agreement_id a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:service_agreement_contract_number a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "contract_number"@es ; rdfs:comment "requerido · Business number; aka numeroContrato, CONTRATO AQUACIS in collector files"@es .
+cal:service_agreement_legacy_references a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "legacy_references"@es ; rdfs:comment "Prior-system numbers: {cea: ceaNumContrato, sige: cnttnum/cnttrefant, aquacis: ...}; aka referenciaContratoAnterior"@es .
+cal:service_agreement_service_point_id a owl:ObjectProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range cal:ServicePoint ; rdfs:label "service_point_id"@es .
+cal:service_agreement_address_id a owl:ObjectProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range cal:Address ; rdfs:label "address_id"@es .
+cal:service_agreement_service_class_id a owl:ObjectProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range cal:ServiceClass ; rdfs:label "service_class_id"@es ; rdfs:comment "aka tipoContratacionId, SIGE tctcod"@es .
+cal:service_agreement_service_type a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "service_type"@es ; rdfs:comment "valores: water, sewerage, sanitation, mixed · aka tipoServicio"@es .
+cal:service_agreement_use_category a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "use_category"@es ; rdfs:comment "valores: domestic, non_domestic · Drives IVA exemption and no-total-cut rule; aka AQUACIS USO 1/0"@es .
+cal:service_agreement_activity_code a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "activity_code"@es ; rdfs:comment "Economic activity; aka CatalogoActividad CIG2018, SIGE ACTIPOL_*, AQUACIS CNTTACTIVID"@es .
+cal:service_agreement_billing_cycle a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "billing_cycle"@es ; rdfs:comment "valores: monthly, bimonthly, quarterly, biannual, annual · aka cicloFacturacion"@es .
+cal:service_agreement_status a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: active, suspended, restricted, canceled, in_process · aka estado, AQUACIS CNTTESTADO"@es .
+cal:service_agreement_legal_hold a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:boolean ; rdfs:label "legal_hold"@es ; rdfs:comment "aka bloqueadoJuridico"@es .
+cal:service_agreement_direct_debit a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:boolean ; rdfs:label "direct_debit"@es ; rdfs:comment "aka domiciliado"@es .
+cal:service_agreement_bill_delivery a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "bill_delivery"@es ; rdfs:comment "valores: paper, pdf, paper_and_pdf · aka tipoEnvioFactura"@es .
+cal:service_agreement_served_units a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:integer ; rdfs:label "served_units"@es ; rdfs:comment "Housing/commercial units served (tariff divisor); aka unidadesServidas, AQUACIS VIVIENDAS"@es .
+cal:service_agreement_start_date a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:date ; rdfs:label "start_date"@es ; rdfs:comment "aka fecha (String in Hydra — normalize to ISO)"@es .
+cal:service_agreement_end_date a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:date ; rdfs:label "end_date"@es ; rdfs:comment "aka fechaBaja"@es .
+cal:service_agreement_zone_path a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "zone_path"@es ; rdfs:comment "Operational hierarchy {administration, zone, district, route}; aka Administracion/Zona/Distrito/Ruta, SIGE expid, AQUACIS LOTPLECEXPID/ZONID"@es .
+cal:service_agreement_contract_text_snapshot a owl:DatatypeProperty ; rdfs:domain cal:ServiceAgreement ; rdfs:range xsd:string ; rdfs:label "contract_text_snapshot"@es ; rdfs:comment "aka textoContratoSnapshot (versioned clauses)"@es .
+
+### Clase service_class
+cal:ServiceClass a owl:Class ; rdfs:label "Service class (contracting type)"@es ; rdfs:comment "Parameterized user/tariff class (aka TipoContratacion, clase de usuario — 11 CEA classes; SIGE tctcod/tctclsccod)."@es ; skos:note "clave: id"@es .
+cal:service_class_id a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:service_class_code a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · aka codigo, TCT-*"@es .
+cal:service_class_name a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:string ; rdfs:label "name"@es ; rdfs:comment "requerido"@es .
+cal:service_class_requires_meter a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:boolean ; rdfs:label "requires_meter"@es ; rdfs:comment "aka requiereMedidor; SIGE sheet 'sin medidor'"@es .
+cal:service_class_requires_inspection a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:boolean ; rdfs:label "requires_inspection"@es ; rdfs:comment "aka requiereInspeccion"@es .
+cal:service_class_is_individualization a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:boolean ; rdfs:label "is_individualization"@es ; rdfs:comment "aka esIndividualizacion (condominio sub-metering)"@es .
+cal:service_class_allowed_periodicities a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:string ; rdfs:label "allowed_periodicities"@es ; rdfs:comment "aka periodicidadesPermitidas"@es .
+cal:service_class_active a owl:DatatypeProperty ; rdfs:domain cal:ServiceClass ; rdfs:range xsd:boolean ; rdfs:label "active"@es .
+
+### Clase meter
+cal:Meter a owl:Class ; rdfs:label "Meter"@es ; rdfs:comment "Installed water meter (aka Medidor, contador, AQUACIS CONTNUMERO/CONTCALMM/MARCA)."@es ; skos:note "clave: id"@es .
+cal:meter_id a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:meter_agreement_id a owl:ObjectProperty ; rdfs:domain cal:Meter ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:meter_serial_number a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "serial_number"@es ; rdfs:comment "requerido · aka serie, CONTNUMERO"@es .
+cal:meter_brand a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "brand"@es ; rdfs:comment "aka CatalogoMarcaMedidor, AQUACIS MARCA"@es .
+cal:meter_model a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "model"@es ; rdfs:comment "aka CatalogoModeloMedidor"@es .
+cal:meter_caliber a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "caliber"@es ; rdfs:comment "aka CatalogoCalibre (mm), AQUACIS CONTCALMM / CALIEQPUL (pulgadas)"@es .
+cal:meter_digits a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:integer ; rdfs:label "digits"@es ; rdfs:comment "Register digit count for rollover; aka digitos"@es .
+cal:meter_placement a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "placement"@es ; rdfs:comment "valores: interior, exterior · aka CatalogoEmplazamiento, AQUACIS EMPLINTEXT/SITUACION"@es .
+cal:meter_telemetry_type a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "telemetry_type"@es ; rdfs:comment "AMI/AMR protocol when present (DLMS/COSEM, wM-Bus, LoRaWAN, NB-IoT); aka tipoTelemetria"@es .
+cal:meter_initial_reading a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:integer ; rdfs:label "initial_reading"@es ; rdfs:comment "aka lecturaInicial"@es .
+cal:meter_installed_at a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:date ; rdfs:label "installed_at"@es ; rdfs:comment "aka fechaInstalacion"@es .
+cal:meter_last_verified_at a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:date ; rdfs:label "last_verified_at"@es ; rdfs:comment "aka fechaUltimaVerif"@es .
+cal:meter_status a owl:DatatypeProperty ; rdfs:domain cal:Meter ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: installed, in_stock, in_repair, retired · aka estado + MedidorBodega"@es .
+
+### Clase reading_batch
+cal:ReadingBatch a owl:Class ; rdfs:label "Reading batch (lot)"@es ; rdfs:comment "Reading work unit exchanged with the field (aka LoteLecturas; AQUACIS lot file named administración(4)+zona(3)+lote(3), e.g. 0001M08L20, /Salida → /Entrada round trip; lot types L lectura / I inspección / R repaso)."@es ; skos:note "clave: id"@es .
+cal:reading_batch_id a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:reading_batch_period a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido · Billing period YYYY-MM; aka periodo, LOTPLECANNO+PERNUM"@es .
+cal:reading_batch_batch_type a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "batch_type"@es ; rdfs:comment "valores: reading, inspection, reread · aka tipoLote, AQUACIS LOTTIPO L/I/R"@es .
+cal:reading_batch_zone_path a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "zone_path"@es ; rdfs:comment "aka zonaId/rutaId, LOTPLECEXPID/LOTPLECZONID/LOTNUMERO"@es .
+cal:reading_batch_file_name a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "file_name"@es ; rdfs:comment "Source flat file; aka archivoNombre"@es .
+cal:reading_batch_file_hash a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "file_hash"@es ; rdfs:comment "aka archivoHash"@es .
+cal:reading_batch_status a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: pending, emitted, returned, validated, loaded, error · aka estado; AQUACIS blocks loading until every contract has reading or incidence"@es .
+cal:reading_batch_totals a owl:DatatypeProperty ; rdfs:domain cal:ReadingBatch ; rdfs:range xsd:string ; rdfs:label "totals"@es ; rdfs:comment "{records, valid, errors}; aka totalRegistros/totalValidos/totalConError"@es .
+
+### Clase meter_reading
+cal:MeterReading a owl:Class ; rdfs:label "Meter reading"@es ; rdfs:comment "Individual reading within a batch (aka Lectura; AQUACIS LECTURA/FECHALEC/HORALEC + OBSERVAC incidence + LECTOR/CONTRATISTA + Foto)."@es ; skos:note "clave: id"@es .
+cal:meter_reading_id a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:meter_reading_batch_id a owl:ObjectProperty ; rdfs:domain cal:MeterReading ; rdfs:range cal:ReadingBatch ; rdfs:label "batch_id"@es ; rdfs:comment "requerido"@es .
+cal:meter_reading_agreement_id a owl:ObjectProperty ; rdfs:domain cal:MeterReading ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:meter_reading_period a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido"@es .
+cal:meter_reading_reading_value a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:integer ; rdfs:label "reading_value"@es ; rdfs:comment "Register units; aka lecturaActual, AQUACIS LECTURA"@es .
+cal:meter_reading_previous_reading a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:integer ; rdfs:label "previous_reading"@es ; rdfs:comment "aka lecturaAnterior, AQUACIS LECANTERIO"@es .
+cal:meter_reading_expected_range a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "expected_range"@es ; rdfs:comment "{min,max} plausibility band; aka lecturaMinZona/MaxZona, AQUACIS LECESPINF/LECESPSUP"@es .
+cal:meter_reading_read_at a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:dateTime ; rdfs:label "read_at"@es ; rdfs:comment "Field capture timestamp; aka AQUACIS FECHALEC+HORALEC"@es .
+cal:meter_reading_incidence_code a owl:ObjectProperty ; rdfs:domain cal:MeterReading ; rdfs:range cal:ReadingIncidence ; rdfs:label "incidence_code"@es ; rdfs:comment "aka incidenciaId, AQUACIS OBSERVAC (2-char Observac.dat key)"@es .
+cal:meter_reading_is_estimated a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:boolean ; rdfs:label "is_estimated"@es ; rdfs:comment "aka esEstimada; AQUACIS estimates on avería incidences at load"@es .
+cal:meter_reading_reader_code a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "reader_code"@es ; rdfs:comment "aka Lecturista.codigo, AQUACIS LECTOR"@es .
+cal:meter_reading_crew_code a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "crew_code"@es ; rdfs:comment "Contractor/cuadrilla; aka Contratista, AQUACIS CONTRATISTA (Lectores.dat)"@es .
+cal:meter_reading_photo_url a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "photo_url"@es ; rdfs:comment "Field evidence; aka urlFoto, AQUACIS Foto"@es .
+cal:meter_reading_status a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: pending, valid, invalid · aka estado/motivoInvalidacion"@es .
+cal:meter_reading_raw_record a owl:DatatypeProperty ; rdfs:domain cal:MeterReading ; rdfs:range xsd:string ; rdfs:label "raw_record"@es ; rdfs:comment "Original flat-file record; aka datosRaw"@es .
+
+### Clase reading_incidence
+cal:ReadingIncidence a owl:Class ; rdfs:label "Reading incidence"@es ; rdfs:comment "Incidence/observation catalog (aka CatalogoIncidencia; AQUACIS Observac.dat 2-char keys: FA/FU fuga, CE/CB consumo excesivo/bajo, PA medidor parado, CD cerrado, NO no localizado...)."@es ; skos:note "clave: code"@es .
+cal:reading_incidence_code a owl:DatatypeProperty ; rdfs:domain cal:ReadingIncidence ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · aka clave, OBSERVAC"@es .
+cal:reading_incidence_description a owl:DatatypeProperty ; rdfs:domain cal:ReadingIncidence ; rdfs:range xsd:string ; rdfs:label "description"@es ; rdfs:comment "requerido"@es .
+cal:reading_incidence_is_fault a owl:DatatypeProperty ; rdfs:domain cal:ReadingIncidence ; rdfs:range xsd:boolean ; rdfs:label "is_fault"@es ; rdfs:comment "Avería → triggers estimation; aka esAveria"@es .
+cal:reading_incidence_active a owl:DatatypeProperty ; rdfs:domain cal:ReadingIncidence ; rdfs:range xsd:boolean ; rdfs:label "active"@es .
+
+### Clase consumption
+cal:Consumption a owl:Class ; rdfs:label "Consumption"@es ; rdfs:comment "Consumption per agreement-period in m3, real or estimated (aka Consumo; feeds billing and the billed-metered balance component)."@es ; skos:note "clave: id"@es .
+cal:consumption_id a owl:DatatypeProperty ; rdfs:domain cal:Consumption ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:consumption_agreement_id a owl:ObjectProperty ; rdfs:domain cal:Consumption ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:consumption_period a owl:DatatypeProperty ; rdfs:domain cal:Consumption ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido · YYYY-MM"@es .
+cal:consumption_volume_m3 a owl:DatatypeProperty ; rdfs:domain cal:Consumption ; rdfs:range xsd:decimal ; rdfs:label "volume_m3"@es ; rdfs:comment "requerido · aka m3"@es .
+cal:consumption_determination a owl:DatatypeProperty ; rdfs:domain cal:Consumption ; rdfs:range xsd:string ; rdfs:label "determination"@es ; rdfs:comment "valores: measured, historical_average, mixed, fixed_quota · aka tipo Real/Promedio histórico/Mixto/Consumo fijo"@es .
+cal:consumption_confirmed a owl:DatatypeProperty ; rdfs:domain cal:Consumption ; rdfs:range xsd:boolean ; rdfs:label "confirmed"@es ; rdfs:comment "aka confirmado (billing gate)"@es .
+
+### Clase tariff
+cal:Tariff a owl:Class ; rdfs:label "Tariff block"@es ; rdfs:comment "Tariff rule: service class × service type × consumption block with unit price or fixed charge and validity window (aka Tarifa; Mexican pattern: 11 user classes × increasing m3 blocks + fixed charge + 10% sewerage + 12% sanitation surcharges + IVA only non-domestic, Art. 154 Consejo Directivo / Acuerdo de Precios)."@es ; skos:note "clave: id"@es .
+cal:tariff_id a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:tariff_code a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · aka codigo"@es .
+cal:tariff_service_class_code a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "service_class_code"@es ; rdfs:comment "aka tipoContratacionCodigo (string join in Hydra — canonical keeps the code but mappings should resolve the FK)"@es .
+cal:tariff_service_type a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "service_type"@es ; rdfs:comment "valores: water, sewerage, sanitation · aka tipoServicio"@es .
+cal:tariff_calc_method a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "calc_method"@es ; rdfs:comment "valores: block, fixed, variable · aka tipoCalculo escalonado/fijo/variable"@es .
+cal:tariff_block_min_m3 a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:integer ; rdfs:label "block_min_m3"@es ; rdfs:comment "aka rangoMinM3"@es .
+cal:tariff_block_max_m3 a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:integer ; rdfs:label "block_max_m3"@es ; rdfs:comment "aka rangoMaxM3"@es .
+cal:tariff_unit_price a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:decimal ; rdfs:label "unit_price"@es ; rdfs:comment "MXN per m3; aka precioUnitario"@es .
+cal:tariff_fixed_charge a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:decimal ; rdfs:label "fixed_charge"@es ; rdfs:comment "aka cuotaFija"@es .
+cal:tariff_surcharges a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "surcharges"@es ; rdfs:comment "e.g. {sewerage_pct: 10, sanitation_pct: 12} applied over the water amount"@es .
+cal:tariff_vat_pct a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:decimal ; rdfs:label "vat_pct"@es ; rdfs:comment "aka ivaPct; 0/exempt for domestic use"@es .
+cal:tariff_currency a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:string ; rdfs:label "currency"@es ; rdfs:comment "ISO 4217, MXN default"@es .
+cal:tariff_valid_from a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:date ; rdfs:label "valid_from"@es ; rdfs:comment "requerido · aka vigenciaDesde"@es .
+cal:tariff_valid_to a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:date ; rdfs:label "valid_to"@es ; rdfs:comment "aka vigenciaHasta"@es .
+cal:tariff_version a owl:DatatypeProperty ; rdfs:domain cal:Tariff ; rdfs:range xsd:integer ; rdfs:label "version"@es .
+
+### Clase bill
+cal:Bill a owl:Class ; rdfs:label "Bill (header)"@es ; rdfs:comment "Billing document header per agreement-period: totals, due date, fiscal stamp and balances (merges Hydra Timbrado + Recibo; aka recibo, factura, CFDI 4.0). Lines live in bill_line."@es ; skos:note "clave: id"@es .
+cal:bill_id a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:bill_agreement_id a owl:ObjectProperty ; rdfs:domain cal:Bill ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:bill_period a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido"@es .
+cal:bill_consumption_id a owl:ObjectProperty ; rdfs:domain cal:Bill ; rdfs:range cal:Consumption ; rdfs:label "consumption_id"@es .
+cal:bill_subtotal a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:decimal ; rdfs:label "subtotal"@es ; rdfs:comment "requerido"@es .
+cal:bill_tax a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:decimal ; rdfs:label "tax"@es ; rdfs:comment "requerido · IVA; aka iva"@es .
+cal:bill_total a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:decimal ; rdfs:label "total"@es ; rdfs:comment "requerido"@es .
+cal:bill_currency a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:string ; rdfs:label "currency"@es ; rdfs:comment "MXN default"@es .
+cal:bill_current_balance a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:decimal ; rdfs:label "current_balance"@es ; rdfs:comment "aka saldoVigente"@es .
+cal:bill_overdue_balance a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:decimal ; rdfs:label "overdue_balance"@es ; rdfs:comment "aka saldoVencido"@es .
+cal:bill_issued_at a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:date ; rdfs:label "issued_at"@es ; rdfs:comment "aka fechaEmision (String in Hydra — normalize)"@es .
+cal:bill_due_at a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:date ; rdfs:label "due_at"@es ; rdfs:comment "aka fechaVencimiento"@es .
+cal:bill_cfdi_uuid a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:string ; rdfs:label "cfdi_uuid"@es ; rdfs:comment "SAT fiscal UUID; aka Timbrado.uuid"@es .
+cal:bill_stamp_status a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:string ; rdfs:label "stamp_status"@es ; rdfs:comment "valores: pending, stamped, pac_error, canceled · aka estado Timbrada OK/Error PAC/Pendiente"@es .
+cal:bill_delivered a owl:DatatypeProperty ; rdfs:domain cal:Bill ; rdfs:range xsd:boolean ; rdfs:label "delivered"@es ; rdfs:comment "aka impreso (OM print/envelope pipeline)"@es .
+
+### Clase bill_line
+cal:BillLine a owl:Class ; rdfs:label "Bill line (concept)"@es ; rdfs:comment "Billed concept line (aka ContratoConcepto/ConceptoCobro, concepto de cobro; origin CONTRATACION/LECTURAS/VARIOS)."@es ; skos:note "clave: id"@es .
+cal:bill_line_id a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:bill_line_bill_id a owl:ObjectProperty ; rdfs:domain cal:BillLine ; rdfs:range cal:Bill ; rdfs:label "bill_id"@es ; rdfs:comment "requerido"@es .
+cal:bill_line_concept_code a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:string ; rdfs:label "concept_code"@es ; rdfs:comment "requerido · aka ConceptoCobro.codigo"@es .
+cal:bill_line_description a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:string ; rdfs:label "description"@es ; rdfs:comment "aka nombre"@es .
+cal:bill_line_quantity a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:decimal ; rdfs:label "quantity"@es ; rdfs:comment "aka cantidad"@es .
+cal:bill_line_unit_price a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:decimal ; rdfs:label "unit_price"@es ; rdfs:comment "aka precioBase/precioProporcional"@es .
+cal:bill_line_amount a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:decimal ; rdfs:label "amount"@es ; rdfs:comment "requerido · aka importe"@es .
+cal:bill_line_vat_pct a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:decimal ; rdfs:label "vat_pct"@es ; rdfs:comment "aka ivaPct"@es .
+cal:bill_line_vat_amount a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:decimal ; rdfs:label "vat_amount"@es ; rdfs:comment "aka ivaImporte"@es .
+cal:bill_line_order a owl:DatatypeProperty ; rdfs:domain cal:BillLine ; rdfs:range xsd:integer ; rdfs:label "order"@es ; rdfs:comment "aka orden"@es .
+
+### Clase payment
+cal:Payment a owl:Class ; rdfs:label "Payment"@es ; rdfs:comment "Applied payment from any channel (aka Pago; external-collector records — PagoExterno staging over the ~22 recaudador layouts — become payments on conciliation). Rule: paid_at is the real client payment date from the collector file, not the file-arrival date."@es ; skos:note "clave: id"@es .
+cal:payment_id a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:payment_agreement_id a owl:ObjectProperty ; rdfs:domain cal:Payment ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:payment_bill_id a owl:ObjectProperty ; rdfs:domain cal:Payment ; rdfs:range cal:Bill ; rdfs:label "bill_id"@es ; rdfs:comment "aka reciboId/timbradoId"@es .
+cal:payment_payment_agreement_id a owl:ObjectProperty ; rdfs:domain cal:Payment ; rdfs:range cal:PaymentAgreement ; rdfs:label "payment_agreement_id"@es ; rdfs:comment "aka convenioId"@es .
+cal:payment_amount a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:decimal ; rdfs:label "amount"@es ; rdfs:comment "requerido · aka monto; collector files may carry cents or split IMPORTE+IMPORTE DEC — mappings normalize to decimal MXN"@es .
+cal:payment_currency a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "currency"@es ; rdfs:comment "MXN default"@es .
+cal:payment_paid_at a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:dateTime ; rdfs:label "paid_at"@es ; rdfs:comment "requerido · Real payment date; aka fechaPagoReal, FECHA in collector layouts (formats vary)"@es .
+cal:payment_channel a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "channel"@es ; rdfs:comment "valores: cashier, portal, direct_debit, external_collector, codi, other · aka origen nativo/externo + canal"@es .
+cal:payment_method a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "method"@es ; rdfs:comment "valores: cash, card, transfer, check, direct_debit, other · aka FormaPago/SAT code via DIF. FORMAS DE PAGO mapping"@es .
+cal:payment_collector a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "collector"@es ; rdfs:comment "Recaudador (OXXO, BANORTE, BBVA...); aka recaudador + emisora code"@es .
+cal:payment_external_reference a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "external_reference"@es ; rdfs:comment "Collector reference/folio; aka referencia"@es .
+cal:payment_office a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "office"@es ; rdfs:comment "Branch/cashier office; aka oficina/sucursal"@es .
+cal:payment_conciliation_status a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "conciliation_status"@es ; rdfs:comment "valores: applied, pending_conciliation, conciliated, rejected · aka estado pendiente_conciliar/conciliado/rechazado + motivoRechazo"@es .
+cal:payment_raw_record a owl:DatatypeProperty ; rdfs:domain cal:Payment ; rdfs:range xsd:string ; rdfs:label "raw_record"@es ; rdfs:comment "Original collector record; aka datosRaw + contratoRaw"@es .
+
+### Clase payment_agreement
+cal:PaymentAgreement a owl:Class ; rdfs:label "Payment agreement (convenio)"@es ; rdfs:comment "Debt installment plan (aka Convenio de parcialidades; REP 2.0 CFDI complement applies to installment payments)."@es ; skos:note "clave: id"@es .
+cal:payment_agreement_id a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:payment_agreement_agreement_id a owl:ObjectProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:payment_agreement_origin a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:string ; rdfs:label "origin"@es ; rdfs:comment "valores: overdue_debt, cut, reconnection, other · aka origenTipo"@es .
+cal:payment_agreement_installments a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:integer ; rdfs:label "installments"@es ; rdfs:comment "requerido · aka numParcialidades"@es .
+cal:payment_agreement_installment_amount a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:decimal ; rdfs:label "installment_amount"@es ; rdfs:comment "requerido · aka montoParcialidad"@es .
+cal:payment_agreement_total_amount a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:decimal ; rdfs:label "total_amount"@es ; rdfs:comment "requerido · aka montoTotal"@es .
+cal:payment_agreement_paid_amount a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:decimal ; rdfs:label "paid_amount"@es ; rdfs:comment "aka montoPagado"@es .
+cal:payment_agreement_down_payment a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:decimal ; rdfs:label "down_payment"@es ; rdfs:comment "aka montoAnticipo/porcentajeAnticipo"@es .
+cal:payment_agreement_covered_bill_ids a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:string ; rdfs:label "covered_bill_ids"@es ; rdfs:comment "Bills under the plan; aka facturas (JSONB in Hydra — relational here)"@es .
+cal:payment_agreement_credit_balance a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:decimal ; rdfs:label "credit_balance"@es ; rdfs:comment "aka saldoAFavor"@es .
+cal:payment_agreement_status a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: active, completed, defaulted, canceled · aka estado"@es .
+cal:payment_agreement_start_date a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:date ; rdfs:label "start_date"@es ; rdfs:comment "aka fechaInicio"@es .
+cal:payment_agreement_due_date a owl:DatatypeProperty ; rdfs:domain cal:PaymentAgreement ; rdfs:range xsd:date ; rdfs:label "due_date"@es ; rdfs:comment "aka fechaVencimiento"@es .
+
+### Clase work_order
+cal:WorkOrder a owl:Class ; rdfs:label "Work order"@es ; rdfs:comment "Field order: cut/restriction, reconnection, installation, inspection, review (aka Orden, orden de trabajo, Q Order). cut_impact encodes the minimum-vital rule of the Ley General de Aguas 2025: domestic service is restricted, never fully suspended."@es ; skos:note "clave: id"@es .
+cal:work_order_id a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:work_order_agreement_id a owl:ObjectProperty ; rdfs:domain cal:WorkOrder ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "requerido"@es .
+cal:work_order_type a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "type"@es ; rdfs:comment "valores: cut, reconnection, installation, inspection, review, other · aka tipo"@es .
+cal:work_order_cut_impact a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "cut_impact"@es ; rdfs:comment "valores: total_suspension, partial_restriction, record_only · aka CatalogoTipoCorte.impacto; domestic use → partial_restriction only"@es .
+cal:work_order_cut_location a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "cut_location"@es ; rdfs:comment "valores: meter_box, connection, sidewalk_valve · aka ubicacionCorte cuadro/toma/llave_banqueta"@es .
+cal:work_order_status a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: pending, scheduled, executed, canceled · aka estado"@es .
+cal:work_order_priority a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "priority"@es ; rdfs:comment "aka prioridad"@es .
+cal:work_order_auto_generated a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:boolean ; rdfs:label "auto_generated"@es ; rdfs:comment "aka origenAutomatico/eventoOrigen"@es .
+cal:work_order_requested_at a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:dateTime ; rdfs:label "requested_at"@es ; rdfs:comment "aka fechaSolicitud"@es .
+cal:work_order_scheduled_at a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:dateTime ; rdfs:label "scheduled_at"@es ; rdfs:comment "aka fechaProgramada"@es .
+cal:work_order_executed_at a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:dateTime ; rdfs:label "executed_at"@es ; rdfs:comment "aka fechaEjecucion"@es .
+cal:work_order_field_data a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "field_data"@es ; rdfs:comment "Evidence, GPS, photos; aka datosCampo"@es .
+cal:work_order_external_reference a owl:DatatypeProperty ; rdfs:domain cal:WorkOrder ; rdfs:range xsd:string ; rdfs:label "external_reference"@es ; rdfs:comment "aka externalRef (Q Order)"@es .
+
+### Clase service_application
+cal:ServiceApplication a owl:Class ; rdfs:label "Service application"@es ; rdfs:comment "New-service application entering the contracting flow (aka Solicitud; factibilidad → inspección → cotización → contratación)."@es ; skos:note "clave: id"@es .
+cal:service_application_id a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:service_application_folio a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "folio"@es ; rdfs:comment "requerido"@es .
+cal:service_application_applicant_name a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "applicant_name"@es ; rdfs:comment "aka propNombreCompleto"@es .
+cal:service_application_applicant_tax_id a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "applicant_tax_id"@es ; rdfs:comment "aka propRfc"@es .
+cal:service_application_cadastral_key a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "cadastral_key"@es ; rdfs:comment "aka claveCatastral"@es .
+cal:service_application_service_class_id a owl:ObjectProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range cal:ServiceClass ; rdfs:label "service_class_id"@es ; rdfs:comment "aka tipoContratacionId"@es .
+cal:service_application_status a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: pending_review, inspection_required, inspection_in_progress, quoting, accepted, contracted, rejected, canceled · aka estado FSM"@es .
+cal:service_application_agreement_id a owl:ObjectProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es ; rdfs:comment "Resulting contract; aka contratoId"@es .
+cal:service_application_requested_at a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:dateTime ; rdfs:label "requested_at"@es ; rdfs:comment "aka fechaSolicitud"@es .
+cal:service_application_form_data a owl:DatatypeProperty ; rdfs:domain cal:ServiceApplication ; rdfs:range xsd:string ; rdfs:label "form_data"@es ; rdfs:comment "Captured form snapshot; aka formData (schema-on-write pending in Hydra)"@es .
+
+### Clase customer_case
+cal:CustomerCase a owl:Class ; rdfs:label "Customer case"@es ; rdfs:comment "Complaint, clarification or procedure/trámite (aka QuejaAclaracion + Tramite; cambio de nombre, subrogación, baja...)."@es ; skos:note "clave: id"@es .
+cal:customer_case_id a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:customer_case_folio a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "folio"@es ; rdfs:comment "aka folio (trámites)"@es .
+cal:customer_case_agreement_id a owl:ObjectProperty ; rdfs:domain cal:CustomerCase ; rdfs:range cal:ServiceAgreement ; rdfs:label "agreement_id"@es .
+cal:customer_case_party_id a owl:ObjectProperty ; rdfs:domain cal:CustomerCase ; rdfs:range cal:Party ; rdfs:label "party_id"@es .
+cal:customer_case_kind a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "kind"@es ; rdfs:comment "requerido · valores: complaint, clarification, procedure · aka Queja/Aclaración/Tramite"@es .
+cal:customer_case_type a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "type"@es ; rdfs:comment "Procedure or complaint category; aka tipo/CatalogoTramite"@es .
+cal:customer_case_description a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "description"@es ; rdfs:comment "aka descripcion"@es .
+cal:customer_case_channel a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "channel"@es ; rdfs:comment "valores: counter, digital, phone, hybrid, other · aka canal Ventanilla/presencial/digital/hibrido"@es .
+cal:customer_case_priority a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "priority"@es ; rdfs:comment "aka prioridad"@es .
+cal:customer_case_status a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "aka estado + seguimientos"@es .
+cal:customer_case_opened_at a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:dateTime ; rdfs:label "opened_at"@es ; rdfs:comment "aka fecha/createdAt"@es .
+cal:customer_case_resolved_at a owl:DatatypeProperty ; rdfs:domain cal:CustomerCase ; rdfs:range xsd:dateTime ; rdfs:label "resolved_at"@es ; rdfs:comment "aka fechaAprobacion/motivoCierre"@es .
+
+### Clase accounting_voucher
+cal:AccountingVoucher a owl:Class ; rdfs:label "Accounting voucher (header)"@es ; rdfs:comment "Daily accounting document exported to the ERP (aka Poliza → SAP IDOC file: Aqua_SAP control + Interfaz_AquaCis_SAP_Cabecera; types cobros/ingresos and facturación)."@es ; skos:note "clave: id"@es .
+cal:accounting_voucher_id a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:accounting_voucher_number a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "number"@es ; rdfs:comment "requerido · aka numero, IDOC DOCNUM"@es .
+cal:accounting_voucher_type a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "type"@es ; rdfs:comment "valores: collections, billing, adjustments, agreements, cancellations · aka tipo cobros/facturación; SAP BKTXT suffix PAGO vs oficina"@es .
+cal:accounting_voucher_period a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido · aka periodo AAAAMM; SAP MONAT"@es .
+cal:accounting_voucher_date a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:date ; rdfs:label "date"@es ; rdfs:comment "requerido · aka fecha; SAP BLDAT/BUDAT DDMMAAAA"@es .
+cal:accounting_voucher_currency a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "currency"@es ; rdfs:comment "MXN; SAP WAERS"@es .
+cal:accounting_voucher_description a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "description"@es ; rdfs:comment "aka descripcion; SAP BKTXT"@es .
+cal:accounting_voucher_status a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "status"@es ; rdfs:comment "valores: generated, exported, sent, error, voided · aka estado generada/exportada/enviada/error/anulada"@es .
+cal:accounting_voucher_export_file a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucher ; rdfs:range xsd:string ; rdfs:label "export_file"@es ; rdfs:comment "Generated IDOC file; aka archivoIdoc"@es .
+
+### Clase accounting_voucher_line
+cal:AccountingVoucherLine a owl:Class ; rdfs:label "Accounting voucher line"@es ; rdfs:comment "Voucher line (aka LineaPoliza → IDOC Interfaz_AquaCis_SAP_Posicion). GL account placement follows the posting key: 40/50 → NEWKO, 01-39 → HKONT with NEWKO=GENERICO."@es ; skos:note "clave: id"@es .
+cal:accounting_voucher_line_id a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:accounting_voucher_line_voucher_id a owl:ObjectProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range cal:AccountingVoucher ; rdfs:label "voucher_id"@es ; rdfs:comment "requerido"@es .
+cal:accounting_voucher_line_position a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:integer ; rdfs:label "position"@es ; rdfs:comment "requerido · aka posicion; SAP SEGNUM"@es .
+cal:accounting_voucher_line_posting_key a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:string ; rdfs:label "posting_key"@es ; rdfs:comment "requerido · Debit/credit indicator; aka indicador, SAP BSCHL (40,15,01,50,12)"@es .
+cal:accounting_voucher_line_amount a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:decimal ; rdfs:label "amount"@es ; rdfs:comment "requerido · aka monto; SAP WRBTR"@es .
+cal:accounting_voucher_line_tax_amount a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:decimal ; rdfs:label "tax_amount"@es ; rdfs:comment "SAP WMWST/FWBAS"@es .
+cal:accounting_voucher_line_gl_account a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:string ; rdfs:label "gl_account"@es ; rdfs:comment "requerido · aka cuentaContable; SAP NEWKO/HKONT per posting key"@es .
+cal:accounting_voucher_line_cost_center a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:string ; rdfs:label "cost_center"@es ; rdfs:comment "CEBE/office; aka centroCoste, SAP KOSTL/PRCTR"@es .
+cal:accounting_voucher_line_date a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:date ; rdfs:label "date"@es ; rdfs:comment "aka fecha; SAP VALUT"@es .
+cal:accounting_voucher_line_text a owl:DatatypeProperty ; rdfs:domain cal:AccountingVoucherLine ; rdfs:range xsd:string ; rdfs:label "text"@es ; rdfs:comment "aka descripcion/texto; SAP SGTXT"@es .
+
+### Clase hydraulic_sector
+cal:HydraulicSector a owl:Class ; rdfs:label "Hydraulic sector (DMA)"@es ; rdfs:comment "District metered area / sector hidráulico — the balance unit (aka SectorHidraulico; today only a catalog in Hydra, volumes pending macro-metering)."@es ; skos:note "clave: id"@es .
+cal:hydraulic_sector_id a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:hydraulic_sector_code a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · aka codigo"@es .
+cal:hydraulic_sector_name a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:string ; rdfs:label "name"@es ; rdfs:comment "requerido · aka nombre"@es .
+cal:hydraulic_sector_administration a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:string ; rdfs:label "administration"@es ; rdfs:comment "aka administracionId"@es .
+cal:hydraulic_sector_geometry a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:string ; rdfs:label "geometry"@es ; rdfs:comment "GeoJSON polygon WGS84 (GIS layer when available)"@es .
+cal:hydraulic_sector_mains_length_km a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:decimal ; rdfs:label "mains_length_km"@es ; rdfs:comment "Lm for UARL"@es .
+cal:hydraulic_sector_service_connections a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:integer ; rdfs:label "service_connections"@es ; rdfs:comment "Nc for UARL"@es .
+cal:hydraulic_sector_avg_pressure_m a owl:DatatypeProperty ; rdfs:domain cal:HydraulicSector ; rdfs:range xsd:decimal ; rdfs:label "avg_pressure_m"@es ; rdfs:comment "P for UARL"@es .
+
+### Clase water_balance
+cal:WaterBalance a owl:Class ; rdfs:label "Water balance (IWA/AWWA)"@es ; rdfs:comment "Standard IWA/AWWA water balance for a system or hydraulic sector and period. Components per Lambert & Hirner 2000 / AWWA M36: System Input Volume = Authorised Consumption (billed/unbilled × metered/unmetered) + Water Losses (apparent: unauthorised consumption, metering inaccuracies, data handling errors; real: mains leakage, storage leakage/overflows, service-connection leakage). NRW = unbilled authorised + apparent + real. Each volume carries an AWWA data grade."@es ; skos:note "clave: id"@es .
+cal:water_balance_id a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:water_balance_hydraulic_sector_id a owl:ObjectProperty ; rdfs:domain cal:WaterBalance ; rdfs:range cal:HydraulicSector ; rdfs:label "hydraulic_sector_id"@es ; rdfs:comment "Null = whole system"@es .
+cal:water_balance_period a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido · Audit period, usually YYYY"@es .
+cal:water_balance_system_input_volume_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "system_input_volume_m3"@es ; rdfs:comment "requerido · aka volumen producido/suministrado"@es .
+cal:water_balance_billed_metered_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "billed_metered_m3"@es ; rdfs:comment "Σ measured consumption billed; aka consumo facturado medido"@es .
+cal:water_balance_billed_unmetered_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "billed_unmetered_m3"@es ; rdfs:comment "aka cuota fija facturada"@es .
+cal:water_balance_unbilled_metered_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "unbilled_metered_m3"@es .
+cal:water_balance_unbilled_unmetered_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "unbilled_unmetered_m3"@es ; rdfs:comment "e.g. firefighting, network flushing"@es .
+cal:water_balance_unauthorised_consumption_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "unauthorised_consumption_m3"@es ; rdfs:comment "aka tomas clandestinas"@es .
+cal:water_balance_metering_inaccuracies_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "metering_inaccuracies_m3"@es ; rdfs:comment "aka submedición"@es .
+cal:water_balance_data_handling_errors_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "data_handling_errors_m3"@es .
+cal:water_balance_real_losses_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "real_losses_m3"@es ; rdfs:comment "aka pérdidas físicas/fugas"@es .
+cal:water_balance_revenue_water_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "revenue_water_m3"@es ; rdfs:comment "= billed authorised"@es .
+cal:water_balance_non_revenue_water_m3 a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "non_revenue_water_m3"@es ; rdfs:comment "NRW; aka agua no facturada"@es .
+cal:water_balance_carl_l_day a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "carl_l_day"@es ; rdfs:comment "Current Annual Real Losses"@es .
+cal:water_balance_uarl_l_day a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "uarl_l_day"@es ; rdfs:comment "(18×Lm + 0.8×Nc + 25×Lp) × P"@es .
+cal:water_balance_ili a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:decimal ; rdfs:label "ili"@es ; rdfs:comment "CARL/UARL — World Bank bands"@es .
+cal:water_balance_data_validity_score a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:integer ; rdfs:label "data_validity_score"@es ; rdfs:comment "AWWA FWAS composite grading"@es .
+cal:water_balance_component_grades a owl:DatatypeProperty ; rdfs:domain cal:WaterBalance ; rdfs:range xsd:string ; rdfs:label "component_grades"@es ; rdfs:comment "Per-component AWWA data grade 1-10"@es .
+
+### Clase performance_indicator
+cal:PerformanceIndicator a owl:Class ; rdfs:label "Performance indicator value"@es ; rdfs:comment "KPI value per period computed from the commercial ledger, defined against a named standard (aka indicador PIGOO/IWA PI/IBNET). Core Mexican set (PIGOO, verified): IP.13 eficiencia física 1 (vol consumido/producido), IP.30 eficiencia física 2 (vol facturado/producido), IP.14 eficiencia comercial (vol cobrado/vol facturado — volumes), IP.15 eficiencia de cobro (pesos ingresados/facturados), IP.25 eficiencia global, IP.05 micromedición, IP.12 dotación l/hab/día, IP.10 empleados por mil tomas, IP.27/IP.28 pérdidas por toma/por km; plus internal commercial KPIs (% lecturas reales vs estimadas, periodo medio de cobranza IBNET 23.1, antigüedad de cartera)."@es ; skos:note "clave: id"@es .
+cal:performance_indicator_id a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "id"@es ; rdfs:comment "requerido"@es .
+cal:performance_indicator_standard a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "standard"@es ; rdfs:comment "requerido · valores: pigoo, iwa_pi, ibnet, awwa_m36, internal"@es .
+cal:performance_indicator_code a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "code"@es ; rdfs:comment "requerido · e.g. PIGOO IP.14"@es .
+cal:performance_indicator_name a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "name"@es ; rdfs:comment "requerido"@es .
+cal:performance_indicator_formula a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "formula"@es ; rdfs:comment "Definition over ledger variables"@es .
+cal:performance_indicator_unit a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "unit"@es .
+cal:performance_indicator_period a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "period"@es ; rdfs:comment "requerido"@es .
+cal:performance_indicator_scope a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "scope"@es ; rdfs:comment "System / administration / sector filter"@es .
+cal:performance_indicator_value a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:decimal ; rdfs:label "value"@es ; rdfs:comment "requerido"@es .
+cal:performance_indicator_confidence_grade a owl:DatatypeProperty ; rdfs:domain cal:PerformanceIndicator ; rdfs:range xsd:string ; rdfs:label "confidence_grade"@es ; rdfs:comment "IWA data confidence band / AWWA grade"@es .

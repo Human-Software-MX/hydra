@@ -1,0 +1,691 @@
+callosum: 1
+kind: mapping
+domain: agua
+source: hydra
+canonical_version: 0.1.0
+entity_maps:
+  # ── Personas y roles ────────────────────────────────────────────────
+  - source_entity: persona
+    canonical_entity: party
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - source: nombre
+        canonical: name
+        notes: For Moral parties razonSocial is the display name — connector prefers razon_social when tipo=Moral
+      - {source: apellido_paterno, canonical: paternal_surname}
+      - {source: apellido_materno, canonical: maternal_surname}
+      - source: tipo
+        canonical: type
+        transform:
+          type: enum_map
+          values:
+            Fisica: natural_person
+            Moral: organization
+      - {source: rfc, canonical: tax_id}
+      - {source: curp, canonical: national_id}
+      - {source: regimen_fiscal, canonical: tax_regime}
+      - {source: email, canonical: email}
+      - {source: telefono, canonical: phone}
+      - source: tipo_identificacion
+        canonical: id_document
+        notes: Canonical is json {kind, number}; Hydra profiles only the kind (INE/Pasaporte/Licencia)
+
+  - source_entity: rol_persona_contrato
+    canonical_entity: party_role
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: persona_id, canonical: party_id}
+      - {source: contrato_id, canonical: agreement_id}
+      - source: rol
+        canonical: role
+        transform:
+          type: enum_map
+          values:
+            PROPIETARIO: owner
+            FISCAL: fiscal
+            CONTACTO: contact
+          default: other
+      - {source: fecha_desde, canonical: valid_from, transform: parse_datetime}
+      - source: fecha_hasta
+        canonical: valid_to
+        transform: parse_datetime
+        notes: Hydra also carries boolean activo — canonical convention is valid_to null = current
+
+  # ── Territorio ──────────────────────────────────────────────────────
+  - source_entity: domicilio
+    canonical_entity: address
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: calle, canonical: street}
+      - {source: num_exterior, canonical: exterior_number}
+      - {source: num_interior, canonical: interior_number}
+      - {source: colonia_inegi_id, canonical: neighborhood_key}
+      - {source: localidad_inegi_id, canonical: locality_key}
+      - {source: municipio_inegi_id, canonical: municipality_key}
+      - canonical: state_key
+        transform: {type: const, value: "22"}
+        notes: CEA operates only in Querétaro (INEGI 22); ingest-only
+      - {source: codigo_postal, canonical: postal_code}
+      - source: gps_lat
+        canonical: reference_point
+        transform:
+          type: template
+          template: '{{"type": "Point", "coordinates": [{gps_lng}, {gps_lat}]}}'
+        notes: GeoJSON built from gps_lat/gps_lng; ingest-only (export writes the flat columns back from the point)
+      - {source: validado_inegi, canonical: inegi_validated}
+
+  - source_entity: punto_servicio
+    canonical_entity: service_point
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: codigo, canonical: code}
+      - {source: domicilio_id, canonical: address_id}
+      - {source: tipo_suministro_id, canonical: supply_type}
+      - {source: diametro_toma, canonical: connection_diameter}
+      - {source: material_tuberia, canonical: pipe_material}
+      - source: gps_lat
+        canonical: location
+        transform:
+          type: template
+          template: '{{"type": "Point", "coordinates": [{gps_lng}, {gps_lat}]}}'
+        notes: ingest-only GeoJSON
+      - {source: punto_servicio_padre_id, canonical: parent_service_point_id}
+      - {source: reparticion_consumo, canonical: consumption_split_pct}
+      - {source: cortable, canonical: cuttable}
+      - {source: codigo_recorrido_id, canonical: route_code}
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            activo: active
+            inactivo: inactive
+            disponible: available
+            asignado: assigned
+
+  - source_entity: toma
+    canonical_entity: service_point
+    direction: in
+    field_maps:
+      - {source: id, canonical: id}
+      - source: ubicacion
+        canonical: code
+        notes: Legacy Toma has no business code — location string is the provisional code until migration Toma→PuntoServicio (recomendación 1.4) assigns real codes
+      - source: tipo
+        canonical: service_type
+        transform:
+          type: enum_map
+          values:
+            Agua: water
+            Saneamiento: sanitation
+            Alcantarillado: sewerage
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            Disponible: available
+            Asignada: assigned
+
+  # ── Contrato y clase ────────────────────────────────────────────────
+  - source_entity: contrato
+    canonical_entity: service_agreement
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: numero_contrato, canonical: contract_number, transform: to_string}
+      - source: cea_num_contrato
+        canonical: legacy_references
+        transform:
+          type: template
+          template: '{{"cea": "{cea_num_contrato}"}}'
+        notes: ingest-only; SIGE cnttnum arrives via the sige mapping into the same json
+      - {source: punto_servicio_id, canonical: service_point_id}
+      - {source: domicilio_id, canonical: address_id}
+      - {source: tipo_contratacion_id, canonical: service_class_id}
+      - source: tipo_servicio
+        canonical: service_type
+        transform:
+          type: enum_map
+          values:
+            agua: water
+            alcantarillado: sewerage
+            saneamiento: sanitation
+      - {source: actividad_id, canonical: activity_code}
+      - source: ciclo_facturacion
+        canonical: billing_cycle
+        transform:
+          type: enum_map
+          values:
+            MENSUAL: monthly
+            TRIMESTRAL: quarterly
+            SEMESTRAL: biannual
+            ANUAL: annual
+        notes: Canonical also allows bimonthly (AQUACIS cycles); Hydra enum lacks it today
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            activo: active
+            suspendido: suspended
+            restringido: restricted
+            cancelado: canceled
+            en_proceso: in_process
+        notes: Hydra stores free strings — unmapped values pass through for the quality gate (T15) to flag
+      - {source: bloqueado_juridico, canonical: legal_hold}
+      - {source: domiciliado, canonical: direct_debit}
+      - source: tipo_envio_factura
+        canonical: bill_delivery
+        transform:
+          type: enum_map
+          values:
+            PAPEL: paper
+            PDF: pdf
+            PAPEL_PDF: paper_and_pdf
+      - {source: unidades_servidas, canonical: served_units}
+      - source: fecha
+        canonical: start_date
+        transform: parse_date
+        notes: "CAVEAT: String date in Hydra (deuda 1.1) — non-ISO variants must be normalized by the connector or quarantined"
+      - {source: fecha_baja, canonical: end_date, transform: parse_date}
+      - source: zona_id
+        canonical: zone_path
+        transform:
+          type: template
+          template: '{{"zone": "{zona_id}", "route": "{ruta_id}"}}'
+        notes: ingest-only; Administración/Distrito resolved from Zona FK by the connector
+      - {source: texto_contrato_snapshot, canonical: contract_text_snapshot}
+      - canonical: use_category
+        notes: Not a Hydra column — derive domestic/non_domestic from CatalogoActividad/categoría; drives IVA exemption and the LGA-2025 no-total-cut rule
+
+  - source_entity: tipo_contratacion
+    canonical_entity: service_class
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: codigo, canonical: code}
+      - {source: nombre, canonical: name}
+      - {source: requiere_medidor, canonical: requires_meter}
+      - {source: requiere_inspeccion, canonical: requires_inspection}
+      - {source: es_individualizacion, canonical: is_individualization}
+      - source: periodicidades_permitidas
+        canonical: allowed_periodicities
+        notes: CSV string in Hydra (ANUAL,MENSUAL,...) — engine lacks an ingest-side split transform, connector splits to array
+
+  # ── Medición ────────────────────────────────────────────────────────
+  - source_entity: medidor
+    canonical_entity: meter
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: serie, canonical: serial_number}
+      - {source: marca_id, canonical: brand}
+      - {source: modelo_id, canonical: model}
+      - {source: calibre_id, canonical: caliber}
+      - {source: digitos, canonical: digits}
+      - {source: tipo_telemetria, canonical: telemetry_type}
+      - {source: lectura_inicial, canonical: initial_reading}
+      - {source: fecha_instalacion, canonical: installed_at, transform: parse_date}
+      - {source: fecha_ultima_verif, canonical: last_verified_at, transform: parse_date}
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            instalado: installed
+            en_bodega: in_stock
+            en_reparacion: in_repair
+            retirado: retired
+        notes: MedidorBodega records also land as in_stock
+
+  - source_entity: lote_lecturas
+    canonical_entity: reading_batch
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: periodo, canonical: period}
+      - source: tipo_lote
+        canonical: batch_type
+        transform:
+          type: enum_map
+          values:
+            L: reading
+            I: inspection
+            R: reread
+            LECTURA: reading
+            INSPECCION: inspection
+            REPASO: reread
+      - source: zona_id
+        canonical: zone_path
+        transform:
+          type: template
+          template: '{{"zone": "{zona_id}", "route": "{ruta_id}"}}'
+        notes: ingest-only
+      - {source: archivo_nombre, canonical: file_name}
+      - {source: archivo_hash, canonical: file_hash}
+      - {source: estado, canonical: status}
+      - source: total_registros
+        canonical: totals
+        transform:
+          type: template
+          template: '{{"records": {total_registros}, "valid": {total_validos}, "errors": {total_con_error}}}'
+        notes: ingest-only
+
+  - source_entity: lectura
+    canonical_entity: meter_reading
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: lote_id, canonical: batch_id}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: periodo, canonical: period}
+      - {source: lectura_actual, canonical: reading_value}
+      - {source: lectura_anterior, canonical: previous_reading}
+      - {source: incidencia_id, canonical: incidence_code, notes: Resolve FK to CatalogoIncidencia.codigo (2-char AQUACIS key)}
+      - {source: es_estimada, canonical: is_estimated}
+      - {source: lecturista_id, canonical: reader_code, notes: Resolve FK to Lecturista.codigo}
+      - {source: url_foto, canonical: photo_url}
+      - {source: estado, canonical: status}
+      - {source: datos_raw, canonical: raw_record}
+      - canonical: read_at
+        notes: Hydra Lectura has no capture timestamp column — comes from datos_raw FECHALEC+HORALEC when the reading originated in an AQUACIS lot
+
+  - source_entity: consumo
+    canonical_entity: consumption
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: periodo, canonical: period}
+      - {source: m3, canonical: volume_m3}
+      - source: tipo
+        canonical: determination
+        transform:
+          type: enum_map
+          values:
+            "Real": measured
+            "Promedio histórico": historical_average
+            "Mixto": mixed
+            "Consumo fijo": fixed_quota
+      - {source: confirmado, canonical: confirmed}
+
+  # ── Tarifas ─────────────────────────────────────────────────────────
+  - source_entity: tarifa
+    canonical_entity: tariff
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: codigo, canonical: code}
+      - source: tipo_contratacion_codigo
+        canonical: service_class_code
+        notes: "CAVEAT: string join, no FK (deuda 1.3) — quality gate must reject codes without a TipoContratacion match"
+      - source: tipo_servicio
+        canonical: service_type
+        transform:
+          type: enum_map
+          values:
+            agua: water
+            saneamiento: sanitation
+            alcantarillado: sewerage
+      - source: tipo_calculo
+        canonical: calc_method
+        transform:
+          type: enum_map
+          values:
+            escalonado: block
+            fijo: fixed
+            variable: variable
+      - {source: rango_min_m3, canonical: block_min_m3}
+      - {source: rango_max_m3, canonical: block_max_m3}
+      - {source: precio_unitario, canonical: unit_price}
+      - {source: cuota_fija, canonical: fixed_charge}
+      - {source: iva_pct, canonical: vat_pct}
+      - canonical: currency
+        transform: {type: const, value: MXN}
+      - {source: vigencia_desde, canonical: valid_from, transform: parse_date}
+      - {source: vigencia_hasta, canonical: valid_to, transform: parse_date}
+      - {source: version, canonical: version}
+      - canonical: surcharges
+        notes: 10% alcantarillado / 12% saneamiento live as separate ConceptoCobro rows in Hydra, not on Tarifa — unified tariff engine (doc 07) moves them here
+
+  # ── Facturación (bill = Timbrado + Recibo merge) ────────────────────
+  - source_entity: timbrado
+    canonical_entity: bill
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: periodo, canonical: period}
+      - {source: consumo_id, canonical: consumption_id}
+      - {source: subtotal, canonical: subtotal}
+      - {source: iva, canonical: tax}
+      - {source: total, canonical: total}
+      - canonical: currency
+        transform: {type: const, value: MXN}
+      - {source: uuid, canonical: cfdi_uuid}
+      - source: estado
+        canonical: stamp_status
+        transform:
+          type: enum_map
+          values:
+            "Timbrada OK": stamped
+            "Error PAC": pac_error
+            "Pendiente": pending
+      - source: fecha_emision
+        canonical: issued_at
+        transform: parse_date
+        notes: "CAVEAT: String date (deuda 1.1)"
+      - {source: fecha_vencimiento, canonical: due_at, transform: parse_date}
+
+  - source_entity: recibo
+    canonical_entity: bill
+    direction: in
+    field_maps:
+      - source: timbrado_id
+        canonical: id
+        notes: Recibo merges onto the bill created from its Timbrado — same canonical id, upsert adds the balance/delivery fields
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: saldo_vigente, canonical: current_balance}
+      - {source: saldo_vencido, canonical: overdue_balance}
+      - source: fecha_vencimiento
+        canonical: due_at
+        transform: parse_date
+        notes: "CAVEAT: String date (deuda 1.1)"
+      - {source: impreso, canonical: delivered}
+
+  # ── Pagos y convenios ───────────────────────────────────────────────
+  - source_entity: pago
+    canonical_entity: payment
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: recibo_id, canonical: bill_id, notes: Resolve Recibo → its timbrado_id (canonical bill id)}
+      - {source: convenio_id, canonical: payment_agreement_id}
+      - {source: monto, canonical: amount}
+      - source: fecha
+        canonical: paid_at
+        transform: parse_datetime
+        notes: "CAVEAT: String date (deuda 1.1); for conciliated external payments the real date is PagoExterno.fechaPagoReal"
+      - source: origen
+        canonical: channel
+        transform:
+          type: enum_map
+          values:
+            nativo: cashier
+            externo: external_collector
+      - source: tipo
+        canonical: method
+        transform:
+          type: enum_map
+          values:
+            Efectivo: cash
+            Tarjeta: card
+            Transferencia: transfer
+            SPEI: transfer
+            OXXO: cash
+            CoDi: transfer
+            WEB: card
+          default: other
+        notes: Legacy free-text; authoritative source is FormaPago via forma_pago_id
+      - {source: oficina, canonical: office}
+      - canonical: currency
+        transform: {type: const, value: MXN}
+
+  - source_entity: pago_externo
+    canonical_entity: payment
+    direction: in
+    field_maps:
+      - {source: id, canonical: id}
+      - source: contrato_id
+        canonical: agreement_id
+        notes: Null until conciliation matches contrato_raw — unmatched staging rows stay out of the canonical store
+      - {source: monto, canonical: amount}
+      - {source: fecha_pago_real, canonical: paid_at, transform: parse_datetime}
+      - canonical: channel
+        transform: {type: const, value: external_collector}
+      - {source: recaudador, canonical: collector}
+      - {source: referencia, canonical: external_reference}
+      - source: estado
+        canonical: conciliation_status
+        transform:
+          type: enum_map
+          values:
+            pendiente_conciliar: pending_conciliation
+            conciliado: conciliated
+            rechazado: rejected
+            aplicado: applied
+      - {source: datos_raw, canonical: raw_record}
+      - canonical: currency
+        transform: {type: const, value: MXN}
+
+  - source_entity: convenio
+    canonical_entity: payment_agreement
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - source: origen_tipo
+        canonical: origin
+        transform:
+          type: enum_map
+          values:
+            adeudo_vencido: overdue_debt
+            corte: cut
+            reconexion: reconnection
+          default: other
+      - {source: num_parcialidades, canonical: installments}
+      - {source: monto_parcialidad, canonical: installment_amount}
+      - {source: monto_total, canonical: total_amount}
+      - {source: monto_pagado, canonical: paid_amount}
+      - {source: monto_anticipo, canonical: down_payment}
+      - source: facturas
+        canonical: covered_bill_ids
+        notes: "CAVEAT: JSONB without FK (deuda 1.2 #1) — quality gate must verify every referenced bill exists before ingest"
+      - {source: saldo_a_favor, canonical: credit_balance}
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            activo: active
+            completado: completed
+            incumplido: defaulted
+            cancelado: canceled
+      - {source: fecha_inicio, canonical: start_date, transform: parse_date}
+      - {source: fecha_vencimiento, canonical: due_date, transform: parse_date}
+
+  # ── Órdenes de trabajo ──────────────────────────────────────────────
+  - source_entity: orden
+    canonical_entity: work_order
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - source: tipo
+        canonical: type
+        transform:
+          type: enum_map
+          values:
+            corte: cut
+            reconexion: reconnection
+            instalacion: installation
+            inspeccion: inspection
+            revision: review
+          default: other
+      - source: subtipo_corte_id
+        canonical: cut_impact
+        transform:
+          type: enum_map
+          values:
+            suspension_total: total_suspension
+            restriccion_parcial: partial_restriction
+            solo_registro: record_only
+        notes: Connector resolves the FK to CatalogoTipoCorte.impacto before mapping; LGA-2025 rule — domestic use may only produce partial_restriction
+      - source: ubicacion_corte
+        canonical: cut_location
+        transform:
+          type: enum_map
+          values:
+            cuadro: meter_box
+            toma: connection
+            llave_banqueta: sidewalk_valve
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            pendiente: pending
+            programada: scheduled
+            ejecutada: executed
+            cancelada: canceled
+      - {source: prioridad, canonical: priority}
+      - {source: origen_automatico, canonical: auto_generated}
+      - {source: fecha_solicitud, canonical: requested_at, transform: parse_datetime}
+      - {source: fecha_programada, canonical: scheduled_at, transform: parse_datetime}
+      - {source: fecha_ejecucion, canonical: executed_at, transform: parse_datetime}
+      - {source: datos_campo, canonical: field_data}
+      - {source: external_ref, canonical: external_reference}
+
+  # ── Atención al cliente (customer_case = QuejaAclaracion + Tramite) ─
+  - source_entity: queja_aclaracion
+    canonical_entity: customer_case
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: contrato_id, canonical: agreement_id}
+      - source: tipo
+        canonical: kind
+        transform:
+          type: enum_map
+          values:
+            Queja: complaint
+            "Aclaración": clarification
+      - {source: descripcion, canonical: description}
+      - source: canal
+        canonical: channel
+        transform:
+          type: enum_map
+          values:
+            Ventanilla: counter
+            presencial: counter
+            digital: digital
+            telefono: phone
+            hibrido: hybrid
+          default: other
+      - {source: prioridad, canonical: priority}
+      - {source: estado, canonical: status}
+      - {source: fecha, canonical: opened_at, transform: parse_datetime}
+
+  - source_entity: tramite
+    canonical_entity: customer_case
+    direction: in
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: folio, canonical: folio}
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: persona_id, canonical: party_id}
+      - canonical: kind
+        transform: {type: const, value: procedure}
+      - {source: tipo, canonical: type}
+      - source: canal
+        canonical: channel
+        transform:
+          type: enum_map
+          values:
+            presencial: counter
+            digital: digital
+            hibrido: hybrid
+      - {source: estado, canonical: status}
+      - {source: fecha_aprobacion, canonical: resolved_at, transform: parse_datetime}
+
+  # ── Contratación ────────────────────────────────────────────────────
+  - source_entity: solicitud
+    canonical_entity: service_application
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: folio, canonical: folio}
+      - {source: prop_nombre_completo, canonical: applicant_name}
+      - {source: prop_rfc, canonical: applicant_tax_id}
+      - {source: clave_catastral, canonical: cadastral_key}
+      - {source: tipo_contratacion_id, canonical: service_class_id}
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            pendiente_revision: pending_review
+            inspeccion_requerida: inspection_required
+            inspeccion_en_proceso: inspection_in_progress
+            en_cotizacion: quoting
+            aceptada: accepted
+            contratado: contracted
+            rechazada: rejected
+            cancelada: canceled
+      - {source: contrato_id, canonical: agreement_id}
+      - {source: fecha_solicitud, canonical: requested_at, transform: parse_datetime}
+      - source: form_data
+        canonical: form_data
+        notes: "CAVEAT: schema-on-write pending in Hydra (SolicitudState) — validate before trusting nested fields"
+
+  # ── Contabilidad ────────────────────────────────────────────────────
+  - source_entity: poliza
+    canonical_entity: accounting_voucher
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: numero, canonical: number}
+      - source: tipo
+        canonical: type
+        transform:
+          type: enum_map
+          values:
+            ingresos: collections
+            cobros: collections
+            facturacion: billing
+      - {source: periodo, canonical: period}
+      - {source: fecha, canonical: date, transform: parse_date}
+      - {source: moneda, canonical: currency}
+      - source: estado
+        canonical: status
+        transform:
+          type: enum_map
+          values:
+            generada: generated
+            exportada: exported
+            enviada: sent
+            error: error
+            anulada: voided
+      - {source: archivo_idoc, canonical: export_file}
+
+  - source_entity: linea_poliza
+    canonical_entity: accounting_voucher_line
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: poliza_id, canonical: voucher_id}
+      - {source: posicion, canonical: position}
+      - {source: indicador, canonical: posting_key}
+      - {source: monto, canonical: amount}
+      - {source: cuenta_contable, canonical: gl_account, notes: "Export rule (SAP): posting key 40/50 → NEWKO, 01-39 → HKONT with NEWKO=GENERICO"}
+      - {source: centro_coste, canonical: cost_center}
+      - {source: fecha, canonical: date, transform: parse_date}
+
+  # ── Balance hídrico (semilla) ───────────────────────────────────────
+  - source_entity: sector_hidraulico
+    canonical_entity: hydraulic_sector
+    direction: bidirectional
+    field_maps:
+      - {source: id, canonical: id}
+      - {source: codigo, canonical: code}
+      - {source: nombre, canonical: name}
+      - {source: administracion_id, canonical: administration}
+      - canonical: geometry
+        notes: Not in Hydra yet — arrives from the GIS layer (doc 04) when sector polygons are delivered

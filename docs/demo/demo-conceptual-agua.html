@@ -1,0 +1,489 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hydra · Demo conceptual — datos reales AQUACIS</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f6f8f9;
+    --surface: #fcfdfe;
+    --ink: #0c1114;
+    --ink-2: #4e5a60;
+    --muted: #85908f;
+    --grid: #e0e5e5;
+    --baseline: #c1c9c9;
+    --border: rgba(12, 17, 20, 0.10);
+    --accent: #1c5cab;
+    --accent-ink: #104281;
+    --mark: #2a78d6;
+    --mark-soft: #9ec5f4;
+    --good-text: #006300;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --chip-bg: rgba(42, 120, 214, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0f10;
+      --surface: #191c1d;
+      --ink: #ffffff;
+      --ink-2: #c0c6c5;
+      --muted: #8a9291;
+      --grid: #2b2f2f;
+      --baseline: #3a3f3f;
+      --border: rgba(255, 255, 255, 0.10);
+      --accent: #5598e7;
+      --accent-ink: #86b6ef;
+      --mark: #3987e5;
+      --mark-soft: #1c5cab;
+      --good-text: #0ca30c;
+      --chip-bg: rgba(57, 135, 229, 0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0f10;
+    --surface: #191c1d;
+    --ink: #ffffff;
+    --ink-2: #c0c6c5;
+    --muted: #8a9291;
+    --grid: #2b2f2f;
+    --baseline: #3a3f3f;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #5598e7;
+    --accent-ink: #86b6ef;
+    --mark: #3987e5;
+    --mark-soft: #1c5cab;
+    --good-text: #0ca30c;
+    --chip-bg: rgba(57, 135, 229, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 40px 24px 64px; display: flex; flex-direction: column; gap: 36px; }
+
+  header { display: flex; flex-direction: column; gap: 14px; }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--accent); display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 2px; background: var(--accent); border-radius: 1px; }
+  h1 { margin: 0; font-size: 27px; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--ink-2); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 12px; font-weight: 500; color: var(--accent-ink);
+    background: var(--chip-bg); border: 1px solid var(--border);
+    padding: 3px 10px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .sec-head { display: flex; flex-direction: column; gap: 2px; }
+  .sec-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+  h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+  .sec-note { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 72ch; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .tile .label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .tile .value { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .tile .value small { font-size: 16px; font-weight: 600; color: var(--ink-2); letter-spacing: 0; }
+  .tile .std { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 12px; color: var(--ink-2); }
+  .split-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; margin-top: 6px; }
+  .split-bar span:first-child { background: var(--mark); border-radius: 3px 0 0 3px; }
+  .split-bar span:last-child { background: var(--mark-soft); border-radius: 0 3px 3px 0; }
+  .split-legend { display: flex; gap: 14px; font-size: 11px; color: var(--ink-2); margin-top: 4px; }
+  .split-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+  .cards-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .cards-2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  }
+  .card h3 { margin: 0; font-size: 14px; font-weight: 650; }
+  .card .sub { font-size: 12px; color: var(--ink-2); margin: -6px 0 0; }
+
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .bar { fill: var(--mark); }
+  .bar:hover, .bar:focus-visible { fill: var(--accent); outline: none; }
+  .axis-label { font-size: 11px; fill: var(--muted); font-family: inherit; font-variant-numeric: tabular-nums; }
+  .direct-label { font-size: 11px; font-weight: 600; fill: var(--ink-2); font-family: inherit; font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+
+  .tooltip {
+    position: fixed; z-index: 10; pointer-events: none; display: none;
+    background: var(--ink); color: var(--page);
+    font-size: 12px; font-variant-numeric: tabular-nums;
+    padding: 6px 9px; border-radius: 6px; max-width: 260px; line-height: 1.35;
+  }
+  .tooltip strong { display: block; }
+
+  details.table-view { font-size: 12px; color: var(--ink-2); }
+  details.table-view summary { cursor: pointer; color: var(--muted); }
+  details.table-view table { border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  details.table-view th, details.table-view td { text-align: left; padding: 3px 14px 3px 0; border-bottom: 1px solid var(--grid); }
+  details.table-view th { font-weight: 600; color: var(--ink-2); }
+
+  .annotation { display: flex; gap: 8px; font-size: 12px; color: var(--ink-2); align-items: baseline; }
+  .annotation .flag { font-weight: 700; }
+  .flag.serious { color: var(--serious); }
+  .flag.critical { color: var(--critical); }
+  .flag.good { color: var(--good-text); }
+
+  .meters { display: flex; flex-direction: column; gap: 10px; }
+  .meter { display: grid; grid-template-columns: 200px 1fr 220px; gap: 12px; align-items: center; }
+  @media (max-width: 700px) { .meter { grid-template-columns: 1fr; gap: 4px; } }
+  .meter .name { font-size: 13px; font-weight: 550; }
+  .meter .track { height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+  .meter .fill { height: 100%; background: var(--mark); border-radius: 4px; }
+  .meter .read { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+  .pipeline { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 0 10px; }
+  .stage {
+    flex: 1 1 0; min-width: 148px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stage .st-name { font-size: 13px; font-weight: 650; }
+  .stage .st-desc { font-size: 11.5px; color: var(--ink-2); line-height: 1.4; }
+  .stage .st-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; margin-top: auto; padding-top: 6px; }
+  .stage.done { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .stage.done .st-tag { color: var(--accent-ink); }
+  .stage.next .st-tag { color: var(--muted); }
+  .arrow { align-self: center; flex: 0 0 auto; padding: 0 6px; color: var(--muted); font-size: 15px; }
+
+  footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--grid); padding-top: 16px; max-width: 78ch; }
+  footer p { margin: 0 0 6px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .bar, .meter .fill { transition: fill 120ms ease; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Hydra · CEA Querétaro · Entregable 14</div>
+    <h1>Demo conceptual: del archivo plano al modelo canónico del agua</h1>
+    <p class="lede">
+      Lotes de lectura reales de AQUACIS — archivos posicionales de 1,480 caracteres — se ingirieron
+      al modelo canónico <strong>agua v0.1.0</strong> (Callosum), se normalizaron y se exportaron de
+      vuelta a su forma original sin pérdida. Este dashboard lo generó el pipeline al arrancar el
+      contenedor: cambia los archivos de entrada y cambian los números.
+    </p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <div class="sec-eyebrow">Indicadores</div>
+      <h2>Primeros KPIs calculados del ciclo comercial</h2>
+      <p class="sec-note">Cada indicador queda ligado al estándar que lo define (PIGOO/IMTA, IWA PI, AWWA M36) — la base del motor de KPIs auditable del plan.</p>
+    </div>
+    <div class="tiles">
+      <div class="tile">
+        <div class="label">Padrón ingerido</div>
+        <div class="value" id="t-padron"></div>
+        <div class="sub" id="t-padron-sub"></div>
+        <div class="std">canónico: service_agreement</div>
+      </div>
+      <div class="tile">
+        <div class="label">Lecturas sin incidencia</div>
+        <div class="value"><span id="t-clean"></span><small>%</small></div>
+        <div class="sub" id="t-clean-sub"></div>
+        <div class="std">IWA PI · % lecturas reales</div>
+      </div>
+      <div class="tile">
+        <div class="label">Consumo mediano</div>
+        <div class="value"><span id="t-median"></span> <small>m³</small></div>
+        <div class="sub" id="t-median-sub"></div>
+        <div class="std">insumo de facturación / dotación IP.12</div>
+      </div>
+      <div class="tile">
+        <div class="label">Productividad de lectura</div>
+        <div class="value"><span id="t-prod"></span><small>/h</small></div>
+        <div class="sub" id="t-prod-sub"></div>
+        <div class="std">interno · ciclo de lectura</div>
+      </div>
+      <div class="tile">
+        <div class="label">Uso del servicio</div>
+        <div class="value"><span id="t-dom"></span><small>%</small></div>
+        <div class="sub" id="t-dom-sub"></div>
+        <div class="split-bar" aria-hidden="true"><span id="t-dom-bar"></span><span id="t-nondom-bar"></span></div>
+        <div class="split-legend">
+          <span><i style="background:var(--mark)"></i>Doméstico <span id="t-dom-n"></span></span>
+          <span><i style="background:var(--mark-soft)"></i>No dom. <span id="t-nondom-n"></span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="sec-eyebrow" id="ret-eyebrow"></div>
+      <h2>Qué regresó del campo</h2>
+      <p class="sec-note" id="ret-note"></p>
+    </div>
+    <div class="cards-2">
+
+      <div class="card">
+        <h3>Distribución del consumo del periodo</h3>
+        <p class="sub" id="hist-sub"></p>
+        <div class="chart" id="hist"></div>
+        <div class="annotation">
+          <span class="flag serious" id="zeros-flag"></span>
+          <span>candidatas a medidor parado o predio deshabitado — primer caso de uso de detección de anomalías del plan de IA.</span>
+        </div>
+        <details class="table-view">
+          <summary>Ver como tabla</summary>
+          <table>
+            <thead><tr><th scope="col">Rango m³</th><th scope="col">Tomas</th></tr></thead>
+            <tbody id="hist-table"></tbody>
+          </table>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>Incidencias reportadas por el lecturista</h3>
+        <p class="sub" id="incid-sub"></p>
+        <div class="chart" id="incid"></div>
+        <div class="annotation">
+          <span class="flag serious" id="band-flag"></span>
+          <span id="band-text"></span>
+        </div>
+        <details class="table-view">
+          <summary>Ver como tabla</summary>
+          <table>
+            <thead><tr><th scope="col">Clave</th><th scope="col">Descripción</th><th scope="col">Casos</th></tr></thead>
+            <tbody id="incid-table"></tbody>
+          </table>
+        </details>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="sec-eyebrow">Calidad de datos · Tarea 15</div>
+      <h2>Calificación de confianza del dato (estilo AWWA)</h2>
+      <p class="sec-note" id="conf-note"></p>
+    </div>
+    <div class="card">
+      <div class="meters" id="meters"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="sec-eyebrow">Arquitectura · patrón Katastik</div>
+      <h2>Dónde está parado este demo en el pipeline</h2>
+      <p class="sec-note">Las tres primeras etapas corren en este contenedor con datos reales, incluido el viaje de regreso (reverse ETL a la forma AQUACIS). Las dos siguientes son la ruta del plan: kardex de eventos comerciales y, encima, KPIs, balance hídrico e IA.</p>
+    </div>
+    <div class="pipeline">
+      <div class="stage done">
+        <div class="st-name">Fuentes</div>
+        <div class="st-desc">AQUACIS (.txt 1,480c), Hydra (PostgreSQL), SIGE, 22 recaudadores, SAP IDOC — 7 perfiles YAML</div>
+        <div class="st-tag">Corre en este demo</div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="stage done">
+        <div class="st-name">Mapeo bidireccional</div>
+        <div class="st-desc">31 entity maps (Hydra 24 + AQUACIS 7) con transforms declarativos y caveats de deuda anotados por campo</div>
+        <div class="st-tag">Corre en este demo</div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="stage done">
+        <div class="st-name">Canónico agua v0.1.0</div>
+        <div class="st-desc">24 entidades sobre estándares IWA/AWWA/PIGOO · store DuckDB · export de regreso sin pérdida</div>
+        <div class="st-tag">Corre en este demo</div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="stage next">
+        <div class="st-name">Kardex de eventos</div>
+        <div class="st-desc">Ledger append-only por contrato: CARGO · PAGO · AJUSTE · ESTIMACIÓN · CONVENIO</div>
+        <div class="st-tag">Siguiente fase</div>
+      </div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="stage next">
+        <div class="st-name">Derivados</div>
+        <div class="st-desc">Motor de KPIs (PIGOO/IWA), balance hídrico por sector, cartera, anomalías e IA</div>
+        <div class="st-tag">Siguiente fase</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Qué demuestra este demo:</strong> que el conocimiento del dominio — layouts, catálogos, reglas, estándares — puede vivir como artefactos declarativos versionados, y que con eso los datos reales fluyen fuente → canónico → fuente sin código ad-hoc. La misma maquinaria escala a los 7 sistemas fuente perfilados.</p>
+    <p id="foot-meta"></p>
+  </footer>
+
+</div>
+
+<div class="tooltip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+window.DEMO_DATA = {"generated_at": "17-jul-2026", "specs": {"total": 10, "errors": 0}, "canonical": {"records": 4366, "entities": 7}, "lots": [{"id": "0001M08L20", "locality": "Santiago De Queretaro", "period": "2024-08", "records": 620, "is_return": false}, {"id": "0007AM1L44", "locality": "Amealco De Bonfil", "period": "2026-03", "records": 90, "is_return": true}], "padron": {"total": 710, "dom": 677, "nondom": 33, "pct_dom": 95.4}, "readings": {"return_total": 90, "clean": 73, "pct_clean": 81.1, "read_date": "16-feb-2026", "window": "08:31–10:55", "minutes": 144, "per_hour": 37.4, "return_lots": ["0007AM1L44"]}, "consumo": {"n": 87, "median": 7, "mean": 8.9, "zeros": 16, "negatives": 3, "hist": [{"label": "0", "n": 16}, {"label": "1–5", "n": 19}, {"label": "6–10", "n": 26}, {"label": "11–15", "n": 11}, {"label": "16–20", "n": 6}, {"label": "21–30", "n": 5}, {"label": "31–50", "n": 4}, {"label": ">50", "n": 0}]}, "band": {"inside": 75, "outside": 15, "pct_out": 16.7}, "incidences": {"total": 17, "pct": 18.9, "items": [{"code": "CB", "name": "Consumo bajo", "n": 9}, {"code": "CE", "name": "Consumo excesivo", "n": 3}, {"code": "SE", "name": "Sin medidor (no instalado)", "n": 1}, {"code": "CN", "name": "Consumo negativo", "n": 1}, {"code": "CD", "name": "Cerrado", "n": 1}, {"code": "DH", "name": "Deshabitado - solar baldio", "n": 1}, {"code": "RO", "name": "Medidor destruido", "n": 1}]}, "confidence": [{"name": "Foto y timestamp de lectura", "pct": 100.0, "detail": "lote de vuelta (90/90)", "flag": "good"}, {"name": "Medidor registrado", "pct": 99.3, "detail": "705 de 710", "flag": "good"}, {"name": "Localidad identificada", "pct": 100.0, "detail": "710 de 710", "flag": "good"}, {"name": "Clave catastral (vínculo GIS)", "pct": 36.8, "detail": "261 de 710", "flag": "serious"}, {"name": "Colonia identificable", "pct": 100.0, "detail": "viaja incrustada en el campo LIBRE", "flag": "good"}]};
+</script>
+<script>
+(function () {
+  var D = window.DEMO_DATA;
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n) { return Number(n).toLocaleString('es-MX'); };
+
+  /* ── Chips ── */
+  var chips = D.lots.map(function (l) {
+    return 'Lote ' + l.id + ' · ' + l.locality + ' · ' + fmt(l.records) +
+      (l.is_return ? ' lecturas de campo' : ' registros');
+  });
+  chips.push(fmt(D.canonical.records) + ' registros canónicos · ' + D.canonical.entities + ' entidades');
+  chips.push(D.specs.total + ' specs válidos · ' + D.specs.errors + ' errores');
+  $('chips').innerHTML = chips.map(function (c) { return '<span class="chip">' + c + '</span>'; }).join('');
+
+  /* ── Tiles ── */
+  $('t-padron').textContent = fmt(D.padron.total);
+  $('t-padron-sub').textContent = 'contratos-registro en ' + D.lots.length + ' lotes';
+  $('t-clean').textContent = D.readings.pct_clean;
+  $('t-clean-sub').textContent = D.readings.clean + ' de ' + D.readings.return_total + ' en el lote de vuelta';
+  $('t-median').textContent = D.consumo.median;
+  $('t-median-sub').textContent = 'promedio ' + D.consumo.mean + ' m³ · n = ' + D.consumo.n;
+  $('t-prod').textContent = D.readings.per_hour;
+  $('t-prod-sub').textContent = D.readings.return_total + ' lecturas en ' +
+    Math.floor(D.readings.minutes / 60) + ' h ' + (D.readings.minutes % 60) + ' min';
+  $('t-dom').textContent = D.padron.pct_dom;
+  $('t-dom-sub').textContent = 'doméstico (' + fmt(D.padron.dom) + ' de ' + fmt(D.padron.total) + ')';
+  $('t-dom-bar').style.width = D.padron.pct_dom + '%';
+  $('t-nondom-bar').style.width = (100 - D.padron.pct_dom) + '%';
+  $('t-dom-n').textContent = fmt(D.padron.dom);
+  $('t-nondom-n').textContent = fmt(D.padron.nondom);
+
+  /* ── Sección lote de vuelta ── */
+  $('ret-eyebrow').textContent = 'Lote de vuelta ' + D.readings.return_lots.join(', ') +
+    ' · leído el ' + D.readings.read_date + ' (' + D.readings.window + ')';
+  $('ret-note').textContent = 'Las ' + D.readings.return_total +
+    ' lecturas volvieron del campo; el consumo se deriva de lectura − lectura anterior. ' +
+    D.consumo.negatives + ' registros con consumo negativo quedan fuera (candidatos a rollover de medidor o error de captura).';
+  $('hist-sub').textContent = 'm³ por toma · n = ' + D.consumo.n;
+  $('zeros-flag').textContent = '▲ ' + D.consumo.zeros + ' tomas con consumo cero';
+  $('incid-sub').textContent = D.incidences.total + ' de ' + D.readings.return_total +
+    ' lecturas (' + D.incidences.pct + '%) · catálogo Observac.dat';
+  $('band-flag').textContent = '▲ ' + D.band.outside + ' lecturas fuera de la banda esperada';
+  $('band-text').textContent = '(' + D.band.pct_out + '%) según los límites LECESPINF/LECESPSUP del propio archivo — señal cruzada con CB/CE.';
+  $('conf-note').textContent = 'Cobertura medida sobre los ' + fmt(D.padron.total) +
+    ' registros del padrón. Esto es exactamente lo que el framework de calidad declarativa (gate T15) verificará antes de cada migración: la brecha se mide, no se supone.';
+  $('foot-meta').innerHTML = 'Datos: muestras reales AQUACIS de la CEA (' +
+    D.lots.map(function (l) { return 'periodo ' + l.period; }).join(' y ') +
+    '). Sin datos personales: solo agregados. Generado el ' + D.generated_at +
+    ' por <code>etl_demo.py</code> · Callosum <code>specs/canonical/agua.yaml</code> + <code>specs/mappings/agua/</code>.';
+
+  /* ── Tooltip ── */
+  var tip = $('tip');
+  function showTip(html, evt) {
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    var x = Math.min(evt.clientX + 14, window.innerWidth - tip.offsetWidth - 10);
+    var y = Math.min(evt.clientY + 14, window.innerHeight - tip.offsetHeight - 10);
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
+  /* ── Histograma ── */
+  var hist = D.consumo.hist;
+  var total = hist.reduce(function (s, d) { return s + d.n; }, 0) || 1;
+  var maxN = Math.max.apply(null, hist.map(function (d) { return d.n; }));
+  var max = Math.max(Math.ceil(maxN / 10) * 10, 10);
+  var W = 460, H = 210, padL = 26, padB = 26, padT = 16;
+  var innerW = W - padL - 8, innerH = H - padT - padB;
+  var bw = innerW / hist.length;
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Histograma de consumo en metros cúbicos">';
+  for (var v = 0; v <= max; v += max / 3) {
+    var gy = padT + innerH - (v / max) * innerH;
+    svg += '<line class="' + (v === 0 ? 'baseline' : 'gridline') + '" x1="' + padL + '" y1="' + gy + '" x2="' + (W - 8) + '" y2="' + gy + '"/>';
+    svg += '<text class="axis-label" x="' + (padL - 6) + '" y="' + (gy + 3.5) + '" text-anchor="end">' + Math.round(v) + '</text>';
+  }
+  hist.forEach(function (d, i) {
+    var h = (d.n / max) * innerH;
+    var x = padL + i * bw + 5;
+    var y = padT + innerH - h;
+    var w = bw - 10;
+    if (d.n > 0) {
+      svg += '<path class="bar" tabindex="0" data-i="' + i + '" d="M' + x + ' ' + (padT + innerH) +
+        ' V' + (y + 4) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
+        ' H' + (x + w - 4) + ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + 4) +
+        ' V' + (padT + innerH) + ' Z"><title>' + d.label + ' m³: ' + d.n + ' tomas</title></path>';
+    }
+    if (d.n >= maxN * 0.4 || d.label === '0') {
+      svg += '<text class="direct-label" x="' + (x + w / 2) + '" y="' + (y - 5) + '" text-anchor="middle">' + d.n + '</text>';
+    }
+    svg += '<text class="axis-label" x="' + (x + w / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + d.label + '</text>';
+  });
+  svg += '</svg>';
+  $('hist').innerHTML = svg;
+  $('hist-table').innerHTML = hist.map(function (d) {
+    return '<tr><td>' + d.label + '</td><td>' + d.n + '</td></tr>';
+  }).join('');
+  $('hist').addEventListener('mousemove', function (e) {
+    var b = e.target.closest('.bar');
+    if (!b) { hideTip(); return; }
+    var d = hist[+b.dataset.i];
+    showTip('<strong>' + d.label + ' m³</strong>' + d.n + ' tomas · ' + (100 * d.n / total).toFixed(1) + '% del lote', e);
+  });
+  $('hist').addEventListener('mouseleave', hideTip);
+
+  /* ── Incidencias ── */
+  var inc = D.incidences.items;
+  var W2 = 460, rowH = 27, padL2 = 210, H2 = Math.max(inc.length * rowH + 8, 40);
+  var maxI = Math.max.apply(null, inc.map(function (d) { return d.n; }).concat([1])) + 1;
+  var innerW2 = W2 - padL2 - 34;
+  var svg2 = '<svg viewBox="0 0 ' + W2 + ' ' + H2 + '" role="img" aria-label="Incidencias de lectura por tipo">';
+  inc.forEach(function (d, i) {
+    var y = 4 + i * rowH;
+    var w = Math.max((d.n / maxI) * innerW2, 8);
+    var name = d.name.length > 30 ? d.name.slice(0, 29) + '…' : d.name;
+    svg2 += '<text class="direct-label" x="' + (padL2 - 8) + '" y="' + (y + rowH / 2 + 3) + '" text-anchor="end">' +
+      d.code + ' · ' + name + '</text>';
+    svg2 += '<path class="bar" tabindex="0" data-i="' + i + '" d="M' + padL2 + ' ' + (y + 5) +
+      ' H' + (padL2 + w - 4) + ' Q' + (padL2 + w) + ' ' + (y + 5) + ' ' + (padL2 + w) + ' ' + (y + 9) +
+      ' V' + (y + rowH - 12) + ' Q' + (padL2 + w) + ' ' + (y + rowH - 8) + ' ' + (padL2 + w - 4) + ' ' + (y + rowH - 8) +
+      ' H' + padL2 + ' Z"><title>' + d.name + ': ' + d.n + '</title></path>';
+    svg2 += '<text class="direct-label" x="' + (padL2 + w + 7) + '" y="' + (y + rowH / 2 + 3) + '">' + d.n + '</text>';
+  });
+  svg2 += '<line class="baseline" x1="' + padL2 + '" y1="0" x2="' + padL2 + '" y2="' + H2 + '"/></svg>';
+  $('incid').innerHTML = svg2;
+  $('incid-table').innerHTML = inc.map(function (d) {
+    return '<tr><td>' + d.code + '</td><td>' + d.name + '</td><td>' + d.n + '</td></tr>';
+  }).join('');
+  $('incid').addEventListener('mousemove', function (e) {
+    var b = e.target.closest('.bar');
+    if (!b) { hideTip(); return; }
+    var d = inc[+b.dataset.i];
+    showTip('<strong>' + d.code + ' — ' + d.name + '</strong>' + d.n + ' de ' + D.incidences.total +
+      ' incidencias · ' + (100 * d.n / D.readings.return_total).toFixed(1) + '% de las lecturas', e);
+  });
+  $('incid').addEventListener('mouseleave', hideTip);
+
+  /* ── Meters de confianza ── */
+  var FLAG = { good: ['✓', 'flag good', ''], serious: ['▲ serio', 'flag serious', ''], critical: ['✕ crítico', 'flag critical', ''] };
+  $('meters').innerHTML = D.confidence.map(function (c) {
+    var f = FLAG[c.flag] || FLAG.good;
+    return '<div class="meter">' +
+      '<div class="name">' + c.name + '</div>' +
+      '<div class="track"><div class="fill" style="width:' + c.pct + '%"></div></div>' +
+      '<div class="read"><span class="' + f[1] + '">' + f[0] + '</span> ' + c.pct + '% · ' + c.detail + '</div>' +
+      '</div>';
+  }).join('');
+})();
+</script>
