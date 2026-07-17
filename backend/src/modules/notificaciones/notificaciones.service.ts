@@ -205,6 +205,41 @@ export class NotificacionesService {
     return { email, whatsapp };
   }
 
+  /**
+   * Aviso previo de restricción de servicio a mínimo vital (LGA dic-2025).
+   * Se envía al programar la restricción — el usuario debe ser notificado antes
+   * de cualquier limitación del suministro.
+   */
+  async notificarRestriccionProgramada(params: {
+    contratoId: string;
+    fechaProgramada: string;
+    adeudo: number;
+  }): Promise<{ email: boolean; whatsapp: boolean }> {
+    const dest = await this.destinatarioContrato(params.contratoId);
+    const asunto = 'Aviso de restricción de servicio por adeudo';
+    const cuerpo =
+      `<p>Le informamos que, por adeudo de <strong>$${params.adeudo.toFixed(2)}</strong>, ` +
+      `se programó una <strong>restricción de flujo</strong> de su servicio de agua para el ` +
+      `<strong>${params.fechaProgramada}</strong>.</p>` +
+      `<p>Conforme a la Ley General de Aguas, su suministro <strong>no será cortado</strong>: ` +
+      `se garantizará el mínimo vital. Para evitar la restricción, pague su adeudo o ` +
+      `solicite un convenio de pago antes de la fecha indicada.</p>`;
+    const msgWa =
+      `⚠️ Aviso: por adeudo de $${params.adeudo.toFixed(2)} se programó una restricción de flujo ` +
+      `de su servicio de agua para el ${params.fechaProgramada}. Su suministro NO será cortado ` +
+      `(se garantiza el mínimo vital). Evítela pagando o solicitando un convenio de pago.`;
+
+    let email = false;
+    let whatsapp = false;
+    if (dest.email) {
+      email = (await this.enviarEmail({ destinatario: dest.email, asunto, cuerpo, tipo: 'aviso_restriccion', contratoId: params.contratoId })).enviado;
+    }
+    if (dest.telefono) {
+      whatsapp = (await this.enviarWhatsApp({ telefono: dest.telefono, mensaje: msgWa, tipo: 'aviso_restriccion', contratoId: params.contratoId })).enviado;
+    }
+    return { email, whatsapp };
+  }
+
   async notificarFolioTramite(params: {
     folio: string;
     tipo: string;

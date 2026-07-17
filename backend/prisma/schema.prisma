@@ -167,6 +167,7 @@ model Contrato {
   variablesCapturadas     Json?                 @map("variables_capturadas")
   procesosContratacion    ProcesoContratacion[]
   conceptosContrato       ContratoConcepto[]
+  restricciones           RestriccionServicio[]
 
   @@index([tomaId])
   @@index([puntoServicioId])
@@ -1881,4 +1882,36 @@ model NotificacionLog {
   @@index([tipo])
   @@index([createdAt])
   @@map("notificacion_logs")
+}
+
+// ---- Mínimo vital (LGA dic-2025): restricción de flujo, nunca corte total ----
+model RestriccionServicio {
+  id                  String    @id @default(cuid())
+  contratoId          String    @map("contrato_id")
+  estado              String    @default("programada") // programada | aplicada | revertida | cancelada
+  motivo              String    @default("adeudo") // adeudo | reincidencia
+  // Mínimo vital garantizado durante la restricción (OMS: 50-100 l/persona/día)
+  litrosDiariosMinimo Int       @default(100) @map("litros_diarios_minimo")
+  personasVivienda    Int?      @map("personas_vivienda")
+  adeudoAlMomento     Decimal   @default(0) @map("adeudo_al_momento") @db.Decimal(10, 2)
+  recibosVencidos     Int       @default(0) @map("recibos_vencidos")
+  ordenRestriccionId  String?   @map("orden_restriccion_id")
+  ordenReversaId      String?   @map("orden_reversa_id")
+  dispositivo         String? // restrictor/placa instalada (evidencia probatoria)
+  evidencia           Json? // fotos, notas, geolocalización de la aplicación
+  evidenciaReversa    Json?     @map("evidencia_reversa")
+  fechaProgramada     DateTime? @map("fecha_programada")
+  fechaAplicacion     DateTime? @map("fecha_aplicacion")
+  fechaReversa        DateTime? @map("fecha_reversa")
+  autorizadoPor       String?   @map("autorizado_por")
+  aplicadoPor         String?   @map("aplicado_por")
+  notas               String?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  contrato            Contrato  @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+
+  @@index([contratoId])
+  @@index([estado])
+  @@index([fechaProgramada])
+  @@map("restricciones_servicio")
 }

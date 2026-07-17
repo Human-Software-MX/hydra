@@ -35,6 +35,7 @@ import { MedidoresModule } from './modules/medidores/medidores.module';
 import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
 import { FacturacionModule } from './modules/facturacion/facturacion.module';
 import { BatchModule } from './modules/batch/batch.module';
+import { RestriccionesModule } from './modules/restricciones/restricciones.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { BatchModule } from './modules/batch/batch.module';
     SolicitudesModule,
     FacturacionModule,
     BatchModule,
+    RestriccionesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
