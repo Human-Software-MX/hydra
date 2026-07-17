@@ -283,20 +283,23 @@ export class FacturacionService {
 
   /**
    * Suma el saldo pendiente de recibos anteriores del contrato (arrastre de vencido).
-   * Pendiente por recibo = saldoVigente + saldoVencido - pagos aplicados, con piso en 0.
+   * Se calcula a nivel contrato — max(0, Σ saldoVigente anteriores − Σ pagos del
+   * contrato) — y NO por recibo con `saldoVigente + saldoVencido`: `saldoVencido`
+   * es a su vez el arrastre de los recibos previos, así que sumarlo por recibo
+   * duplica (y compone) la deuda. Además `Pago.reciboId` es opcional: el nivel
+   * contrato evita perder pagos hechos sobre el recibo más reciente.
    */
   private async calcularSaldoVencido(contratoId: string, consumoIdActual: string): Promise<number> {
-    const recibos = await this.prisma.recibo.findMany({
-      where: { contratoId, timbrado: { consumoId: { not: consumoIdActual } } },
-      include: { pagos: { select: { monto: true } } },
-    });
-    let vencido = 0;
-    for (const r of recibos) {
-      const pagado = r.pagos.reduce((s, p) => s + Number(p.monto), 0);
-      const pendiente = Number(r.saldoVigente) + Number(r.saldoVencido) - pagado;
-      if (pendiente > 0) vencido += pendiente;
-    }
-    return redondear(vencido);
+    const [facturadoAgg, pagadoAgg] = await Promise.all([
+      this.prisma.recibo.aggregate({
+        where: { contratoId, timbrado: { consumoId: { not: consumoIdActual } } },
+        _sum: { saldoVigente: true },
+      }),
+      this.prisma.pago.aggregate({ where: { contratoId }, _sum: { monto: true } }),
+    ]);
+    const facturado = Number(facturadoAgg._sum.saldoVigente ?? 0);
+    const pagado = Number(pagadoAgg._sum.monto ?? 0);
+    return redondear(Math.max(0, facturado - pagado));
   }
 
   private async administracionDeZona(zonaId: string | null): Promise<string | null> {

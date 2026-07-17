@@ -50,7 +50,7 @@ Leyenda: ✅ existe · 🟡 parcial · ❌ ausente | P0 = must-have para licitar
 
 | # | Capacidad | Estado | Prioridad | Notas |
 |---|-----------|--------|-----------|-------|
-| 1 | Cartera vencida: aging, segmentación de deuda, dunning multicanal | ❌ | **P0** | El adeudo hoy se calcula on-the-fly en `restricciones`. Falta modelo de cartera de primera clase. Alcance ESSAP = referencia. |
+| 1 | Cartera vencida: aging, segmentación de deuda, dunning multicanal | ❌ | **P0** | Diseño listo: `docs/design/cartera-cobranza.md`. El adeudo hoy se calcula on-the-fly en 3 fórmulas con **doble conteo confirmado del arrastre** (ver diseño §1). Alcance ESSAP = referencia. |
 | 2 | Portal/app autoservicio con pago en línea, historial de consumo, descarga CFDI | 🟡 | **P0** | El portal actual solo cubre login + 3 trámites. Table-stakes hasta en organismos medianos MX. |
 | 3 | Pagos digitales MX con conciliación automática: tarjeta, SPEI (referencia por contrato), línea de captura OXXO/corresponsales, domiciliación | 🟡 | **P0** | Existe ETL batch de recaudadores; falta tiempo real. La conciliación multicanal es el dolor real. |
 | 4 | Pre-facturación con validación de anomalías ("bill precision"): VEE de lecturas, flags de medidor parado/invertido/consumo cero, estimación reglada auditada | 🟡 | **P0** | Existe prefacturación; falta la capa VEE formal. Reduce reclamos y es criterio de compra (Oracle lo vende como estrella). |

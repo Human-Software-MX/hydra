@@ -19,6 +19,36 @@ import { NotificacionesService } from '../notificaciones/notificaciones.service'
  * Exclusiones duras: contratos con convenio de pago activo, bloqueo jurídico,
  * o punto de servicio marcado como no cortable (p. ej. hospitales, escuelas).
  */
+
+/**
+ * Adeudo vencido de un contrato aplicando los pagos FIFO (recibo más antiguo
+ * primero). `Recibo.saldoVencido` NO participa: es un arrastre de los recibos
+ * anteriores, que aquí ya se cuentan uno a uno — sumarlo duplicaría la deuda.
+ * Como `Pago.reciboId` es opcional, la asignación real pago→recibo no es
+ * confiable; FIFO garantiza que un pago hecho "sobre el recibo más reciente"
+ * (que en el papel incluía el arrastre) sí liquide los recibos viejos.
+ * Precondición: `recibos` ordenados por fechaVencimiento ascendente.
+ */
+export function adeudoFifo(
+  recibos: Array<{ saldoVigente: unknown; fechaVencimiento: string }>,
+  pagadoTotal: number,
+): { monto: number; recibosVencidos: number } {
+  let disponible = pagadoTotal;
+  let monto = 0;
+  let vencidos = 0;
+  for (const r of recibos) {
+    const vigente = Number(r.saldoVigente);
+    const abono = Math.min(disponible, vigente);
+    disponible -= abono;
+    const pendiente = vigente - abono;
+    if (pendiente > 0.01) {
+      monto += pendiente;
+      vencidos++;
+    }
+  }
+  return { monto: Math.round(monto * 100) / 100, recibosVencidos: vencidos };
+}
+
 @Injectable()
 export class RestriccionesService {
   private readonly logger = new Logger(RestriccionesService.name);
@@ -32,21 +62,15 @@ export class RestriccionesService {
 
   private async adeudoContrato(contratoId: string): Promise<{ monto: number; recibosVencidos: number }> {
     const hoy = new Date().toISOString().slice(0, 10);
-    const recibos = await this.prisma.recibo.findMany({
-      where: { contratoId, fechaVencimiento: { lt: hoy } },
-      include: { pagos: { select: { monto: true } } },
-    });
-    let monto = 0;
-    let vencidos = 0;
-    for (const r of recibos) {
-      const pagado = r.pagos.reduce((s, p) => s + Number(p.monto), 0);
-      const pendiente = Number(r.saldoVigente) + Number(r.saldoVencido) - pagado;
-      if (pendiente > 0.01) {
-        monto += pendiente;
-        vencidos++;
-      }
-    }
-    return { monto: Math.round(monto * 100) / 100, recibosVencidos: vencidos };
+    const [recibos, pagadoAgg] = await Promise.all([
+      this.prisma.recibo.findMany({
+        where: { contratoId, fechaVencimiento: { lt: hoy } },
+        select: { saldoVigente: true, fechaVencimiento: true },
+        orderBy: { fechaVencimiento: 'asc' },
+      }),
+      this.prisma.pago.aggregate({ where: { contratoId }, _sum: { monto: true } }),
+    ]);
+    return adeudoFifo(recibos, Number(pagadoAgg._sum.monto ?? 0));
   }
 
   private async tieneConvenioActivo(contratoId: string): Promise<boolean> {
@@ -77,36 +101,59 @@ export class RestriccionesService {
     const limit = params.limit ?? 50;
     const hoy = new Date().toISOString().slice(0, 10);
 
-    const recibosVencidos = await this.prisma.recibo.findMany({
-      where: { fechaVencimiento: { lt: hoy } },
-      include: {
-        pagos: { select: { monto: true } },
-        contrato: {
-          select: {
-            id: true,
-            numeroContrato: true,
-            nombre: true,
-            estado: true,
-            bloqueadoJuridico: true,
-            puntoServicio: { select: { cortable: true } },
+    const [recibosVencidos, pagosPorContrato] = await Promise.all([
+      this.prisma.recibo.findMany({
+        where: { fechaVencimiento: { lt: hoy } },
+        select: {
+          contratoId: true,
+          saldoVigente: true,
+          fechaVencimiento: true,
+          contrato: {
+            select: {
+              id: true,
+              numeroContrato: true,
+              nombre: true,
+              estado: true,
+              bloqueadoJuridico: true,
+              puntoServicio: { select: { cortable: true } },
+            },
           },
         },
-      },
-    });
+        orderBy: { fechaVencimiento: 'asc' },
+      }),
+      this.prisma.pago.groupBy({ by: ['contratoId'], _sum: { monto: true } }),
+    ]);
 
-    // Agrupa el adeudo por contrato.
+    const pagadoPorContrato = new Map(
+      pagosPorContrato.map((p) => [p.contratoId, Number(p._sum.monto ?? 0)]),
+    );
+
+    // Agrupa los recibos vencidos por contrato (conservan el orden asc de vencimiento).
+    const recibosPorContrato = new Map<
+      string,
+      {
+        contrato: (typeof recibosVencidos)[0]['contrato'];
+        recibos: Array<{ saldoVigente: unknown; fechaVencimiento: string }>;
+      }
+    >();
+    for (const r of recibosVencidos) {
+      const g = recibosPorContrato.get(r.contratoId) ?? { contrato: r.contrato, recibos: [] };
+      g.recibos.push(r);
+      recibosPorContrato.set(r.contratoId, g);
+    }
+
     const porContrato = new Map<
       string,
       { contrato: (typeof recibosVencidos)[0]['contrato']; monto: number; vencidos: number }
     >();
-    for (const r of recibosVencidos) {
-      const pagado = r.pagos.reduce((s, p) => s + Number(p.monto), 0);
-      const pendiente = Number(r.saldoVigente) + Number(r.saldoVencido) - pagado;
-      if (pendiente <= 0.01) continue;
-      const acc = porContrato.get(r.contratoId) ?? { contrato: r.contrato, monto: 0, vencidos: 0 };
-      acc.monto += pendiente;
-      acc.vencidos++;
-      porContrato.set(r.contratoId, acc);
+    for (const [contratoId, g] of recibosPorContrato) {
+      const adeudo = adeudoFifo(g.recibos, pagadoPorContrato.get(contratoId) ?? 0);
+      if (adeudo.monto <= 0.01) continue;
+      porContrato.set(contratoId, {
+        contrato: g.contrato,
+        monto: adeudo.monto,
+        vencidos: adeudo.recibosVencidos,
+      });
     }
 
     const resultado: Array<{

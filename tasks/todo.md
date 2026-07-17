@@ -23,9 +23,33 @@ Se ejecuta por iteraciones autoprogramadas (/loop). Cada iteración deja código
 - [x] **It. 5 — Mínimo vital (LGA 2025)** ✅: modelo `RestriccionServicio` (+migración) con ciclo candidato→programada→aplicada→revertida/cancelada; candidatos con exclusiones duras (convenio activo, bloqueo jurídico, `PuntoServicio.cortable=false`); programar crea Orden de trabajo + **aviso previo obligatorio** al usuario (email/WhatsApp, tipo `aviso_restriccion`); aplicar registra dispositivo restrictor + evidencia probatoria; reversa automática diaria (cron `JOB_REVERSAS_CRON`) al liquidar adeudo o firmar convenio; litros mínimos garantizados (default 100 l/p/d OMS). RBAC en todos los endpoints. Typecheck OK.
 - [x] **It. 6 — Indicadores PIGOO** ✅: `IndicadoresModule` con cálculo automático por periodo (padrón, micromedición %, volumen facturado vs producido → eficiencia física, facturado vs recaudado → eficiencia comercial, eficiencia global, cartera vencida real, usuarios con adeudo, rezago %, restricciones/convenios/quejas); modelo `VolumenProducido` (+migración) para capturar macromedición (upsert manual por NULL-safe); serie histórica (máx 24 periodos, cruce de año verificado) y **export CSV** para reporte PIGOO/CONAGUA. RBAC. Typecheck OK.
 - [x] **It. 7 — Pipeline VEE** ✅: motor de reglas puro (`vee-rules.ts`: lectura_negativa, fuera_rango_zona, spike, caida_drastica/submedición, consumo_cero_prolongado, estimaciones_encadenadas; umbrales por env); cola de excepciones `ExcepcionLectura` (+migración, unique lectura+regla = idempotente); `VeeService`: análisis por periodo con historial de 12 periodos, resolución aceptar/descartar/**corregir** (Editing con valor original preservado en `datosRaw.veeOriginal`, estado "Corregida", guard de consumo negativo); resumen por regla/severidad; RBAC. Verificado: verify-vee 11/11 + typecheck OK.
-- [ ] **It. 8 — RBAC global** en todos los controladores + auditoría global.
 - [x] **It. 8 — Balance hídrico M36 / NRW** ✅: calculador puro `m36-balance.ts` con taxonomía IWA/AWWA completa (consumo autorizado facturado medido/no medido/autorizado no facturado; pérdidas aparentes = submedición % + no autorizado %, pérdidas reales = resto); valorización estándar (aparentes a tarifa media, reales a costo de producción); indicadores NRW %, eficiencia física, tarifa media, pérdidas en pesos; advertencias por macromedición inconsistente y acotamiento de estimaciones; `BalanceService` alimentado por VolumenProducido + consumos por tipo + timbrados, filtrable por administración; endpoint `GET /balance-hidrico` con parámetros de estimación por query. Verificado: verify-balance 15/15 + typecheck OK.
-- [ ] **It. 10 — Tests + CI** (GitHub Actions).
+- [x] **It. 9 — CI + guards** ✅: workflow `.github/workflows/ci.yml` (backend: typecheck + `npm run verify` con los 5 suites de motores; frontend: typecheck + vitest + build); scripts npm `verify:*` en backend; `JwtAuthGuard` añadido a los 4 controladores que estaban sin autenticación (consumos, medidores, rutas, prefacturas). Verificado: 5/5 suites TODO OK, frontend 9/9 tests.
+
+## Pendiente para futuras sesiones (P1/P2/P3 restantes)
+
+- [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada
+- [ ] Pagos a la mexicana: referencias de pago/línea de captura, webhook SPEI/OXXO, aplicación automática
+- [ ] Portal: pago en línea, descarga CFDI real en portal (endpoint XML ya existe — falta el wire), consumo histórico con gráficas
+- [ ] App móvil de lecturista/cuadrilla (offline-first, GPS, foto)
+- [ ] GIS visual (PostGIS + mapa de padrón/tomas)
+- [ ] Multi-tenancy real para SaaS multi-organismo
+- [ ] IA: score de propensión al pago, ranking de reemplazo de medidores (base: excepciones VEE caida_drastica)
+- [ ] Adapter PAC real (Finkok/SW) cuando haya credenciales — implementar la interfaz `PacProvider`
+- [ ] Gateway real de WhatsApp/email — solo configurar `NOTIF_*_URL`
+
+## Revisión final de la sesión (2026-07-17)
+
+9 iteraciones ejecutadas sobre `feat/state-of-the-art-billing` (9 commits, sin push).
+El ciclo meter-to-cash quedó completo end-to-end: consumo → factura (tarifa escalonada
+multi-servicio) → CFDI 4.0 timbrado → recibo imprimible → notificación → batch mensual →
+cobranza con mínimo vital LGA. Capa analítica SWAN: VEE, PIGOO, balance M36.
+Todos los motores de dinero/fiscal/reglas tienen verificación aritmética ejecutable
+(`npm run verify`, 5 suites) y CI en GitHub Actions.
+
+**Acciones humanas pendientes**: aplicar 5 migraciones nuevas en el servidor
+(`npx prisma migrate deploy`), contratar PAC y configurar `PAC_PROVIDER` + CSD,
+configurar gateway de WhatsApp Business API, decidir push/PR de la rama.
 
 ## Notas de diseño
 
