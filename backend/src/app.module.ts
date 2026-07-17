@@ -33,6 +33,7 @@ import { CatalogosOperativosModule } from './modules/catalogos-operativos/catalo
 import { RutasModule } from './modules/rutas/rutas.module';
 import { MedidoresModule } from './modules/medidores/medidores.module';
 import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
+import { FacturacionModule } from './modules/facturacion/facturacion.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
     RutasModule,
     MedidoresModule,
     SolicitudesModule,
+    FacturacionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
