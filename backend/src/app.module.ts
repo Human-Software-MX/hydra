@@ -37,6 +37,7 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
 import { BatchModule } from './modules/batch/batch.module';
 import { RestriccionesModule } from './modules/restricciones/restricciones.module';
 import { IndicadoresModule } from './modules/indicadores/indicadores.module';
+import { VeeModule } from './modules/vee/vee.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { IndicadoresModule } from './modules/indicadores/indicadores.module';
     BatchModule,
     RestriccionesModule,
     IndicadoresModule,
+    VeeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

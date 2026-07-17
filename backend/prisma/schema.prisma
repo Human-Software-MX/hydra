@@ -1931,3 +1931,27 @@ model VolumenProducido {
   @@index([periodo])
   @@map("volumenes_producidos")
 }
+
+// ---- VEE: cola de excepciones de validación de lecturas ----
+model ExcepcionLectura {
+  id          String    @id @default(cuid())
+  lecturaId   String    @map("lectura_id")
+  contratoId  String    @map("contrato_id")
+  periodo     String
+  regla       String // lectura_negativa | fuera_rango_zona | spike | caida_drastica | consumo_cero_prolongado | estimaciones_encadenadas
+  severidad   String // critica | advertencia
+  detalle     Json?
+  estado      String    @default("pendiente") // pendiente | aceptada | corregida | descartada
+  resolucion  String?
+  resueltoPor String?   @map("resuelto_por")
+  resueltaEn  DateTime? @map("resuelta_en")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([lecturaId, regla])
+  @@index([contratoId])
+  @@index([periodo])
+  @@index([estado])
+  @@index([regla])
+  @@map("excepciones_lectura")
+}
