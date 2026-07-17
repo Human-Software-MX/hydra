@@ -36,6 +36,7 @@ import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
 import { FacturacionModule } from './modules/facturacion/facturacion.module';
 import { BatchModule } from './modules/batch/batch.module';
 import { RestriccionesModule } from './modules/restricciones/restricciones.module';
+import { IndicadoresModule } from './modules/indicadores/indicadores.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { RestriccionesModule } from './modules/restricciones/restricciones.modul
     FacturacionModule,
     BatchModule,
     RestriccionesModule,
+    IndicadoresModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1915,3 +1915,19 @@ model RestriccionServicio {
   @@index([fechaProgramada])
   @@map("restricciones_servicio")
 }
+
+// ---- Indicadores PIGOO / balance hídrico: volumen producido (macromedición) ----
+model VolumenProducido {
+  id               String   @id @default(cuid())
+  periodo          String // YYYY-MM
+  administracionId String?  @map("administracion_id")
+  m3               Decimal  @db.Decimal(14, 2)
+  fuente           String? // macromedidor | estimado | SCADA
+  notas            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([periodo, administracionId])
+  @@index([periodo])
+  @@map("volumenes_producidos")
+}
