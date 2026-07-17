@@ -38,6 +38,7 @@ import { BatchModule } from './modules/batch/batch.module';
 import { RestriccionesModule } from './modules/restricciones/restricciones.module';
 import { IndicadoresModule } from './modules/indicadores/indicadores.module';
 import { VeeModule } from './modules/vee/vee.module';
+import { BalanceModule } from './modules/balance/balance.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { VeeModule } from './modules/vee/vee.module';
     RestriccionesModule,
     IndicadoresModule,
     VeeModule,
+    BalanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
