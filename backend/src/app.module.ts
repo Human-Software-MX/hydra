@@ -34,6 +34,7 @@ import { RutasModule } from './modules/rutas/rutas.module';
 import { MedidoresModule } from './modules/medidores/medidores.module';
 import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
 import { FacturacionModule } from './modules/facturacion/facturacion.module';
+import { BatchModule } from './modules/batch/batch.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { FacturacionModule } from './modules/facturacion/facturacion.module';
     MedidoresModule,
     SolicitudesModule,
     FacturacionModule,
+    BatchModule,
   ],
   controllers: [AppController],
   providers: [AppService],
