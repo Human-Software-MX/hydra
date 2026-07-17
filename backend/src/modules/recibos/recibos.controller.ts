@@ -5,12 +5,15 @@ import {
   Param,
   Query,
   Body,
+  Res,
   UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
+import { construirReciboHtml } from './recibo-html';
 
 @Controller('recibos')
 @UseGuards(JwtAuthGuard)
@@ -83,6 +86,65 @@ export class RecibosController {
   @Post(':id/marcar-impreso')
   async marcarImpreso(@Param('id') id: string) {
     return this.prisma.recibo.update({ where: { id }, data: { impreso: true } });
+  }
+
+  /** Recibo imprimible (HTML listo para guardar como PDF desde el navegador). */
+  @Get(':id/html')
+  async reciboHtml(@Param('id') id: string, @Res() res: Response) {
+    const recibo = await this.prisma.recibo.findUnique({
+      where: { id },
+      include: {
+        contrato: { select: { numeroContrato: true, nombre: true, rfc: true, direccion: true } },
+        timbrado: true,
+      },
+    });
+    if (!recibo) {
+      res.status(404).send('<h1>Recibo no encontrado</h1>');
+      return;
+    }
+
+    const now = new Date();
+    const mensajes = await this.prisma.mensajeRecibo.findMany({
+      where: {
+        activo: true,
+        AND: [
+          { OR: [{ tipo: 'Global' }, { tipo: 'Individual', contratoId: recibo.contratoId }] },
+          { OR: [{ vigenciaDesde: null }, { vigenciaDesde: { lte: now } }] },
+          { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }] },
+        ],
+      },
+    });
+
+    const html = construirReciboHtml({
+      reciboId: recibo.id,
+      organismo: process.env.CFDI_EMISOR_NOMBRE ?? 'Organismo Operador de Agua',
+      contrato: {
+        numero: recibo.contrato.numeroContrato,
+        nombre: recibo.contrato.nombre,
+        rfc: recibo.contrato.rfc,
+        direccion: recibo.contrato.direccion,
+      },
+      periodo: recibo.timbrado?.periodo ?? '',
+      fechaEmision: recibo.timbrado?.fechaEmision ?? '',
+      fechaVencimiento: recibo.fechaVencimiento,
+      subtotal: Number(recibo.timbrado?.subtotal ?? 0),
+      iva: Number(recibo.timbrado?.iva ?? 0),
+      saldoVigente: Number(recibo.saldoVigente),
+      saldoVencido: Number(recibo.saldoVencido),
+      total: Number(recibo.saldoVigente) + Number(recibo.saldoVencido),
+      cfdi: recibo.timbrado?.uuid
+        ? {
+            uuid: recibo.timbrado.uuid,
+            serie: recibo.timbrado.serie ?? undefined,
+            folio: recibo.timbrado.folio ?? undefined,
+            selloSat: recibo.timbrado.selloSat ?? undefined,
+          }
+        : undefined,
+      mensajes: mensajes.map((m) => m.mensaje),
+    });
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
   }
 }
 

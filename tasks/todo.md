@@ -18,7 +18,7 @@ Se ejecuta por iteraciones autoprogramadas (/loop). Cada iteración deja código
 ## Próximas iteraciones (pendientes)
 
 - [x] **It. 2 — CFDI 4.0** ✅: constructor XML CFDI 4.0 puro (Emisor/Receptor/Conceptos/Impuestos, clave 83101509, MTQ/E48, público general), abstracción PAC (adapter) con proveedor simulado + factory por env, `TimbradoService` (timbrar individual + masivo por periodo, reconciliación de importes, descarga XML), columnas fiscales en `Timbrado` + migración, RBAC en endpoints, panel frontend en TimbradoPage. Verificado: verify-cfdi 13/13 + typecheck OK.
-- [ ] **It. 3 — PDF de recibos** + **notificaciones reales** (abstracción de proveedor email/WhatsApp con adapters; no-op por defecto sin secretos).
+- [x] **It. 3 — Recibo imprimible + notificaciones reales** ✅: arquitectura de canales (EmailChannel/WhatsAppChannel) con adapters consola (default) + HTTP gateway por env; factory; `NotificacionesService` real con bitácora `NotificacionLog` (+migración) y plantillas (recibo emitido, aviso vencimiento, folio trámite); `NotificacionesController` (prueba, notificar recibo/vencimiento, logs) con RBAC; generador de recibo imprimible HTML server-side (`recibo-html.ts`) + endpoint `/recibos/:id/html`; frontend: api/notificaciones.ts + botones "Descargar/Imprimir" y "Notificar" en Recibos. Verificado: verify-recibo-html 7/7 + typecheck OK.
 - [ ] **It. 4 — Scheduler/batch** (`@nestjs/schedule`): facturación mensual, vencimientos, generación de órdenes por adeudo.
 - [ ] **It. 5 — Mínimo vital (LGA 2025)**: restricción de flujo como estado de la toma, con trazabilidad probatoria — diferenciador regulatorio.
 - [ ] **It. 6 — Dashboard PIGOO**: indicadores de eficiencia física/comercial, export.

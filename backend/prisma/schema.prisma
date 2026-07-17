@@ -1860,3 +1860,25 @@ model SolicitudInspeccion {
 
   @@map("solicitud_inspecciones")
 }
+
+// ---- Notificaciones (bitácora de envíos multicanal) ----
+model NotificacionLog {
+  id           String   @id @default(cuid())
+  contratoId   String?  @map("contrato_id")
+  canal        String // email | whatsapp
+  tipo         String // recibo_emitido | aviso_vencimiento | aviso_restriccion | folio_tramite | prueba
+  destinatario String
+  asunto       String?
+  mensaje      String   @db.Text
+  proveedor    String
+  enviado      Boolean  @default(false)
+  referencia   String?
+  error        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([contratoId])
+  @@index([canal])
+  @@index([tipo])
+  @@index([createdAt])
+  @@map("notificacion_logs")
+}
