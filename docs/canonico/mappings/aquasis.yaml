@@ -43,18 +43,19 @@ entity_maps:
           type: template
           template: '{{"min": {lec_esp_inf}, "max": {lec_esp_sup}}}'
         notes: Plausibility band LECESPINF/LECESPSUP; ingest-only
-      - source: fecha_lec
+      - source: read_at
         canonical: read_at
         transform: parse_datetime
-        notes: "Connector normalizes FECHALEC+HORALEC (AAAAMMDD + HHMMSS, zeros = not read) to ISO datetime or null before mapping"
+        notes: "Connector field spanning FECHALEC+HORALEC @417+14 (AAAAMMDD + HHMMSS, zeros = not read) — ISO datetime or null"
       - {source: observac, canonical: incidence_code, notes: 2-char Observac.dat key returned by the terminal}
       - {source: lector, canonical: reader_code}
       - {source: contratista, canonical: crew_code}
       - {source: foto, canonical: photo_url, notes: "Return field: https://lectura.ceaqueretaro.gob.mx/imagen.php?..."}
       - canonical: is_estimated
         notes: Not in the file — AQUACIS generates estimations at lot load when the incidence is an avería; the connector flags readings it estimates
-      - canonical: raw_record
-        notes: Connector stores the full 1480-char record (latin1→utf8) for lineage
+      - source: _raw
+        canonical: raw_record
+        notes: The connector exposes the full 1480-char record (latin1→utf8) as _raw — kept for lineage
 
   - source_entity: registro_lectura
     canonical_entity: reading_batch

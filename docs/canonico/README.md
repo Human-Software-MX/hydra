@@ -1,28 +1,30 @@
 # Artefactos canónicos del dominio agua
 
 Estos archivos son el **resultado final de Callosum** — lo único de Callosum
-que Hydra consume. El motor corre en su propio repo (`~/Desktop/AI/callosum`)
-en design-time; aquí solo viven sus artefactos versionados:
+que este proyecto consume. El motor corre en su propio repo en design-time;
+aquí solo viven sus artefactos versionados, listos para leerse como datos
+(diccionario de referencia, validación schema-on-read, KPIs, knowledge graph).
 
 | Archivo | Qué es |
 |---|---|
-| `agua.yaml` | Modelo canónico del dominio agua v0.1.0 — 24 entidades meter-to-cash + balance hídrico sobre IWA/AWWA/PIGOO. El diccionario de datos de referencia. |
-| `agua.ttl` | La misma ontología en OWL/Turtle — para Knowledge Graph, RAG, SPARQL o Protégé (entregable 10 del plan). |
-| `mappings/hydra.yaml` | Mapeo bidireccional Hydra ↔ canónico (24 entity maps, caveats de deuda técnica anotados por campo). |
-| `mappings/aquasis.yaml` | Mapeo AQUACIS ↔ canónico (registro de lote 1,480c → 6 entidades). |
+| `agua.yaml` | Modelo canónico del dominio v0.1.0 — 24 entidades. El diccionario de datos de referencia. |
+| `agua.ttl` | La misma ontología en OWL/Turtle — para Knowledge Graph, RAG, SPARQL o Protégé. |
+| `mappings/aquasis.yaml` | Mapeo bidireccional aquasis ↔ canónico, campo a campo. |
+| `mappings/hydra.yaml` | Mapeo bidireccional hydra ↔ canónico, campo a campo. |
+
+Modelo v0.1.0 · 24 entidades. Adopta: IWA/AWWA standard water balance (Lambert & Hirner 2000; AWWA M36 5th ed. with data validity grading) + IWA PI system (Alegre et al. 3rd ed. 2017) / IBNET / PIGOO (IMTA) for indicators; meter-to-cash core normalized from the IMTA "Sistema comercial" reference (comercialización, padrón, medición, facturación y cobranza) and the CIS vocabulary shared by Oracle CC&B / SAP IS-U.
 
 ## Regenerar
 
 En el repo Callosum (fuente de verdad de estos artefactos):
 
 ```bash
-cd ~/Desktop/AI/callosum
-# editar specs/... según el cambio
-.venv/bin/python -m callosum.cli validate
-.venv/bin/python -m callosum.cli ontology agua --write
-cp specs/canonical/agua.yaml specs/canonical/agua.ttl <hydra>/docs/canonico/
-cp specs/mappings/agua/{hydra,aquasis}.yaml <hydra>/docs/canonico/mappings/
+callosum validate
+callosum ontology agua --write
+callosum publish agua <este-directorio>
 ```
 
-Versionar el cambio aquí (commit) — Hydra nunca depende del repo Callosum en
-runtime, solo de estos archivos.
+Versionar el cambio aquí (commit) — el proyecto nunca depende del repo
+Callosum en runtime, solo de estos archivos.
+
+*Generado por `callosum publish`.*
