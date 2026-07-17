@@ -1,7 +1,9 @@
-import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller('rutas')
+@UseGuards(JwtAuthGuard)
 export class RutasController {
   constructor(private readonly prisma: PrismaService) {}
 

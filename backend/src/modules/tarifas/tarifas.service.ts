@@ -116,9 +116,19 @@ export class TarifasService {
   async calcularMonto(params: { tipoServicio: string; consumoM3: number; fecha?: string }) {
     const tarifas = await this.findTarifaVigente(params.tipoServicio, params.fecha);
     if (!tarifas.length) throw new BadRequestException('No hay tarifas vigentes para el servicio indicado');
+    return this.computeMonto(tarifas, params.consumoM3);
+  }
 
+  /**
+   * Cálculo puro sobre un set de tarifas ya cargado. Permite a otros módulos
+   * (p. ej. prefacturas) calcular montos en lote sin una query por registro.
+   */
+  computeMonto(
+    tarifas: Awaited<ReturnType<TarifasService['findTarifaVigente']>>,
+    consumoM3: number,
+  ) {
     let subtotal = 0;
-    let desglose: Array<{ rango: string; m3: number; precio: number; subtotal: number }> = [];
+    const desglose: Array<{ rango: string; m3: number; precio: number; subtotal: number }> = [];
 
     for (const t of tarifas) {
       if (t.tipoCalculo === 'fijo') {
@@ -129,8 +139,8 @@ export class TarifasService {
       if (t.tipoCalculo === 'escalonado' || t.tipoCalculo === 'variable') {
         const min = t.rangoMinM3 ?? 0;
         const max = t.rangoMaxM3 ?? Infinity;
-        if (params.consumoM3 > min) {
-          const m3EnRango = Math.min(params.consumoM3, max) - min;
+        if (consumoM3 > min) {
+          const m3EnRango = Math.min(consumoM3, max) - min;
           const sub = m3EnRango * Number(t.precioUnitario ?? 0);
           subtotal += sub;
           desglose.push({
@@ -145,7 +155,7 @@ export class TarifasService {
 
     const ivaPct = Number(tarifas[0]?.ivaPct ?? 16) / 100;
     const iva = subtotal * ivaPct;
-    return { consumoM3: params.consumoM3, subtotal, iva, total: subtotal + iva, desglose };
+    return { consumoM3, subtotal, iva, total: subtotal + iva, desglose };
   }
 
   // ─── Corrección Tarifaria ─────────────────────────────────────────────────
