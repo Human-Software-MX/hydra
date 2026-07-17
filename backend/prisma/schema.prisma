@@ -359,6 +359,20 @@ model Timbrado {
   fechaEmision     String   @map("fecha_emision")
   fechaVencimiento String   @map("fecha_vencimiento")
   error            String?
+  // ── Datos fiscales CFDI 4.0 (poblados por el módulo de timbrado) ──
+  serie            String?
+  folio            String?
+  formaPago        String?  @map("forma_pago")
+  metodoPago       String?  @map("metodo_pago")
+  usoCfdi          String?  @map("uso_cfdi")
+  fechaTimbrado    String?  @map("fecha_timbrado")
+  selloCfdi        String?  @map("sello_cfdi") @db.Text
+  selloSat         String?  @map("sello_sat") @db.Text
+  noCertificadoSat String?  @map("no_certificado_sat")
+  rfcProvCertif    String?  @map("rfc_prov_certif")
+  cadenaOriginalSat String? @map("cadena_original_sat") @db.Text
+  xml              String?  @db.Text
+  pacProveedor     String?  @map("pac_proveedor")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   contrato         Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
@@ -367,6 +381,7 @@ model Timbrado {
   pagos            Pago[]
 
   @@index([contratoId])
+  @@index([uuid])
   @@map("timbrados")
 }
 

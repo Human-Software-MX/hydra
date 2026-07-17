@@ -1,12 +1,34 @@
 import { useState, useMemo } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
 import StatusBadge from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { timbrarPeriodo, type ResultadoTimbradoPeriodo } from '@/api/timbrado';
+import { useToast } from '@/components/ui/use-toast';
 
 const TimbradoPage = () => {
   const { timbrados, addTimbrado, updateTimbrado, preFacturas, contratos, zonas, allowedZonaIds } = useData();
   const [zonaId, setZonaId] = useState<string>('all');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [periodoTimbrado, setPeriodoTimbrado] = useState(new Date().toISOString().slice(0, 7));
+  const [resultado, setResultado] = useState<ResultadoTimbradoPeriodo | null>(null);
+
+  const timbrarPeriodoMut = useMutation({
+    mutationFn: () => timbrarPeriodo({ periodo: periodoTimbrado }),
+    onSuccess: (data) => {
+      setResultado(data);
+      queryClient.invalidateQueries({ queryKey: ['timbrados'] });
+      toast({
+        title: 'Timbrado ejecutado',
+        description: `${data.timbrados}/${data.procesados} timbrados${data.conError ? ` · ${data.conError} con error` : ''}`,
+      });
+    },
+    onError: (e: Error) => toast({ title: 'Error al timbrar', description: e.message, variant: 'destructive' }),
+  });
 
   const contratoIdsZona = useMemo(() => {
     if (zonaId === 'all') return new Set(contratos.map(c => c.id));
@@ -45,6 +67,43 @@ const TimbradoPage = () => {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="mb-6 widget-card">
+        <h3 className="section-title">Timbrado del periodo (CFDI 4.0)</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          Timbra ante el PAC todos los comprobantes pendientes del periodo (estado Pendiente o Error PAC).
+          Genera el XML CFDI 4.0 con UUID y sellos.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1">
+            <Label htmlFor="periodo-timbrado">Periodo (YYYY-MM)</Label>
+            <Input
+              id="periodo-timbrado"
+              type="month"
+              value={periodoTimbrado}
+              onChange={(e) => { setPeriodoTimbrado(e.target.value); setResultado(null); }}
+              className="w-[180px]"
+            />
+          </div>
+          <Button onClick={() => timbrarPeriodoMut.mutate()} disabled={timbrarPeriodoMut.isPending || !periodoTimbrado}>
+            {timbrarPeriodoMut.isPending ? 'Timbrando…' : 'Timbrar periodo'}
+          </Button>
+        </div>
+        {resultado && (
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-md border bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Procesados</p><p className="text-lg font-semibold">{resultado.procesados}</p></div>
+            <div className="rounded-md border bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Timbrados</p><p className="text-lg font-semibold">{resultado.timbrados}</p></div>
+            <div className="rounded-md border bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Con error</p><p className="text-lg font-semibold">{resultado.conError}</p></div>
+            {resultado.conError > 0 && (
+              <div className="col-span-2 md:col-span-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                <ul className="list-disc pl-5 text-muted-foreground">
+                  {resultado.errores.slice(0, 5).map((e) => <li key={e.timbradoId}>{e.timbradoId}: {e.error}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {aceptadas.length > 0 && (

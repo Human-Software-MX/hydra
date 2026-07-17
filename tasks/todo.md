@@ -17,7 +17,7 @@ Se ejecuta por iteraciones autoprogramadas (/loop). Cada iteración deja código
 
 ## Próximas iteraciones (pendientes)
 
-- [ ] **It. 2 — CFDI 4.0**: servicio de timbrado con abstracción PAC (adapter), XML Anexo 20, guía DPA, complemento de pago. Sellar Timbrado (estado Pendiente → Timbrada OK).
+- [x] **It. 2 — CFDI 4.0** ✅: constructor XML CFDI 4.0 puro (Emisor/Receptor/Conceptos/Impuestos, clave 83101509, MTQ/E48, público general), abstracción PAC (adapter) con proveedor simulado + factory por env, `TimbradoService` (timbrar individual + masivo por periodo, reconciliación de importes, descarga XML), columnas fiscales en `Timbrado` + migración, RBAC en endpoints, panel frontend en TimbradoPage. Verificado: verify-cfdi 13/13 + typecheck OK.
 - [ ] **It. 3 — PDF de recibos** + **notificaciones reales** (abstracción de proveedor email/WhatsApp con adapters; no-op por defecto sin secretos).
 - [ ] **It. 4 — Scheduler/batch** (`@nestjs/schedule`): facturación mensual, vencimientos, generación de órdenes por adeudo.
 - [ ] **It. 5 — Mínimo vital (LGA 2025)**: restricción de flujo como estado de la toma, con trazabilidad probatoria — diferenciador regulatorio.
