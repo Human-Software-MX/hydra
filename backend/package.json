@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "seed:demo-aquacis": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-demo-aquacis.ts",
     "import-sige-hydra": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-sige-hydra.ts",
     "import:inegi-catalog": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-inegi-catalog.ts",
     "import:localidades-sige-qro": "ts-node scripts/import-localidades-sige-qro.ts",

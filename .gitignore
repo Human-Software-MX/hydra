@@ -30,3 +30,4 @@ DEMO_WALKTHROUGH.md
 *.sw?
 _DocumentacIon_Interna_Sistema_Anterior/*
 scripts/*
+docs/demo/out/

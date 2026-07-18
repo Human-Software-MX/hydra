@@ -1,0 +1,488 @@
+callosum: 1
+kind: canonical-model
+domain: agua
+version: 0.1.0
+adopts_standard: >-
+  IWA/AWWA standard water balance (Lambert & Hirner 2000; AWWA M36 5th ed.
+  with data validity grading) + IWA PI system (Alegre et al. 3rd ed. 2017) /
+  IBNET / PIGOO (IMTA) for indicators; meter-to-cash core normalized from the
+  IMTA "Sistema comercial" reference (comercialización, padrón, medición,
+  facturación y cobranza) and the CIS vocabulary shared by Oracle CC&B / SAP
+  IS-U.
+description: >
+  Canonical commercial-water-utility model (meter-to-cash + water balance),
+  curated from Hydra (CEA Querétaro), AQUACIS reading flat files, SIGE legacy
+  catalogs, external-collector payment layouts, SAP IDOC accounting interface
+  and the IWA/AWWA/PIGOO standards. Conventions: dates ISO 8601 (date) and
+  timestamps ISO 8601 UTC (datetime); money as decimal MXN major units with
+  explicit currency field where another currency is possible; volumes in m3;
+  readings in integer register units; geometry/points as GeoJSON WGS84; ids
+  are opaque strings; enum values snake_case English. Header/line splits are
+  explicit (bill/bill_line, accounting_voucher/accounting_voucher_line).
+  Regulatory note: service cuts on domestic connections must be modeled as
+  restriction to vital minimum, never total suspension (Ley General de Aguas,
+  DOF 2025-12-11) — hence work_order.cut_impact.
+entities:
+  - id: party
+    name: Party
+    description: "Person or organization holding contracts or roles (aka Persona, abonado, titular, propietario, ABONADO in AQUACIS)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: name, type: string, required: true, description: "Given name or razón social; aka nombre/razonSocial"}
+      - {id: paternal_surname, type: string, description: "aka apellidoPaterno"}
+      - {id: maternal_surname, type: string, description: "aka apellidoMaterno"}
+      - {id: type, type: enum, values: [natural_person, organization], description: "aka tipo persona Física/Moral"}
+      - {id: tax_id, type: string, description: "RFC (MX); aka rfc"}
+      - {id: national_id, type: string, description: "CURP (MX); aka curp"}
+      - {id: tax_regime, type: string, description: "SAT c_RegimenFiscal; aka regimenFiscal"}
+      - {id: email, type: string}
+      - {id: phone, type: string, description: "aka telefono/telefonoAlt"}
+      - {id: id_document, type: json, description: "Identification kind+number (INE, pasaporte, licencia); aka tipoIdentificacion/numIdentificacion"}
+
+  - id: party_role
+    name: Party role on agreement
+    description: "Links a party to a service agreement with a role and validity window (aka RolPersonaContrato; roles PROPIETARIO/FISCAL/CONTACTO)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: party_id, type: reference, ref: party, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: role, type: enum, values: [owner, fiscal, contact, tenant, other], required: true, description: "aka rol PROPIETARIO/FISCAL/CONTACTO"}
+      - {id: valid_from, type: datetime, description: "aka fechaDesde"}
+      - {id: valid_to, type: datetime, description: "aka fechaHasta; null = current"}
+
+  - id: address
+    name: Address
+    description: "Normalized service/fiscal address with INEGI hierarchy and legacy Aquasis keys (aka Domicilio; AQUACIS DIR*/NCALNOMBRE/BARRIO/MUNICIPIO)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: street, type: string, required: true, description: "aka calle, NCALNOMBRE"}
+      - {id: exterior_number, type: string, description: "aka numExterior, DIRFINCA"}
+      - {id: interior_number, type: string, description: "aka numInterior, DIRCOMFINCA"}
+      - {id: neighborhood_key, type: string, description: "Colonia key; aka aquasisBarrId (Aquasis barrid), CatalogoColoniaINEGI"}
+      - {id: locality_key, type: string, description: "Localidad key; aka aquasisPobid (Aquasis pobid), CatalogoLocalidadINEGI; NOTE AQUACIS labels this field BARRIO in the reading file"}
+      - {id: municipality_key, type: string, description: "INEGI municipio key; aka claveINEGI, SIGE proid; AQUACIS MUNICIPIO/Población"}
+      - {id: state_key, type: string, description: "INEGI estado key (22 = Querétaro)"}
+      - {id: postal_code, type: string, description: "aka codigoPostal"}
+      - {id: between_streets, type: json, description: "aka entreCalle1/entreCalle2"}
+      - {id: reference_point, type: json, description: "GeoJSON point WGS84; aka gpsLat/gpsLng"}
+      - {id: inegi_validated, type: boolean, description: "aka validadoINEGI"}
+
+  - id: service_point
+    name: Service point
+    description: >
+      Physical connection where service is delivered (aka PuntoServicio,
+      toma, AQUACIS PTOSID; legacy Hydra Toma folds in here). Supports
+      parent-child hierarchy with consumption split (macro meter / condominio
+      individualization) and the cuttability flag.
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: code, type: string, required: true, description: "Business code; aka codigo, PTOSID"}
+      - {id: address_id, type: reference, ref: address}
+      - {id: service_type, type: enum, values: [water, sewerage, sanitation, mixed], description: "aka tipo Agua/Alcantarillado/Saneamiento"}
+      - {id: supply_type, type: string, description: "aka CatalogoTipoSuministro (reading period MENSUAL/BIMESTRAL, requiere medidor), AQUACIS TIPOSUMINISTRO"}
+      - {id: connection_diameter, type: string, description: "aka diametroToma"}
+      - {id: pipe_material, type: string, description: "aka materialTuberia"}
+      - {id: location, type: json, description: "GeoJSON point WGS84; aka gpsLat/gpsLng"}
+      - {id: cadastral_key, type: string, description: "Link to catastro parcel; aka claveCatastral, AQUACIS PTOSREFCAT"}
+      - {id: hydraulic_sector_id, type: reference, ref: hydraulic_sector, description: "DMA membership for the water balance"}
+      - {id: parent_service_point_id, type: reference, ref: service_point, description: "aka puntoServicioPadreId, AQUACIS POLIZAPADRE (macro meter)"}
+      - {id: consumption_split_pct, type: decimal, description: "% of parent consumption assigned to this child; aka reparticionConsumo"}
+      - {id: cuttable, type: boolean, description: "Whether restriction orders may target it; aka cortable/motivoNoCortable"}
+      - {id: route_code, type: string, description: "Reading walk-order; aka codigoRecorrido, AQUACIS LECPTOCODR"}
+      - {id: status, type: enum, values: [active, inactive, available, assigned], description: "aka estado"}
+
+  - id: service_agreement
+    name: Service agreement (contract)
+    description: >
+      The commercial contract binding parties to a service point — hub of the
+      meter-to-cash cycle (aka Contrato, AQUACIS LECCNTTNUM, SIGE cnttnum;
+      legacy references ceaNumContrato/cnttrefant).
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: contract_number, type: string, required: true, description: "Business number; aka numeroContrato, CONTRATO AQUACIS in collector files"}
+      - {id: legacy_references, type: json, description: "Prior-system numbers: {cea: ceaNumContrato, sige: cnttnum/cnttrefant, aquacis: ...}; aka referenciaContratoAnterior"}
+      - {id: service_point_id, type: reference, ref: service_point}
+      - {id: address_id, type: reference, ref: address}
+      - {id: service_class_id, type: reference, ref: service_class, description: "aka tipoContratacionId, SIGE tctcod"}
+      - {id: service_type, type: enum, values: [water, sewerage, sanitation, mixed], description: "aka tipoServicio"}
+      - {id: use_category, type: enum, values: [domestic, non_domestic], description: "Drives IVA exemption and no-total-cut rule; aka AQUACIS USO 1/0"}
+      - {id: activity_code, type: string, description: "Economic activity; aka CatalogoActividad CIG2018, SIGE ACTIPOL_*, AQUACIS CNTTACTIVID"}
+      - {id: billing_cycle, type: enum, values: [monthly, bimonthly, quarterly, biannual, annual], description: "aka cicloFacturacion"}
+      - {id: status, type: enum, values: [active, suspended, restricted, canceled, in_process], description: "aka estado, AQUACIS CNTTESTADO"}
+      - {id: legal_hold, type: boolean, description: "aka bloqueadoJuridico"}
+      - {id: direct_debit, type: boolean, description: "aka domiciliado"}
+      - {id: bill_delivery, type: enum, values: [paper, pdf, paper_and_pdf], description: "aka tipoEnvioFactura"}
+      - {id: served_units, type: integer, description: "Housing/commercial units served (tariff divisor); aka unidadesServidas, AQUACIS VIVIENDAS"}
+      - {id: start_date, type: date, description: "aka fecha (String in Hydra — normalize to ISO)"}
+      - {id: end_date, type: date, description: "aka fechaBaja"}
+      - {id: zone_path, type: json, description: "Operational hierarchy {administration, zone, district, route}; aka Administracion/Zona/Distrito/Ruta, SIGE expid, AQUACIS LOTPLECEXPID/ZONID"}
+      - {id: contract_text_snapshot, type: text, description: "aka textoContratoSnapshot (versioned clauses)"}
+
+  - id: service_class
+    name: Service class (contracting type)
+    description: "Parameterized user/tariff class (aka TipoContratacion, clase de usuario — 11 CEA classes; SIGE tctcod/tctclsccod)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: code, type: string, required: true, description: "aka codigo, TCT-*"}
+      - {id: name, type: string, required: true}
+      - {id: requires_meter, type: boolean, description: "aka requiereMedidor; SIGE sheet 'sin medidor'"}
+      - {id: requires_inspection, type: boolean, description: "aka requiereInspeccion"}
+      - {id: is_individualization, type: boolean, description: "aka esIndividualizacion (condominio sub-metering)"}
+      - {id: allowed_periodicities, type: array, description: "aka periodicidadesPermitidas"}
+      - {id: active, type: boolean}
+
+  - id: meter
+    name: Meter
+    description: "Installed water meter (aka Medidor, contador, AQUACIS CONTNUMERO/CONTCALMM/MARCA)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: serial_number, type: string, required: true, description: "aka serie, CONTNUMERO"}
+      - {id: brand, type: string, description: "aka CatalogoMarcaMedidor, AQUACIS MARCA"}
+      - {id: model, type: string, description: "aka CatalogoModeloMedidor"}
+      - {id: caliber, type: string, description: "aka CatalogoCalibre (mm), AQUACIS CONTCALMM / CALIEQPUL (pulgadas)"}
+      - {id: digits, type: integer, description: "Register digit count for rollover; aka digitos"}
+      - {id: placement, type: enum, values: [interior, exterior], description: "aka CatalogoEmplazamiento, AQUACIS EMPLINTEXT/SITUACION"}
+      - {id: telemetry_type, type: string, description: "AMI/AMR protocol when present (DLMS/COSEM, wM-Bus, LoRaWAN, NB-IoT); aka tipoTelemetria"}
+      - {id: initial_reading, type: integer, description: "aka lecturaInicial"}
+      - {id: installed_at, type: date, description: "aka fechaInstalacion"}
+      - {id: last_verified_at, type: date, description: "aka fechaUltimaVerif"}
+      - {id: status, type: enum, values: [installed, in_stock, in_repair, retired], description: "aka estado + MedidorBodega"}
+
+  - id: reading_batch
+    name: Reading batch (lot)
+    description: >
+      Reading work unit exchanged with the field (aka LoteLecturas; AQUACIS
+      lot file named administración(4)+zona(3)+lote(3), e.g. 0001M08L20,
+      /Salida → /Entrada round trip; lot types L lectura / I inspección /
+      R repaso).
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: period, type: string, required: true, description: "Billing period YYYY-MM; aka periodo, LOTPLECANNO+PERNUM"}
+      - {id: batch_type, type: enum, values: [reading, inspection, reread], description: "aka tipoLote, AQUACIS LOTTIPO L/I/R"}
+      - {id: zone_path, type: json, description: "aka zonaId/rutaId, LOTPLECEXPID/LOTPLECZONID/LOTNUMERO"}
+      - {id: file_name, type: string, description: "Source flat file; aka archivoNombre"}
+      - {id: file_hash, type: string, description: "aka archivoHash"}
+      - {id: status, type: enum, values: [pending, emitted, returned, validated, loaded, error], description: "aka estado; AQUACIS blocks loading until every contract has reading or incidence"}
+      - {id: totals, type: json, description: "{records, valid, errors}; aka totalRegistros/totalValidos/totalConError"}
+
+  - id: meter_reading
+    name: Meter reading
+    description: "Individual reading within a batch (aka Lectura; AQUACIS LECTURA/FECHALEC/HORALEC + OBSERVAC incidence + LECTOR/CONTRATISTA + Foto)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: batch_id, type: reference, ref: reading_batch, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: period, type: string, required: true}
+      - {id: reading_value, type: integer, description: "Register units; aka lecturaActual, AQUACIS LECTURA"}
+      - {id: previous_reading, type: integer, description: "aka lecturaAnterior, AQUACIS LECANTERIO"}
+      - {id: expected_range, type: json, description: "{min,max} plausibility band; aka lecturaMinZona/MaxZona, AQUACIS LECESPINF/LECESPSUP"}
+      - {id: read_at, type: datetime, description: "Field capture timestamp; aka AQUACIS FECHALEC+HORALEC"}
+      - {id: incidence_code, type: reference, ref: reading_incidence, description: "aka incidenciaId, AQUACIS OBSERVAC (2-char Observac.dat key)"}
+      - {id: is_estimated, type: boolean, description: "aka esEstimada; AQUACIS estimates on avería incidences at load"}
+      - {id: reader_code, type: string, description: "aka Lecturista.codigo, AQUACIS LECTOR"}
+      - {id: crew_code, type: string, description: "Contractor/cuadrilla; aka Contratista, AQUACIS CONTRATISTA (Lectores.dat)"}
+      - {id: photo_url, type: string, description: "Field evidence; aka urlFoto, AQUACIS Foto"}
+      - {id: status, type: enum, values: [pending, valid, invalid], description: "aka estado/motivoInvalidacion"}
+      - {id: raw_record, type: json, description: "Original flat-file record; aka datosRaw"}
+
+  - id: reading_incidence
+    name: Reading incidence
+    description: "Incidence/observation catalog (aka CatalogoIncidencia; AQUACIS Observac.dat 2-char keys: FA/FU fuga, CE/CB consumo excesivo/bajo, PA medidor parado, CD cerrado, NO no localizado...)."
+    key: [code]
+    fields:
+      - {id: code, type: string, required: true, description: "aka clave, OBSERVAC"}
+      - {id: description, type: string, required: true}
+      - {id: is_fault, type: boolean, description: "Avería → triggers estimation; aka esAveria"}
+      - {id: active, type: boolean}
+
+  - id: consumption
+    name: Consumption
+    description: "Consumption per agreement-period in m3, real or estimated (aka Consumo; feeds billing and the billed-metered balance component)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: period, type: string, required: true, description: "YYYY-MM"}
+      - {id: volume_m3, type: decimal, required: true, description: "aka m3"}
+      - {id: determination, type: enum, values: [measured, historical_average, mixed, fixed_quota], description: "aka tipo Real/Promedio histórico/Mixto/Consumo fijo"}
+      - {id: confirmed, type: boolean, description: "aka confirmado (billing gate)"}
+
+  - id: tariff
+    name: Tariff block
+    description: >
+      Tariff rule: service class × service type × consumption block with
+      unit price or fixed charge and validity window (aka Tarifa; Mexican
+      pattern: 11 user classes × increasing m3 blocks + fixed charge + 10%
+      sewerage + 12% sanitation surcharges + IVA only non-domestic, Art. 154
+      Consejo Directivo / Acuerdo de Precios).
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: code, type: string, required: true, description: "aka codigo"}
+      - {id: service_class_code, type: string, description: "aka tipoContratacionCodigo (string join in Hydra — canonical keeps the code but mappings should resolve the FK)"}
+      - {id: service_type, type: enum, values: [water, sewerage, sanitation], description: "aka tipoServicio"}
+      - {id: calc_method, type: enum, values: [block, fixed, variable], description: "aka tipoCalculo escalonado/fijo/variable"}
+      - {id: block_min_m3, type: integer, description: "aka rangoMinM3"}
+      - {id: block_max_m3, type: integer, description: "aka rangoMaxM3"}
+      - {id: unit_price, type: money, description: "MXN per m3; aka precioUnitario"}
+      - {id: fixed_charge, type: money, description: "aka cuotaFija"}
+      - {id: surcharges, type: json, description: "e.g. {sewerage_pct: 10, sanitation_pct: 12} applied over the water amount"}
+      - {id: vat_pct, type: decimal, description: "aka ivaPct; 0/exempt for domestic use"}
+      - {id: currency, type: string, description: "ISO 4217, MXN default"}
+      - {id: valid_from, type: date, required: true, description: "aka vigenciaDesde"}
+      - {id: valid_to, type: date, description: "aka vigenciaHasta"}
+      - {id: version, type: integer}
+
+  - id: bill
+    name: Bill (header)
+    description: >
+      Billing document header per agreement-period: totals, due date, fiscal
+      stamp and balances (merges Hydra Timbrado + Recibo; aka recibo,
+      factura, CFDI 4.0). Lines live in bill_line.
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: period, type: string, required: true}
+      - {id: consumption_id, type: reference, ref: consumption}
+      - {id: subtotal, type: money, required: true}
+      - {id: tax, type: money, required: true, description: "IVA; aka iva"}
+      - {id: total, type: money, required: true}
+      - {id: currency, type: string, description: "MXN default"}
+      - {id: current_balance, type: money, description: "aka saldoVigente"}
+      - {id: overdue_balance, type: money, description: "aka saldoVencido"}
+      - {id: issued_at, type: date, description: "aka fechaEmision (String in Hydra — normalize)"}
+      - {id: due_at, type: date, description: "aka fechaVencimiento"}
+      - {id: cfdi_uuid, type: string, description: "SAT fiscal UUID; aka Timbrado.uuid"}
+      - {id: stamp_status, type: enum, values: [pending, stamped, pac_error, canceled], description: "aka estado Timbrada OK/Error PAC/Pendiente"}
+      - {id: delivered, type: boolean, description: "aka impreso (OM print/envelope pipeline)"}
+
+  - id: bill_line
+    name: Bill line (concept)
+    description: "Billed concept line (aka ContratoConcepto/ConceptoCobro, concepto de cobro; origin CONTRATACION/LECTURAS/VARIOS)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: bill_id, type: reference, ref: bill, required: true}
+      - {id: concept_code, type: string, required: true, description: "aka ConceptoCobro.codigo"}
+      - {id: description, type: string, description: "aka nombre"}
+      - {id: quantity, type: decimal, description: "aka cantidad"}
+      - {id: unit_price, type: money, description: "aka precioBase/precioProporcional"}
+      - {id: amount, type: money, required: true, description: "aka importe"}
+      - {id: vat_pct, type: decimal, description: "aka ivaPct"}
+      - {id: vat_amount, type: money, description: "aka ivaImporte"}
+      - {id: order, type: integer, description: "aka orden"}
+
+  - id: payment
+    name: Payment
+    description: >
+      Applied payment from any channel (aka Pago; external-collector records
+      — PagoExterno staging over the ~22 recaudador layouts — become
+      payments on conciliation). Rule: paid_at is the real client payment
+      date from the collector file, not the file-arrival date.
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: bill_id, type: reference, ref: bill, description: "aka reciboId/timbradoId"}
+      - {id: payment_agreement_id, type: reference, ref: payment_agreement, description: "aka convenioId"}
+      - {id: amount, type: money, required: true, description: "aka monto; collector files may carry cents or split IMPORTE+IMPORTE DEC — mappings normalize to decimal MXN"}
+      - {id: currency, type: string, description: "MXN default"}
+      - {id: paid_at, type: datetime, required: true, description: "Real payment date; aka fechaPagoReal, FECHA in collector layouts (formats vary)"}
+      - {id: channel, type: enum, values: [cashier, portal, direct_debit, external_collector, codi, other], description: "aka origen nativo/externo + canal"}
+      - {id: method, type: enum, values: [cash, card, transfer, check, direct_debit, other], description: "aka FormaPago/SAT code via DIF. FORMAS DE PAGO mapping"}
+      - {id: collector, type: string, description: "Recaudador (OXXO, BANORTE, BBVA...); aka recaudador + emisora code"}
+      - {id: external_reference, type: string, description: "Collector reference/folio; aka referencia"}
+      - {id: office, type: string, description: "Branch/cashier office; aka oficina/sucursal"}
+      - {id: conciliation_status, type: enum, values: [applied, pending_conciliation, conciliated, rejected], description: "aka estado pendiente_conciliar/conciliado/rechazado + motivoRechazo"}
+      - {id: raw_record, type: json, description: "Original collector record; aka datosRaw + contratoRaw"}
+
+  - id: payment_agreement
+    name: Payment agreement (convenio)
+    description: "Debt installment plan (aka Convenio de parcialidades; REP 2.0 CFDI complement applies to installment payments)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: origin, type: enum, values: [overdue_debt, cut, reconnection, other], description: "aka origenTipo"}
+      - {id: installments, type: integer, required: true, description: "aka numParcialidades"}
+      - {id: installment_amount, type: money, required: true, description: "aka montoParcialidad"}
+      - {id: total_amount, type: money, required: true, description: "aka montoTotal"}
+      - {id: paid_amount, type: money, description: "aka montoPagado"}
+      - {id: down_payment, type: money, description: "aka montoAnticipo/porcentajeAnticipo"}
+      - {id: covered_bill_ids, type: array, description: "Bills under the plan; aka facturas (JSONB in Hydra — relational here)"}
+      - {id: credit_balance, type: money, description: "aka saldoAFavor"}
+      - {id: status, type: enum, values: [active, completed, defaulted, canceled], description: "aka estado"}
+      - {id: start_date, type: date, description: "aka fechaInicio"}
+      - {id: due_date, type: date, description: "aka fechaVencimiento"}
+
+  - id: work_order
+    name: Work order
+    description: >
+      Field order: cut/restriction, reconnection, installation, inspection,
+      review (aka Orden, orden de trabajo, Q Order). cut_impact encodes the
+      minimum-vital rule of the Ley General de Aguas 2025: domestic service
+      is restricted, never fully suspended.
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: agreement_id, type: reference, ref: service_agreement, required: true}
+      - {id: type, type: enum, values: [cut, reconnection, installation, inspection, review, other], description: "aka tipo"}
+      - {id: cut_impact, type: enum, values: [total_suspension, partial_restriction, record_only], description: "aka CatalogoTipoCorte.impacto; domestic use → partial_restriction only"}
+      - {id: cut_location, type: enum, values: [meter_box, connection, sidewalk_valve], description: "aka ubicacionCorte cuadro/toma/llave_banqueta"}
+      - {id: status, type: enum, values: [pending, scheduled, executed, canceled], description: "aka estado"}
+      - {id: priority, type: string, description: "aka prioridad"}
+      - {id: auto_generated, type: boolean, description: "aka origenAutomatico/eventoOrigen"}
+      - {id: requested_at, type: datetime, description: "aka fechaSolicitud"}
+      - {id: scheduled_at, type: datetime, description: "aka fechaProgramada"}
+      - {id: executed_at, type: datetime, description: "aka fechaEjecucion"}
+      - {id: field_data, type: json, description: "Evidence, GPS, photos; aka datosCampo"}
+      - {id: external_reference, type: string, description: "aka externalRef (Q Order)"}
+
+  - id: service_application
+    name: Service application
+    description: "New-service application entering the contracting flow (aka Solicitud; factibilidad → inspección → cotización → contratación)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: folio, type: string, required: true}
+      - {id: applicant_name, type: string, description: "aka propNombreCompleto"}
+      - {id: applicant_tax_id, type: string, description: "aka propRfc"}
+      - {id: cadastral_key, type: string, description: "aka claveCatastral"}
+      - {id: service_class_id, type: reference, ref: service_class, description: "aka tipoContratacionId"}
+      - {id: status, type: enum, values: [pending_review, inspection_required, inspection_in_progress, quoting, accepted, contracted, rejected, canceled], description: "aka estado FSM"}
+      - {id: agreement_id, type: reference, ref: service_agreement, description: "Resulting contract; aka contratoId"}
+      - {id: requested_at, type: datetime, description: "aka fechaSolicitud"}
+      - {id: form_data, type: json, description: "Captured form snapshot; aka formData (schema-on-write pending in Hydra)"}
+
+  - id: customer_case
+    name: Customer case
+    description: "Complaint, clarification or procedure/trámite (aka QuejaAclaracion + Tramite; cambio de nombre, subrogación, baja...)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: folio, type: string, description: "aka folio (trámites)"}
+      - {id: agreement_id, type: reference, ref: service_agreement}
+      - {id: party_id, type: reference, ref: party}
+      - {id: kind, type: enum, values: [complaint, clarification, procedure], required: true, description: "aka Queja/Aclaración/Tramite"}
+      - {id: type, type: string, description: "Procedure or complaint category; aka tipo/CatalogoTramite"}
+      - {id: description, type: text, description: "aka descripcion"}
+      - {id: channel, type: enum, values: [counter, digital, phone, hybrid, other], description: "aka canal Ventanilla/presencial/digital/hibrido"}
+      - {id: priority, type: string, description: "aka prioridad"}
+      - {id: status, type: string, description: "aka estado + seguimientos"}
+      - {id: opened_at, type: datetime, description: "aka fecha/createdAt"}
+      - {id: resolved_at, type: datetime, description: "aka fechaAprobacion/motivoCierre"}
+
+  - id: accounting_voucher
+    name: Accounting voucher (header)
+    description: "Daily accounting document exported to the ERP (aka Poliza → SAP IDOC file: Aqua_SAP control + Interfaz_AquaCis_SAP_Cabecera; types cobros/ingresos and facturación)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: number, type: string, required: true, description: "aka numero, IDOC DOCNUM"}
+      - {id: type, type: enum, values: [collections, billing, adjustments, agreements, cancellations], description: "aka tipo cobros/facturación; SAP BKTXT suffix PAGO vs oficina"}
+      - {id: period, type: string, required: true, description: "aka periodo AAAAMM; SAP MONAT"}
+      - {id: date, type: date, required: true, description: "aka fecha; SAP BLDAT/BUDAT DDMMAAAA"}
+      - {id: currency, type: string, description: "MXN; SAP WAERS"}
+      - {id: description, type: string, description: "aka descripcion; SAP BKTXT"}
+      - {id: status, type: enum, values: [generated, exported, sent, error, voided], description: "aka estado generada/exportada/enviada/error/anulada"}
+      - {id: export_file, type: string, description: "Generated IDOC file; aka archivoIdoc"}
+
+  - id: accounting_voucher_line
+    name: Accounting voucher line
+    description: "Voucher line (aka LineaPoliza → IDOC Interfaz_AquaCis_SAP_Posicion). GL account placement follows the posting key: 40/50 → NEWKO, 01-39 → HKONT with NEWKO=GENERICO."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: voucher_id, type: reference, ref: accounting_voucher, required: true}
+      - {id: position, type: integer, required: true, description: "aka posicion; SAP SEGNUM"}
+      - {id: posting_key, type: string, required: true, description: "Debit/credit indicator; aka indicador, SAP BSCHL (40,15,01,50,12)"}
+      - {id: amount, type: money, required: true, description: "aka monto; SAP WRBTR"}
+      - {id: tax_amount, type: money, description: "SAP WMWST/FWBAS"}
+      - {id: gl_account, type: string, required: true, description: "aka cuentaContable; SAP NEWKO/HKONT per posting key"}
+      - {id: cost_center, type: string, description: "CEBE/office; aka centroCoste, SAP KOSTL/PRCTR"}
+      - {id: date, type: date, description: "aka fecha; SAP VALUT"}
+      - {id: text, type: string, description: "aka descripcion/texto; SAP SGTXT"}
+
+  - id: hydraulic_sector
+    name: Hydraulic sector (DMA)
+    description: "District metered area / sector hidráulico — the balance unit (aka SectorHidraulico; today only a catalog in Hydra, volumes pending macro-metering)."
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: code, type: string, required: true, description: "aka codigo"}
+      - {id: name, type: string, required: true, description: "aka nombre"}
+      - {id: administration, type: string, description: "aka administracionId"}
+      - {id: geometry, type: json, description: "GeoJSON polygon WGS84 (GIS layer when available)"}
+      - {id: mains_length_km, type: decimal, description: "Lm for UARL"}
+      - {id: service_connections, type: integer, description: "Nc for UARL"}
+      - {id: avg_pressure_m, type: decimal, description: "P for UARL"}
+
+  - id: water_balance
+    name: Water balance (IWA/AWWA)
+    description: >
+      Standard IWA/AWWA water balance for a system or hydraulic sector and
+      period. Components per Lambert & Hirner 2000 / AWWA M36: System Input
+      Volume = Authorised Consumption (billed/unbilled × metered/unmetered)
+      + Water Losses (apparent: unauthorised consumption, metering
+      inaccuracies, data handling errors; real: mains leakage, storage
+      leakage/overflows, service-connection leakage). NRW = unbilled
+      authorised + apparent + real. Each volume carries an AWWA data grade.
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: hydraulic_sector_id, type: reference, ref: hydraulic_sector, description: "Null = whole system"}
+      - {id: period, type: string, required: true, description: "Audit period, usually YYYY"}
+      - {id: system_input_volume_m3, type: decimal, required: true, description: "aka volumen producido/suministrado"}
+      - {id: billed_metered_m3, type: decimal, description: "Σ measured consumption billed; aka consumo facturado medido"}
+      - {id: billed_unmetered_m3, type: decimal, description: "aka cuota fija facturada"}
+      - {id: unbilled_metered_m3, type: decimal}
+      - {id: unbilled_unmetered_m3, type: decimal, description: "e.g. firefighting, network flushing"}
+      - {id: unauthorised_consumption_m3, type: decimal, description: "aka tomas clandestinas"}
+      - {id: metering_inaccuracies_m3, type: decimal, description: "aka submedición"}
+      - {id: data_handling_errors_m3, type: decimal}
+      - {id: real_losses_m3, type: decimal, description: "aka pérdidas físicas/fugas"}
+      - {id: revenue_water_m3, type: decimal, description: "= billed authorised"}
+      - {id: non_revenue_water_m3, type: decimal, description: "NRW; aka agua no facturada"}
+      - {id: carl_l_day, type: decimal, description: "Current Annual Real Losses"}
+      - {id: uarl_l_day, type: decimal, description: "(18×Lm + 0.8×Nc + 25×Lp) × P"}
+      - {id: ili, type: decimal, description: "CARL/UARL — World Bank bands"}
+      - {id: data_validity_score, type: integer, description: "AWWA FWAS composite grading"}
+      - {id: component_grades, type: json, description: "Per-component AWWA data grade 1-10"}
+
+  - id: performance_indicator
+    name: Performance indicator value
+    description: >
+      KPI value per period computed from the commercial ledger, defined
+      against a named standard (aka indicador PIGOO/IWA PI/IBNET). Core
+      Mexican set (PIGOO, verified): IP.13 eficiencia física 1 (vol
+      consumido/producido), IP.30 eficiencia física 2 (vol
+      facturado/producido), IP.14 eficiencia comercial (vol cobrado/vol
+      facturado — volumes), IP.15 eficiencia de cobro (pesos
+      ingresados/facturados), IP.25 eficiencia global, IP.05 micromedición,
+      IP.12 dotación l/hab/día, IP.10 empleados por mil tomas, IP.27/IP.28
+      pérdidas por toma/por km; plus internal commercial KPIs (% lecturas
+      reales vs estimadas, periodo medio de cobranza IBNET 23.1, antigüedad
+      de cartera).
+    key: [id]
+    fields:
+      - {id: id, type: string, required: true}
+      - {id: standard, type: enum, values: [pigoo, iwa_pi, ibnet, awwa_m36, internal], required: true}
+      - {id: code, type: string, required: true, description: "e.g. PIGOO IP.14"}
+      - {id: name, type: string, required: true}
+      - {id: formula, type: string, description: "Definition over ledger variables"}
+      - {id: unit, type: string}
+      - {id: period, type: string, required: true}
+      - {id: scope, type: json, description: "System / administration / sector filter"}
+      - {id: value, type: decimal, required: true}
+      - {id: confidence_grade, type: string, description: "IWA data confidence band / AWWA grade"}
