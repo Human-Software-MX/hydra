@@ -27,6 +27,7 @@ import {
   Landmark,
   NotebookTabs,
   Braces,
+  Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -169,6 +170,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
     label: 'Convenios',
     icon: Handshake,
     allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'ATENCION_CLIENTES'],
+    group: 'Finanzas',
+  },
+  {
+    path: 'cartera',
+    label: 'Cartera y cobranza',
+    icon: Wallet,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
     group: 'Finanzas',
   },
   {

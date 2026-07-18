@@ -34,6 +34,7 @@ const AjustesFacturacion = lazy(() => import('@/pages/AjustesFacturacion'));
 const TimbradoPage = lazy(() => import('@/pages/TimbradoPage'));
 const Recibos = lazy(() => import('@/pages/Recibos'));
 const Convenios = lazy(() => import('@/pages/Convenios'));
+const Cartera = lazy(() => import('@/pages/Cartera'));
 const Pagos = lazy(() => import('@/pages/Pagos'));
 const Contabilidad = lazy(() => import('@/pages/Contabilidad'));
 const AtencionClientes = lazy(() => import('@/pages/AtencionClientes'));
@@ -112,6 +113,7 @@ const App = () => (
                     <Route path="/app/timbrado" element={<TimbradoPage />} />
                     <Route path="/app/recibos" element={<Recibos />} />
                     <Route path="/app/convenios" element={<Convenios />} />
+                    <Route path="/app/cartera" element={<Cartera />} />
                     <Route path="/app/pagos" element={<Pagos />} />
                     <Route path="/app/contabilidad" element={<Contabilidad />} />
                     <Route path="/app/atencion-clientes" element={<AtencionClientes />} />

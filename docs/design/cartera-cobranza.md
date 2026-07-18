@@ -25,9 +25,19 @@ inflada, por lo que **se compone**:
 | R1, R2, R3 (vencido=300) | 300 | 700 |
 
 Todo candidato a restricción con ≥2 recibos impagos hoy trae adeudo inflado. La corrección
-estructural es este módulo (contabilidad por documento); **no** parchar las 3 fórmulas por separado.
+estructural es este módulo (contabilidad por documento).
 Nota: al corregir, los adeudos reportados **bajarán** — validar con el organismo antes de activar
 en producción (§9 R2).
+
+**Fix interino aplicado (2026-07-17):** mientras llega el módulo de cartera, el cálculo se corrigió
+a nivel contrato con pagos aplicados FIFO al recibo más antiguo (`adeudoFifo`, exportado en
+`restricciones.service.ts`): `restricciones` (adeudoContrato + candidatos), `facturacion`
+(`calcularSaldoVencido`, ahora `max(0, Σ vigente anteriores − Σ pagos)`), `indicadores` (cartera
+vencida PIGOO), `portal` (`getSaldos` — antes sumaba los arrastres de TODOS los recibos), y
+frontend `Pagos.tsx` / `AtencionClientes.tsx` (deuda por contrato sin `saldoVencido`). Los usos
+sobre un solo recibo (notificaciones, recibo impreso, aviso de vencimiento del batch) conservan
+`vigente + vencido` porque ahí el arrastre es correcto. El FIFO evita perder pagos hechos "sobre
+el recibo más reciente" que en papel incluían el arrastre (`Pago.reciboId` es opcional).
 
 El módulo introduce un **libro de cartera de partida abierta** (open-item, estilo SAP IS-U /
 Oracle CC&B): un documento de adeudo por recibo, aplicación explícita de pagos a documentos (FIFO),

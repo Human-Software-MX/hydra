@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Query, Param, Body, Req, UseGuards } from
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PortalService } from './portal.service';
+import { CrearIntentoPortalDto } from '../pasarelas/dto/crear-intento.dto';
 
 interface AuthUser {
   id: string;
@@ -84,6 +85,28 @@ export class PortalController {
   ) {
     const user = req.user as AuthUser;
     return this.portalService.updateDatosFiscales(contratoId, user.contratoIds ?? [], body);
+  }
+
+  @Post('contratos/:id/intentos-pago')
+  crearIntentoPago(@Param('id') contratoId: string, @Body() dto: CrearIntentoPortalDto, @Req() req: Request) {
+    const user = req.user as AuthUser;
+    return this.portalService.crearIntentoPago(contratoId, user.contratoIds ?? [], dto);
+  }
+
+  @Get('contratos/:id/intentos-pago')
+  getIntentosPago(@Param('id') contratoId: string, @Req() req: Request) {
+    const user = req.user as AuthUser;
+    return this.portalService.getIntentosPago(contratoId, user.contratoIds ?? []);
+  }
+
+  @Post('contratos/:id/intentos-pago/:intentoId/simular')
+  simularPagoIntento(
+    @Param('id') contratoId: string,
+    @Param('intentoId') intentoId: string,
+    @Req() req: Request,
+  ) {
+    const user = req.user as AuthUser;
+    return this.portalService.simularPagoIntento(contratoId, user.contratoIds ?? [], intentoId);
   }
 
   @Get('contactos')

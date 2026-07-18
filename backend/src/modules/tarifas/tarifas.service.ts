@@ -1,10 +1,23 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FacturacionService } from '../facturacion/facturacion.service';
+import {
+  calcularFactura,
+  redondear,
+  TarifaCalculo,
+} from '../facturacion/billing-calculator';
+import { SimularImpactoDto, CambioTarifaSimulacionDto } from './dto/simular-impacto.dto';
+
+/** Tope de consumos evaluados por simulación para acotar tiempo/memoria. */
+const MAX_CONSUMOS_SIMULACION = 5000;
 
 @Injectable()
 export class TarifasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly facturacion: FacturacionService,
+  ) {}
 
   // ─── Tarifa ───────────────────────────────────────────────────────────────
 
@@ -246,6 +259,233 @@ export class TarifasService {
       },
     });
   }
+
+  // ─── Simulador de impacto tarifario ───────────────────────────────────────
+
+  /**
+   * Simula el impacto de un cambio tarifario re-facturando (en memoria, sin
+   * escribir nada) los consumos confirmados de un periodo base con las tarifas
+   * vigentes y con las tarifas propuestas, y compara ambos escenarios.
+   */
+  async simularImpacto(dto: SimularImpactoDto) {
+    for (const cambio of dto.cambios) {
+      if (cambio.factorAjuste == null && !cambio.tarifasNuevas?.length) {
+        throw new BadRequestException(
+          `El cambio para "${cambio.tipoServicio}" debe indicar factorAjuste o tarifasNuevas`,
+        );
+      }
+      if (cambio.factorAjuste != null && cambio.tarifasNuevas?.length) {
+        throw new BadRequestException(
+          `El cambio para "${cambio.tipoServicio}" debe indicar factorAjuste O tarifasNuevas, no ambos`,
+        );
+      }
+    }
+
+    const where: Prisma.ConsumoWhereInput = {
+      periodo: dto.periodoBase,
+      confirmado: true,
+      ...(dto.administracionId && {
+        contrato: { zona: { administracionId: dto.administracionId } },
+      }),
+    };
+
+    const totalConsumos = await this.prisma.consumo.count({ where });
+    if (totalConsumos === 0) {
+      throw new BadRequestException(
+        `No hay consumos confirmados para el periodo ${dto.periodoBase}` +
+          (dto.administracionId ? ' en la administración indicada' : ''),
+      );
+    }
+
+    const consumos = await this.prisma.consumo.findMany({
+      where,
+      take: MAX_CONSUMOS_SIMULACION,
+      orderBy: { createdAt: 'asc' },
+      include: { contrato: { select: { id: true, nombre: true, zonaId: true } } },
+    });
+
+    const advertencias: string[] = [];
+    if (totalConsumos > MAX_CONSUMOS_SIMULACION) {
+      advertencias.push(
+        `El periodo tiene ${totalConsumos} consumos confirmados; la simulación se limitó a los primeros ` +
+          `${MAX_CONSUMOS_SIMULACION}. Acote con administracionId para una muestra representativa por zona.`,
+      );
+    }
+
+    // Resolución zona → administración en bloque (las tarifas dependen de la administración).
+    const zonaIds = [...new Set(consumos.map((c) => c.contrato.zonaId).filter((z): z is string => !!z))];
+    const zonas = await this.prisma.zona.findMany({
+      where: { id: { in: zonaIds } },
+      select: { id: true, administracionId: true },
+    });
+    const adminPorZona = new Map(zonas.map((z) => [z.id, z.administracionId]));
+
+    // Fecha de referencia para tarifas vigentes: último día del periodo base.
+    const [y, m] = dto.periodoBase.split('-').map((n) => parseInt(n, 10));
+    const fecha = new Date(y, m, 0);
+
+    // Cache de tarifas (actuales y propuestas) por administración.
+    const cacheTarifas = new Map<
+      string,
+      { actuales: Record<string, TarifaCalculo[]>; propuestas: Record<string, TarifaCalculo[]> }
+    >();
+    const tarifasDe = async (administracionId: string | null) => {
+      const key = administracionId ?? '__global__';
+      let entry = cacheTarifas.get(key);
+      if (!entry) {
+        const actuales = await this.facturacion.tarifasVigentesPorServicio(fecha, administracionId);
+        entry = { actuales, propuestas: this.aplicarCambios(actuales, dto.cambios, advertencias) };
+        cacheTarifas.set(key, entry);
+      }
+      return entry;
+    };
+
+    // Escenarios por consumo, agregados por contrato y por tipo de servicio.
+    const porContrato = new Map<
+      string,
+      { contratoId: string; contrato: string; importeActual: number; importePropuesto: number }
+    >();
+    const porServicio = new Map<string, { importeActual: number; importePropuesto: number }>();
+    let sinTarifa = 0;
+
+    for (const c of consumos) {
+      const administracionId = c.contrato.zonaId ? adminPorZona.get(c.contrato.zonaId) ?? null : null;
+      const { actuales, propuestas } = await tarifasDe(administracionId);
+      if (!Object.keys(actuales).length) {
+        sinTarifa++;
+        continue;
+      }
+
+      const consumoM3 = Number(c.m3);
+      const actual = calcularFactura({ consumoM3, tarifasPorServicio: actuales });
+      const propuesto = calcularFactura({ consumoM3, tarifasPorServicio: propuestas });
+
+      const acc = porContrato.get(c.contratoId) ?? {
+        contratoId: c.contratoId,
+        contrato: c.contrato.nombre,
+        importeActual: 0,
+        importePropuesto: 0,
+      };
+      acc.importeActual = redondear(acc.importeActual + actual.total);
+      acc.importePropuesto = redondear(acc.importePropuesto + propuesto.total);
+      porContrato.set(c.contratoId, acc);
+
+      for (const [lineas, campo] of [
+        [actual.lineas, 'importeActual'],
+        [propuesto.lineas, 'importePropuesto'],
+      ] as const) {
+        for (const l of lineas) {
+          const s = porServicio.get(l.tipoServicio) ?? { importeActual: 0, importePropuesto: 0 };
+          s[campo] = redondear(s[campo] + l.importe + l.iva);
+          porServicio.set(l.tipoServicio, s);
+        }
+      }
+    }
+
+    if (sinTarifa > 0) {
+      advertencias.push(`${sinTarifa} consumo(s) omitidos por no tener tarifas vigentes en el periodo base.`);
+    }
+
+    const contratos = [...porContrato.values()].map((c) => ({
+      ...c,
+      deltaMonto: redondear(c.importePropuesto - c.importeActual),
+      deltaPct:
+        c.importeActual > 0
+          ? redondear(((c.importePropuesto - c.importeActual) / c.importeActual) * 100)
+          : null,
+    }));
+
+    const importeTotalActual = redondear(contratos.reduce((s, c) => s + c.importeActual, 0));
+    const importeTotalPropuesto = redondear(contratos.reduce((s, c) => s + c.importePropuesto, 0));
+    const deltaMontos = contratos.map((c) => c.deltaMonto);
+    const deltaPcts = contratos.filter((c) => c.deltaPct !== null).map((c) => c.deltaPct as number);
+
+    return {
+      periodoBase: dto.periodoBase,
+      administracionId: dto.administracionId ?? null,
+      consumosEvaluados: consumos.length - sinTarifa,
+      consumosTotales: totalConsumos,
+      contratosEvaluados: contratos.length,
+      cambios: dto.cambios,
+      resumen: {
+        importeTotalActual,
+        importeTotalPropuesto,
+        deltaMonto: redondear(importeTotalPropuesto - importeTotalActual),
+        deltaPctGlobal:
+          importeTotalActual > 0
+            ? redondear(((importeTotalPropuesto - importeTotalActual) / importeTotalActual) * 100)
+            : null,
+      },
+      distribucionImpacto: {
+        deltaMonto: this.percentiles(deltaMontos),
+        deltaPct: this.percentiles(deltaPcts),
+      },
+      topImpactados: [...contratos]
+        .sort((a, b) => Math.abs(b.deltaMonto) - Math.abs(a.deltaMonto))
+        .slice(0, 20),
+      desglosePorServicio: [...porServicio.entries()].map(([tipoServicio, s]) => ({
+        tipoServicio,
+        importeActual: s.importeActual,
+        importePropuesto: s.importePropuesto,
+        deltaMonto: redondear(s.importePropuesto - s.importeActual),
+        deltaPct:
+          s.importeActual > 0
+            ? redondear(((s.importePropuesto - s.importeActual) / s.importeActual) * 100)
+            : null,
+      })),
+      advertencias,
+    };
+  }
+
+  /** Construye el escenario propuesto aplicando factorAjuste o tarifasNuevas por tipoServicio. */
+  private aplicarCambios(
+    actuales: Record<string, TarifaCalculo[]>,
+    cambios: CambioTarifaSimulacionDto[],
+    advertencias: string[],
+  ): Record<string, TarifaCalculo[]> {
+    const propuestas: Record<string, TarifaCalculo[]> = {};
+    for (const [servicio, lineas] of Object.entries(actuales)) {
+      propuestas[servicio] = lineas.map((l) => ({ ...l }));
+    }
+
+    for (const cambio of cambios) {
+      if (cambio.tarifasNuevas?.length) {
+        propuestas[cambio.tipoServicio] = cambio.tarifasNuevas.map((t) => ({
+          tipoServicio: cambio.tipoServicio,
+          tipoCalculo: t.tipoCalculo,
+          rangoMinM3: t.rangoMinM3 ?? null,
+          rangoMaxM3: t.rangoMaxM3 ?? null,
+          precioUnitario: t.precioUnitario ?? null,
+          cuotaFija: t.cuotaFija ?? null,
+          ivaPct: t.ivaPct ?? 16,
+        }));
+        continue;
+      }
+      const factor = cambio.factorAjuste!;
+      const lineas = propuestas[cambio.tipoServicio];
+      if (!lineas?.length) {
+        const aviso = `El servicio "${cambio.tipoServicio}" no tiene tarifas vigentes; el factorAjuste no tuvo efecto.`;
+        if (!advertencias.includes(aviso)) advertencias.push(aviso);
+        continue;
+      }
+      propuestas[cambio.tipoServicio] = lineas.map((l) => ({
+        ...l,
+        precioUnitario: l.precioUnitario == null ? null : l.precioUnitario * factor,
+        cuotaFija: l.cuotaFija == null ? null : l.cuotaFija * factor,
+      }));
+    }
+
+    return propuestas;
+  }
+
+  private percentiles(valores: number[]): { p50: number | null; p90: number | null; max: number | null } {
+    if (!valores.length) return { p50: null, p90: null, max: null };
+    const orden = [...valores].sort((a, b) => a - b);
+    const at = (p: number) => orden[Math.min(orden.length - 1, Math.max(0, Math.ceil((p / 100) * orden.length) - 1))];
+    return { p50: at(50), p90: at(90), max: orden[orden.length - 1] };
+  }
+
+  // ─── Actualización tarifaria: aplicar ─────────────────────────────────────
 
   async aplicarActualizacion(id: string, aplicadoPor: string) {
     const act = await this.prisma.actualizacionTarifaria.findUnique({ where: { id } });

@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { adeudoFifo } from '../restricciones/restricciones.service';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pct = (num: number, den: number) => (den > 0 ? r2((num / den) * 100) : null);
@@ -99,6 +100,7 @@ export class IndicadoresService {
       timbradosPeriodo,
       pagosPeriodo,
       recibosVencidos,
+      pagosPorContrato,
       restriccionesVigentes,
       conveniosActivos,
       quejasAbiertas,
@@ -121,22 +123,33 @@ export class IndicadoresService {
       }),
       this.prisma.recibo.findMany({
         where: { fechaVencimiento: { lt: hoy } },
-        include: { pagos: { select: { monto: true } } },
+        select: { contratoId: true, saldoVigente: true, fechaVencimiento: true },
+        orderBy: { fechaVencimiento: 'asc' },
       }),
+      this.prisma.pago.groupBy({ by: ['contratoId'], _sum: { monto: true } }),
       this.prisma.restriccionServicio.count({ where: { estado: { in: ['programada', 'aplicada'] } } }),
       this.prisma.convenio.count({ where: { estado: 'Activo' } }),
       this.prisma.quejaAclaracion.count({ where: { estado: { notIn: ['Cerrada', 'Resuelta', 'cerrada', 'resuelta'] } } }),
     ]);
 
-    // Cartera vencida: pendiente real de recibos vencidos (saldos - pagos aplicados).
+    // Cartera vencida: pagos del contrato aplicados FIFO sobre los recibos
+    // vencidos (el arrastre Recibo.saldoVencido NO se suma: duplicaría deuda).
+    const pagadoPorContrato = new Map(
+      pagosPorContrato.map((p) => [p.contratoId, Number(p._sum.monto ?? 0)]),
+    );
+    const recibosPorContrato = new Map<string, typeof recibosVencidos>();
+    for (const r of recibosVencidos) {
+      const lista = recibosPorContrato.get(r.contratoId) ?? [];
+      lista.push(r);
+      recibosPorContrato.set(r.contratoId, lista);
+    }
     let carteraVencida = 0;
     const contratosConAdeudo = new Set<string>();
-    for (const r of recibosVencidos) {
-      const pagado = r.pagos.reduce((s, p) => s + Number(p.monto), 0);
-      const pendiente = Number(r.saldoVigente) + Number(r.saldoVencido) - pagado;
-      if (pendiente > 0.01) {
-        carteraVencida += pendiente;
-        contratosConAdeudo.add(r.contratoId);
+    for (const [contratoId, lista] of recibosPorContrato) {
+      const { monto } = adeudoFifo(lista, pagadoPorContrato.get(contratoId) ?? 0);
+      if (monto > 0.01) {
+        carteraVencida += monto;
+        contratosConAdeudo.add(contratoId);
       }
     }
 

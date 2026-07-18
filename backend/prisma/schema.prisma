@@ -168,6 +168,10 @@ model Contrato {
   procesosContratacion    ProcesoContratacion[]
   conceptosContrato       ContratoConcepto[]
   restricciones           RestriccionServicio[]
+  documentosCartera       DocumentoCartera[]
+  estadoCuenta            EstadoCuenta?
+  accionesCobranza        AccionCobranza[]
+  intentosPago            IntentoPago[]
 
   @@index([tomaId])
   @@index([puntoServicioId])
@@ -242,6 +246,7 @@ model Medidor {
   calibre          CatalogoCalibre?        @relation(fields: [calibreId], references: [id], onDelete: SetNull)
   emplazamiento    CatalogoEmplazamiento?  @relation(fields: [emplazamientoId], references: [id], onDelete: SetNull)
   tipoContador     CatalogoTipoContador?   @relation(fields: [tipoContadorId], references: [id], onDelete: SetNull)
+  lecturasIntervalo LecturaIntervalo[]
 
   @@index([contratoId])
   @@index([marcaId])
@@ -374,15 +379,18 @@ model Timbrado {
   cadenaOriginalSat String? @map("cadena_original_sat") @db.Text
   xml              String?  @db.Text
   pacProveedor     String?  @map("pac_proveedor")
+  loteFacturacionId String? @map("lote_facturacion_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   contrato         Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
   consumo          Consumo? @relation(fields: [consumoId], references: [id], onDelete: SetNull)
+  loteFacturacion  LoteFacturacion? @relation(fields: [loteFacturacionId], references: [id], onDelete: SetNull)
   recibos          Recibo[]
   pagos            Pago[]
 
   @@index([contratoId])
   @@index([uuid])
+  @@index([loteFacturacionId])
   @@map("timbrados")
 }
 
@@ -400,6 +408,7 @@ model Recibo {
   contrato         Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
   timbrado         Timbrado @relation(fields: [timbradoId], references: [id], onDelete: Cascade)
   pagos            Pago[]
+  documentoCartera DocumentoCartera?
 
   @@index([contratoId])
   @@index([timbradoId])
@@ -426,6 +435,8 @@ model Pago {
   timbrado    Timbrado?  @relation(fields: [timbradoId], references: [id], onDelete: SetNull)
   convenio    Convenio?  @relation(fields: [convenioId], references: [id], onDelete: SetNull)
   formaPago   FormaPago? @relation(fields: [formaPagoId], references: [id], onDelete: SetNull)
+  aplicaciones AplicacionPago[]
+  intentoPago IntentoPago?
 
   @@index([contratoId])
   @@index([reciboId])
@@ -1755,6 +1766,7 @@ model SectorHidraulico {
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
   administracion   Administracion? @relation(fields: [administracionId], references: [id], onDelete: SetNull)
+  calendariosSuministro CalendarioSuministro[]
 
   @@index([administracionId])
   @@map("sectores_hidraulicos")
@@ -1954,4 +1966,238 @@ model ExcepcionLectura {
   @@index([estado])
   @@index([regla])
   @@map("excepciones_lectura")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cartera vencida y cobranza (docs/design/cartera-cobranza.md)
+// Libro de partida abierta: un documento por recibo; el "vencido" son los
+// documentos viejos abiertos, nunca el arrastre Recibo.saldoVencido.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model DocumentoCartera {
+  id               String   @id @default(cuid())
+  contratoId       String   @map("contrato_id")
+  reciboId         String?  @unique @map("recibo_id")
+  tipo             String   @default("recibo") // recibo | convenio | ajuste | recargo
+  periodo          String?
+  // montoOriginal = SOLO cargos del periodo (recibo.saldoVigente); NUNCA el arrastre saldoVencido
+  montoOriginal    Decimal  @map("monto_original") @db.Decimal(12, 2)
+  montoAbonado     Decimal  @default(0) @map("monto_abonado") @db.Decimal(12, 2)
+  saldo            Decimal  @db.Decimal(12, 2)
+  fechaEmision     String   @map("fecha_emision")
+  fechaVencimiento String   @map("fecha_vencimiento")
+  diasVencido      Int      @default(0) @map("dias_vencido")
+  bucket           String   @default("corriente") // corriente | b1_30 | b31_60 | b61_90 | b90_mas
+  estado           String   @default("vigente") // vigente | vencido | parcial | pagado | en_convenio | incobrable
+  convenioId       String?  @map("convenio_id")
+  recalculadoEn    DateTime @default(now()) @map("recalculado_en")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  contrato         Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  recibo           Recibo?  @relation(fields: [reciboId], references: [id], onDelete: SetNull)
+  aplicaciones     AplicacionPago[]
+
+  @@index([contratoId])
+  @@index([estado])
+  @@index([bucket])
+  @@index([fechaVencimiento])
+  @@map("documentos_cartera")
+}
+
+model AplicacionPago {
+  id                 String           @id @default(cuid())
+  pagoId             String           @map("pago_id")
+  documentoCarteraId String           @map("documento_cartera_id")
+  monto              Decimal          @db.Decimal(12, 2)
+  fecha              String
+  createdAt          DateTime         @default(now()) @map("created_at")
+  pago               Pago             @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  documento          DocumentoCartera @relation(fields: [documentoCarteraId], references: [id], onDelete: Cascade)
+
+  @@index([pagoId])
+  @@index([documentoCarteraId])
+  @@map("aplicaciones_pago")
+}
+
+model EstadoCuenta {
+  id              String   @id @default(cuid())
+  contratoId      String   @unique @map("contrato_id")
+  saldoTotal      Decimal  @default(0) @map("saldo_total") @db.Decimal(12, 2)
+  saldoCorriente  Decimal  @default(0) @map("saldo_corriente") @db.Decimal(12, 2)
+  saldoVencido    Decimal  @default(0) @map("saldo_vencido") @db.Decimal(12, 2)
+  bucketCorriente Decimal  @default(0) @map("bucket_corriente") @db.Decimal(12, 2)
+  bucket1_30      Decimal  @default(0) @map("bucket_1_30") @db.Decimal(12, 2)
+  bucket31_60     Decimal  @default(0) @map("bucket_31_60") @db.Decimal(12, 2)
+  bucket61_90     Decimal  @default(0) @map("bucket_61_90") @db.Decimal(12, 2)
+  bucket90_mas    Decimal  @default(0) @map("bucket_90_mas") @db.Decimal(12, 2)
+  docsVencidos    Int      @default(0) @map("docs_vencidos")
+  diasMoraMax     Int      @default(0) @map("dias_mora_max")
+  scoreMorosidad  Int      @default(0) @map("score_morosidad") // 0-100
+  categoria       String   @default("AL_CORRIENTE") // AL_CORRIENTE | INCIPIENTE | MODERADO | ALTO | CRITICO
+  enConvenio      Boolean  @default(false) @map("en_convenio")
+  restringido     Boolean  @default(false)
+  recalculadoEn   DateTime @default(now()) @map("recalculado_en")
+  contrato        Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+
+  @@index([categoria])
+  @@index([scoreMorosidad])
+  @@index([saldoVencido])
+  @@map("estados_cuenta")
+}
+
+model ReglaDunning {
+  id                 String   @id @default(cuid())
+  nombre             String
+  orden              Int      @default(0)
+  activo             Boolean  @default(true)
+  tipoContratacionId String?  @map("tipo_contratacion_id") // null = todos
+  tipoServicio       String?  @map("tipo_servicio")
+  diasMoraMin        Int      @map("dias_mora_min")
+  minDocsVencidos    Int      @default(1) @map("min_docs_vencidos")
+  montoMinimo        Decimal  @default(0) @map("monto_minimo") @db.Decimal(12, 2)
+  accion             String // notificar_aviso | notificar_requerimiento | generar_restriccion | generar_corte | ofrecer_convenio | proponer_incobrable
+  canal              String? // email | whatsapp | ambos
+  reintentoDias      Int      @default(15) @map("reintento_dias")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([activo, orden])
+  @@map("reglas_dunning")
+}
+
+model CampanaCobranza {
+  id               String           @id @default(cuid())
+  nombre           String
+  descripcion      String?
+  estado           String           @default("borrador") // borrador | activa | finalizada
+  administracionId String?          @map("administracion_id")
+  bucketObjetivo   String?          @map("bucket_objetivo")
+  fechaInicio      DateTime?        @map("fecha_inicio")
+  fechaFin         DateTime?        @map("fecha_fin")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  acciones         AccionCobranza[]
+
+  @@index([estado])
+  @@map("campanas_cobranza")
+}
+
+model AccionCobranza {
+  id                String           @id @default(cuid())
+  contratoId        String           @map("contrato_id")
+  campanaId         String?          @map("campana_id")
+  reglaId           String?          @map("regla_id")
+  etapa             Int              @default(0)
+  tipo              String // aviso | requerimiento | restriccion | corte | convenio_ofrecido | incobrable
+  canal             String? // email | whatsapp | orden | interno
+  estado            String           @default("ejecutada") // ejecutada | fallida | omitida
+  saldoAlMomento    Decimal          @default(0) @map("saldo_al_momento") @db.Decimal(12, 2)
+  diasMoraAlMomento Int              @default(0) @map("dias_mora_al_momento")
+  notificacionLogId String?          @map("notificacion_log_id")
+  restriccionId     String?          @map("restriccion_id")
+  ordenId           String?          @map("orden_id")
+  autorizadoPor     String?          @map("autorizado_por") // requerido para 'incobrable'
+  motivo            String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+  contrato          Contrato         @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  campana           CampanaCobranza? @relation(fields: [campanaId], references: [id], onDelete: SetNull)
+
+  @@index([contratoId])
+  @@index([tipo])
+  @@index([campanaId])
+  @@index([createdAt])
+  @@map("acciones_cobranza")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Pasarelas de pago digitales (SPEI / OXXO / tarjeta) — patrón provider (PAC)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model IntentoPago {
+  id             String    @id @default(cuid())
+  contratoId     String    @map("contrato_id")
+  pasarela       String // simulada | conekta | openpay | stripe ...
+  metodo         String // spei | oxxo | tarjeta
+  referencia     String    @unique // referencia SPEI / línea de captura OXXO / id de cargo
+  monto          Decimal   @db.Decimal(12, 2)
+  estado         String    @default("pendiente") // pendiente | pagado | expirado | cancelado | fallido
+  urlPago        String?   @map("url_pago")
+  expiraEn       DateTime? @map("expira_en")
+  pagoId         String?   @unique @map("pago_id")
+  webhookPayload Json?     @map("webhook_payload")
+  origen         String    @default("portal") // portal | caja | api
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  contrato       Contrato  @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  pago           Pago?     @relation(fields: [pagoId], references: [id], onDelete: SetNull)
+
+  @@index([contratoId])
+  @@index([estado])
+  @@map("intentos_pago")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Lotes de facturación masiva: reproceso/cancelación auditable por lote
+// ═══════════════════════════════════════════════════════════════════════════
+
+model LoteFacturacion {
+  id                String     @id @default(cuid())
+  periodo           String
+  filtros           Json?
+  estado            String     @default("generado") // generado | cancelado | reprocesado
+  generados         Int        @default(0)
+  conError          Int        @default(0) @map("con_error")
+  importeTotal      Decimal    @default(0) @map("importe_total") @db.Decimal(14, 2)
+  motivoCancelacion String?    @map("motivo_cancelacion")
+  canceladoPor      String?    @map("cancelado_por")
+  loteOrigenId      String?    @map("lote_origen_id") // si es reproceso, apunta al lote cancelado
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+  timbrados         Timbrado[]
+
+  @@index([periodo])
+  @@index([estado])
+  @@map("lotes_facturacion")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MDM ligero (AMI/AMR): series de intervalo separadas de la lectura de billing
+// (SWAN capas 2-4; "twin-ready": series temporales con IDs estables)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model LecturaIntervalo {
+  id          String   @id @default(cuid())
+  medidorId   String   @map("medidor_id")
+  timestamp   DateTime
+  m3Acumulado Decimal  @map("m3_acumulado") @db.Decimal(14, 3)
+  caudalLh    Decimal? @map("caudal_lh") @db.Decimal(12, 3)
+  origen      String   @default("ami") // ami | amr | manual
+  alarmas     Json? // { fuga, tamper, flujoInverso, consumoCero }
+  createdAt   DateTime @default(now()) @map("created_at")
+  medidor     Medidor  @relation(fields: [medidorId], references: [id], onDelete: Cascade)
+
+  @@unique([medidorId, timestamp])
+  @@map("lecturas_intervalo")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tandeo: calendario de suministro por sector hidráulico (realidad MX que
+// ningún CIS extranjero modela; base para facturación diferenciada)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model CalendarioSuministro {
+  id           String           @id @default(cuid())
+  sectorId     String           @map("sector_id")
+  nombre       String
+  horario      Json // bloques por día: { lun: [["06:00","12:00"]], mar: [...], ... }
+  vigenteDesde String           @map("vigente_desde")
+  vigenteHasta String?          @map("vigente_hasta")
+  activo       Boolean          @default(true)
+  notas        String?
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  sector       SectorHidraulico @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+
+  @@index([sectorId])
+  @@map("calendarios_suministro")
 }

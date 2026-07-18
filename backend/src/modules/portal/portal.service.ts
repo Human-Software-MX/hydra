@@ -1,9 +1,15 @@
 import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { adeudoFifo } from '../restricciones/restricciones.service';
+import { PasarelasService } from '../pasarelas/pasarelas.service';
+import { MetodoPagoPasarela } from '../pasarelas/pasarela-provider.interface';
 
 @Injectable()
 export class PortalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pasarelas: PasarelasService,
+  ) {}
 
   private assertOwns(contratoId: string, contratoIds: string[]) {
     if (!contratoIds.includes(contratoId)) {
@@ -62,15 +68,80 @@ export class PortalService {
     });
   }
 
+  /**
+   * Saldo del contrato a nivel padrón: Σ saldoVigente de recibos − Σ pagos.
+   * `Recibo.saldoVencido` NO se suma (es el arrastre de recibos anteriores,
+   * que ya se cuentan uno a uno); el vencido se obtiene aplicando los pagos
+   * FIFO a los recibos con fecha de vencimiento pasada.
+   */
   async getSaldos(contratoId: string, contratoIds: string[]) {
     this.assertOwns(contratoId, contratoIds);
-    const recibos = await this.prisma.recibo.findMany({
-      where: { contratoId },
-      select: { saldoVigente: true, saldoVencido: true },
+    const hoy = new Date().toISOString().slice(0, 10);
+    const [recibos, pagadoAgg] = await Promise.all([
+      this.prisma.recibo.findMany({
+        where: { contratoId },
+        select: { saldoVigente: true, fechaVencimiento: true },
+        orderBy: { fechaVencimiento: 'asc' },
+      }),
+      this.prisma.pago.aggregate({ where: { contratoId }, _sum: { monto: true } }),
+    ]);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const pagado = Number(pagadoAgg._sum.monto ?? 0);
+    const facturado = recibos.reduce((s, r) => s + Number(r.saldoVigente), 0);
+    const total = Math.max(0, r2(facturado - pagado));
+    const vencido = adeudoFifo(recibos.filter((r) => r.fechaVencimiento < hoy), pagado).monto;
+    const vigente = r2(total - vencido);
+    return { vencido, vigente, total, intereses: 0 };
+  }
+
+  /**
+   * Pago en línea desde el portal: crea un intento de pago (SPEI/OXXO/tarjeta)
+   * vía la pasarela configurada. El monto no puede exceder el saldo total.
+   */
+  async crearIntentoPago(
+    contratoId: string,
+    contratoIds: string[],
+    data: { monto: number; metodo: MetodoPagoPasarela },
+  ) {
+    this.assertOwns(contratoId, contratoIds);
+    if (!(data.monto > 0)) {
+      throw new BadRequestException('El monto debe ser mayor a cero');
+    }
+    const saldos = await this.getSaldos(contratoId, contratoIds);
+    if (data.monto > saldos.total) {
+      throw new BadRequestException(
+        `El monto excede el saldo del contrato ($${saldos.total.toFixed(2)})`,
+      );
+    }
+    return this.pasarelas.crearIntento({
+      contratoId,
+      monto: data.monto,
+      metodo: data.metodo,
+      origen: 'portal',
     });
-    const vencido = recibos.reduce((s, r) => s + Number(r.saldoVencido), 0);
-    const vigente = recibos.reduce((s, r) => s + Number(r.saldoVigente), 0);
-    return { vencido, vigente, total: vencido + vigente, intereses: 0 };
+  }
+
+  /** Intentos de pago en línea del contrato (referencias SPEI/OXXO, checkouts). */
+  async getIntentosPago(contratoId: string, contratoIds: string[]) {
+    this.assertOwns(contratoId, contratoIds);
+    return this.pasarelas.listarIntentosContrato(contratoId);
+  }
+
+  /**
+   * Simula la confirmación de un intento de pago del propio contrato.
+   * Solo funciona con PASARELA_PROVIDER=simulada (modo demo) — el guard
+   * de modo vive en PasarelasService.simularPagoExitoso.
+   */
+  async simularPagoIntento(contratoId: string, contratoIds: string[], intentoId: string) {
+    this.assertOwns(contratoId, contratoIds);
+    const intento = await this.prisma.intentoPago.findUnique({
+      where: { id: intentoId },
+      select: { contratoId: true },
+    });
+    if (!intento || intento.contratoId !== contratoId) {
+      throw new NotFoundException('Intento de pago no encontrado');
+    }
+    return this.pasarelas.simularPagoExitoso(intentoId);
   }
 
   /** T13: Timbrado download metadata — in production stream the actual XML/PDF file. */

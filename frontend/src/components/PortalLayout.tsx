@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Consumo', tab: 'consumo' },
   { label: 'Facturas', tab: 'facturas' },
   { label: 'Recibos', tab: 'recibos' },
+  { label: 'Pagar en línea', tab: 'pagar' },
   { label: 'Pagos', tab: 'metodos-pago' },
 ] as const;
 

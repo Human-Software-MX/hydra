@@ -155,13 +155,14 @@ export class FacturacionService {
     return this.persistirFactura(factura);
   }
 
-  private async persistirFactura(factura: FacturaConsumoResultado) {
+  private async persistirFactura(factura: FacturaConsumoResultado, loteFacturacionId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const timbrado = await tx.timbrado.create({
         data: {
           contratoId: factura.contratoId,
           consumoId: factura.consumoId,
           estado: 'Pendiente', // pasa a "Timbrada OK" cuando el módulo CFDI la selle
+          loteFacturacionId: loteFacturacionId ?? null,
           periodo: factura.periodo,
           subtotal: factura.subtotal,
           iva: factura.iva,
@@ -242,13 +243,32 @@ export class FacturacionService {
     };
   }
 
-  /** Ejecuta la facturación masiva de un periodo (crea Timbrado + Recibo por consumo). */
-  async ejecutarPeriodo(params: {
-    periodo: string;
-    rutaId?: string;
-    zonaId?: string;
-    contratoId?: string;
-  }) {
+  /**
+   * Ejecuta la facturación masiva de un periodo (crea Timbrado + Recibo por consumo),
+   * agrupando la corrida en un LoteFacturacion que guarda los filtros usados para
+   * poder auditar, cancelar o reprocesar la corrida completa.
+   */
+  async ejecutarPeriodo(
+    params: {
+      periodo: string;
+      rutaId?: string;
+      zonaId?: string;
+      contratoId?: string;
+    },
+    loteOrigenId?: string,
+  ) {
+    const lote = await this.prisma.loteFacturacion.create({
+      data: {
+        periodo: params.periodo,
+        filtros: {
+          rutaId: params.rutaId ?? null,
+          zonaId: params.zonaId ?? null,
+          contratoId: params.contratoId ?? null,
+        },
+        loteOrigenId: loteOrigenId ?? null,
+      },
+    });
+
     const consumos = await this.consumosFacturables(params);
     const generados: Array<{ consumoId: string; timbradoId: string; reciboId: string; total: number }> = [];
     const errores: Array<{ consumoId: string; error: string }> = [];
@@ -256,7 +276,7 @@ export class FacturacionService {
     for (const c of consumos) {
       try {
         const factura = await this.calcularParaConsumo(c as any);
-        const res = await this.persistirFactura(factura);
+        const res = await this.persistirFactura(factura, lote.id);
         generados.push({
           consumoId: c.id,
           timbradoId: res.timbradoId,
@@ -268,15 +288,321 @@ export class FacturacionService {
       }
     }
 
+    const importeTotal = redondear(generados.reduce((s, g) => s + g.total, 0));
+    await this.prisma.loteFacturacion.update({
+      where: { id: lote.id },
+      data: { generados: generados.length, conError: errores.length, importeTotal },
+    });
+
     return {
+      loteId: lote.id,
       periodo: params.periodo,
       procesados: consumos.length,
       generados: generados.length,
       conError: errores.length,
-      importeTotal: redondear(generados.reduce((s, g) => s + g.total, 0)),
+      importeTotal,
       detalle: generados,
       errores,
     };
+  }
+
+  // ─── Lotes de facturación: consulta, cancelación y reproceso ──────────────
+
+  async listarLotes(params: { periodo?: string; estado?: string; page?: number; limit?: number }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const where = {
+      ...(params.periodo && { periodo: params.periodo }),
+      ...(params.estado && { estado: params.estado }),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.loteFacturacion.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.loteFacturacion.count({ where }),
+    ]);
+    return { data, total, page, limit };
+  }
+
+  async obtenerLote(loteId: string) {
+    const lote = await this.prisma.loteFacturacion.findUnique({ where: { id: loteId } });
+    if (!lote) throw new NotFoundException('Lote de facturación no encontrado');
+
+    const porEstado = await this.prisma.timbrado.groupBy({
+      by: ['estado'],
+      where: { loteFacturacionId: loteId },
+      _count: { _all: true },
+      _sum: { total: true },
+    });
+
+    return {
+      ...lote,
+      totales: {
+        timbrados: porEstado.reduce((s, g) => s + g._count._all, 0),
+        porEstado: porEstado.map((g) => ({
+          estado: g.estado,
+          cantidad: g._count._all,
+          importe: Number(g._sum.total ?? 0),
+        })),
+      },
+    };
+  }
+
+  /**
+   * Valida que un lote pueda cancelarse:
+   *  - existe y está en estado 'generado';
+   *  - ningún timbrado del lote está sellado ('Timbrada OK' = CFDI vigente ante el SAT);
+   *  - ningún recibo del lote tiene pagos aplicados (directos ni vía cartera).
+   */
+  private async validarLoteCancelable(loteId: string) {
+    const lote = await this.prisma.loteFacturacion.findUnique({
+      where: { id: loteId },
+      include: {
+        timbrados: {
+          select: { id: true, estado: true, recibos: { select: { id: true } } },
+        },
+      },
+    });
+    if (!lote) throw new NotFoundException('Lote de facturación no encontrado');
+    if (lote.estado !== 'generado') {
+      throw new BadRequestException(
+        `Solo se pueden cancelar lotes en estado "generado" (estado actual: "${lote.estado}")`,
+      );
+    }
+
+    const sellados = lote.timbrados.filter((t) => t.estado === 'Timbrada OK').length;
+    if (sellados > 0) {
+      throw new BadRequestException(
+        `El lote tiene ${sellados} factura(s) con CFDI sellado ("Timbrada OK"). ` +
+          'Un CFDI sellado requiere cancelación fiscal ante el SAT, fuera del alcance de esta operación; ' +
+          'cancele fiscalmente esos comprobantes antes de cancelar el lote.',
+      );
+    }
+
+    const timbradoIds = lote.timbrados.map((t) => t.id);
+    const reciboIds = lote.timbrados.flatMap((t) => t.recibos.map((r) => r.id));
+    await this.verificarSinPagos(timbradoIds, reciboIds, 'El lote');
+
+    return { lote, timbradoIds, reciboIds };
+  }
+
+  /** Rechaza la operación si hay pagos (directos o aplicados vía cartera) sobre los recibos/timbrados dados. */
+  private async verificarSinPagos(timbradoIds: string[], reciboIds: string[], sujeto: string) {
+    const [pagosDirectos, aplicaciones] = await Promise.all([
+      this.prisma.pago.count({
+        where: {
+          OR: [{ timbradoId: { in: timbradoIds } }, { reciboId: { in: reciboIds } }],
+        },
+      }),
+      this.prisma.aplicacionPago.count({
+        where: { documento: { reciboId: { in: reciboIds } } },
+      }),
+    ]);
+    if (pagosDirectos + aplicaciones > 0) {
+      throw new BadRequestException(
+        `${sujeto} tiene recibos con pagos aplicados (${pagosDirectos + aplicaciones}); no puede cancelarse. ` +
+          'Revierta o reasigne los pagos antes de intentar la cancelación.',
+      );
+    }
+  }
+
+  /**
+   * Cancela físicamente un lote ya validado: borra recibos (y sus documentos de
+   * cartera huérfanos), marca los timbrados como 'Cancelado' conservándolos como
+   * auditoría y libera los consumos (consumoId=null; el periodo queda en `periodo`).
+   */
+  private async cancelarLoteCore(
+    ctx: { lote: { id: string; periodo: string; importeTotal: any; generados: number }; timbradoIds: string[]; reciboIds: string[] },
+    dto: { motivo: string; canceladoPor?: string },
+    estadoFinal: 'cancelado' | 'reprocesado',
+  ) {
+    const { lote, timbradoIds, reciboIds } = ctx;
+    await this.prisma.$transaction([
+      this.prisma.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } }),
+      this.prisma.recibo.deleteMany({ where: { id: { in: reciboIds } } }),
+      this.prisma.timbrado.updateMany({
+        where: { id: { in: timbradoIds } },
+        data: { estado: 'Cancelado', consumoId: null },
+      }),
+      this.prisma.loteFacturacion.update({
+        where: { id: lote.id },
+        data: {
+          estado: estadoFinal,
+          motivoCancelacion: dto.motivo,
+          canceladoPor: dto.canceladoPor ?? null,
+        },
+      }),
+    ]);
+
+    return {
+      loteId: lote.id,
+      periodo: lote.periodo,
+      estado: estadoFinal,
+      timbradosCancelados: timbradoIds.length,
+      recibosEliminados: reciboIds.length,
+      importeCancelado: Number(lote.importeTotal),
+    };
+  }
+
+  /** Cancela un lote de facturación completo (recibos borrados, timbrados a 'Cancelado', consumos liberados). */
+  async cancelarLote(loteId: string, dto: { motivo: string; canceladoPor?: string }) {
+    return this.conLog(`cancelar-lote:${loteId}`, async () => {
+      const ctx = await this.validarLoteCancelable(loteId);
+      const res = await this.cancelarLoteCore(ctx, dto, 'cancelado');
+      return { ...res, motivo: dto.motivo, registros: res.timbradosCancelados };
+    });
+  }
+
+  /**
+   * Reprocesa un lote: lo cancela (mismas validaciones duras) y vuelve a ejecutar
+   * la facturación del periodo con los filtros originales guardados en el lote.
+   * El lote nuevo queda ligado al anterior vía loteOrigenId.
+   */
+  async reprocesarLote(loteId: string, dto: { motivo: string; canceladoPor?: string }) {
+    return this.conLog(`reprocesar-lote:${loteId}`, async () => {
+      const ctx = await this.validarLoteCancelable(loteId);
+      const cancelacion = await this.cancelarLoteCore(ctx, dto, 'reprocesado');
+
+      const filtros = (ctx.lote.filtros ?? {}) as {
+        rutaId?: string | null;
+        zonaId?: string | null;
+        contratoId?: string | null;
+      };
+      const nuevo = await this.ejecutarPeriodo(
+        {
+          periodo: ctx.lote.periodo,
+          rutaId: filtros.rutaId ?? undefined,
+          zonaId: filtros.zonaId ?? undefined,
+          contratoId: filtros.contratoId ?? undefined,
+        },
+        loteId,
+      );
+
+      const importeAnterior = Number(ctx.lote.importeTotal);
+      return {
+        loteAnteriorId: loteId,
+        loteNuevoId: nuevo.loteId,
+        periodo: ctx.lote.periodo,
+        motivo: dto.motivo,
+        comparativo: {
+          importeAnterior,
+          importeNuevo: nuevo.importeTotal,
+          diferencia: redondear(nuevo.importeTotal - importeAnterior),
+          generadosAnterior: ctx.lote.generados,
+          generadosNuevo: nuevo.generados,
+        },
+        cancelacion,
+        resultado: nuevo,
+        registros: nuevo.generados,
+        errores: nuevo.conError,
+      };
+    });
+  }
+
+  /**
+   * Refactura un consumo individual: cancela su timbrado previo (mismas guardas
+   * que el lote: sin CFDI sellado y sin pagos) y vuelve a facturarlo con las
+   * tarifas y saldos vigentes.
+   */
+  async refacturarConsumo(consumoId: string, dto: { motivo: string; canceladoPor?: string }) {
+    return this.conLog(`refacturar-consumo:${consumoId}`, async () => {
+      const consumo = await this.prisma.consumo.findUnique({
+        where: { id: consumoId },
+        include: {
+          contrato: { select: { indicadorExentarFacturacion: true } },
+          timbrado: { include: { recibos: { select: { id: true } } } },
+        },
+      });
+      if (!consumo) throw new NotFoundException('Consumo no encontrado');
+      if (!consumo.timbrado) {
+        throw new BadRequestException(
+          'El consumo no tiene factura previa; use la facturación normal (POST /facturacion/consumo/:id)',
+        );
+      }
+      if (!consumo.confirmado) throw new BadRequestException('El consumo no está confirmado');
+      if (consumo.contrato.indicadorExentarFacturacion) {
+        throw new BadRequestException('El contrato está exento de facturación');
+      }
+
+      const timbrado = consumo.timbrado;
+      if (timbrado.estado === 'Timbrada OK') {
+        throw new BadRequestException(
+          'La factura del consumo tiene CFDI sellado ("Timbrada OK"). ' +
+            'Un CFDI sellado requiere cancelación fiscal ante el SAT, fuera del alcance de esta operación.',
+        );
+      }
+      const reciboIds = timbrado.recibos.map((r) => r.id);
+      await this.verificarSinPagos([timbrado.id], reciboIds, 'La factura del consumo');
+
+      await this.prisma.$transaction([
+        this.prisma.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } }),
+        this.prisma.recibo.deleteMany({ where: { id: { in: reciboIds } } }),
+        this.prisma.timbrado.update({
+          where: { id: timbrado.id },
+          data: { estado: 'Cancelado', consumoId: null },
+        }),
+      ]);
+
+      const nuevo = await this.facturarConsumo(consumoId);
+      const importeAnterior = Number(timbrado.total);
+      return {
+        consumoId,
+        motivo: dto.motivo,
+        timbradoCanceladoId: timbrado.id,
+        timbradoNuevoId: nuevo.timbradoId,
+        reciboNuevoId: nuevo.reciboId,
+        comparativo: {
+          importeAnterior,
+          importeNuevo: nuevo.factura.total,
+          diferencia: redondear(nuevo.factura.total - importeAnterior),
+        },
+        registros: 1,
+      };
+    });
+  }
+
+  /**
+   * Envuelve una operación con bitácora LogProceso (Iniciado → Completado/Error).
+   * Copia local del patrón `conLog` de batch.service.ts, con tipo 'facturacion'.
+   */
+  private async conLog<T extends { registros?: number; errores?: number }>(
+    subTipo: string,
+    fn: () => Promise<T & Record<string, unknown>>,
+  ): Promise<T> {
+    const log = await this.prisma.logProceso.create({
+      data: { tipo: 'facturacion', subTipo, estado: 'Iniciado' },
+    });
+    const inicio = Date.now();
+    try {
+      const resultado = await fn();
+      await this.prisma.logProceso.update({
+        where: { id: log.id },
+        data: {
+          estado: 'Completado',
+          fin: new Date(),
+          duracionMs: Date.now() - inicio,
+          registros: resultado.registros ?? 0,
+          errores: resultado.errores ?? 0,
+          detalle: JSON.parse(JSON.stringify(resultado)),
+        },
+      });
+      return resultado;
+    } catch (e: any) {
+      await this.prisma.logProceso.update({
+        where: { id: log.id },
+        data: {
+          estado: 'Error',
+          fin: new Date(),
+          duracionMs: Date.now() - inicio,
+          errores: 1,
+          errorMsg: e?.message ?? 'Error',
+        },
+      });
+      throw e;
+    }
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

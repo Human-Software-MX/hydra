@@ -76,7 +76,8 @@ const Pagos = () => {
   const adeudos = activos.map(c => {
     const recibosContrato = recibos.filter(r => r.contratoId === c.id);
     const pagosContrato = pagosVisibles.filter(p => p.contratoId === c.id);
-    const totalRecibos = recibosContrato.reduce((s, r) => s + Number(r.saldoVigente) + Number(r.saldoVencido), 0);
+    // saldoVencido es arrastre de recibos anteriores: sumarlo por recibo duplicaría la deuda
+    const totalRecibos = recibosContrato.reduce((s, r) => s + Number(r.saldoVigente), 0);
     const totalPagos = pagosContrato.reduce((s, p) => s + Number(p.monto), 0);
     return { contrato: c, saldo: totalRecibos - totalPagos };
   }).filter(a => a.saldo > 0);

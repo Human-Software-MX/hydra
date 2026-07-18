@@ -20,6 +20,8 @@ type TipoNotificacion =
   | 'recibo_emitido'
   | 'aviso_vencimiento'
   | 'aviso_restriccion'
+  | 'aviso_cobranza'
+  | 'requerimiento_pago'
   | 'folio_tramite'
   | 'prueba';
 
@@ -201,6 +203,91 @@ export class NotificacionesService {
     }
     if (dest.telefono) {
       whatsapp = (await this.enviarWhatsApp({ telefono: dest.telefono, mensaje: msgWa, tipo: 'aviso_vencimiento', contratoId: recibo.contratoId })).enviado;
+    }
+    return { email, whatsapp };
+  }
+
+  /** Aviso de cobranza (dunning): adeudo vencido, con oferta opcional de convenio. */
+  async notificarAvisoCobranza(params: {
+    contratoId: string;
+    saldoVencido: number;
+    diasMora: number;
+    canal?: string | null; // email | whatsapp | ambos (default ambos)
+    ofrecerConvenio?: boolean;
+  }): Promise<{ email: boolean; whatsapp: boolean }> {
+    const contrato = await this.prisma.contrato.findUnique({
+      where: { id: params.contratoId },
+      select: { id: true, nombre: true, numeroContrato: true },
+    });
+    if (!contrato) return { email: false, whatsapp: false };
+    const dest = await this.destinatarioContrato(params.contratoId);
+    const convenio = params.ofrecerConvenio
+      ? `<p>Podemos ofrecerle un <strong>convenio de pago en parcialidades</strong>: acuda a su administración o solicítelo desde el portal.</p>`
+      : '';
+    const asunto = `Aviso de adeudo — contrato ${contrato.numeroContrato}`;
+    const cuerpo =
+      `<p>Estimado usuario,</p>` +
+      `<p>Su contrato presenta un adeudo vencido de <strong>$${params.saldoVencido.toFixed(2)}</strong> ` +
+      `con <strong>${params.diasMora}</strong> días de mora.</p>` +
+      convenio +
+      `<p>Le invitamos a regularizar su situación para evitar restricciones del servicio. Si ya pagó, ignore este mensaje.</p>`;
+    const msgWa =
+      `💧 Aviso: su contrato de agua tiene un adeudo vencido de $${params.saldoVencido.toFixed(2)} ` +
+      `(${params.diasMora} días de mora). ` +
+      (params.ofrecerConvenio ? 'Pregunte por un convenio de pago en parcialidades. ' : '') +
+      `Regularícese para evitar restricción del servicio.`;
+
+    const porEmail = !params.canal || params.canal === 'email' || params.canal === 'ambos';
+    const porWa = !params.canal || params.canal === 'whatsapp' || params.canal === 'ambos';
+    let email = false;
+    let whatsapp = false;
+    if (porEmail && dest.email) {
+      email = (await this.enviarEmail({ destinatario: dest.email, asunto, cuerpo, tipo: 'aviso_cobranza', contratoId: params.contratoId })).enviado;
+    }
+    if (porWa && dest.telefono) {
+      whatsapp = (await this.enviarWhatsApp({ telefono: dest.telefono, mensaje: msgWa, tipo: 'aviso_cobranza', contratoId: params.contratoId })).enviado;
+    }
+    return { email, whatsapp };
+  }
+
+  /** Requerimiento formal de pago (etapa previa a restricción/corte del pipeline de cobranza). */
+  async notificarRequerimientoPago(params: {
+    contratoId: string;
+    saldoVencido: number;
+    diasMora: number;
+    docsVencidos: number;
+    canal?: string | null;
+  }): Promise<{ email: boolean; whatsapp: boolean }> {
+    const contrato = await this.prisma.contrato.findUnique({
+      where: { id: params.contratoId },
+      select: { id: true, nombre: true, numeroContrato: true },
+    });
+    if (!contrato) return { email: false, whatsapp: false };
+    const dest = await this.destinatarioContrato(params.contratoId);
+    const asunto = `Requerimiento de pago — contrato ${contrato.numeroContrato}`;
+    const cuerpo =
+      `<p>Estimado usuario,</p>` +
+      `<p>Se le requiere formalmente el pago del adeudo vencido de su contrato:</p>` +
+      `<ul><li>Importe: <strong>$${params.saldoVencido.toFixed(2)}</strong></li>` +
+      `<li>Recibos vencidos: <strong>${params.docsVencidos}</strong></li>` +
+      `<li>Días de mora: <strong>${params.diasMora}</strong></li></ul>` +
+      `<p>De no regularizarse, el servicio podrá ser <strong>restringido al mínimo vital</strong> ` +
+      `(uso doméstico, Ley General de Aguas) o suspendido (uso no doméstico), previa notificación.</p>` +
+      `<p>Puede pagar en línea, en oficinas o solicitar un convenio de pago.</p>`;
+    const msgWa =
+      `⚠️ Requerimiento de pago: adeudo de $${params.saldoVencido.toFixed(2)} ` +
+      `(${params.docsVencidos} recibos, ${params.diasMora} días de mora). ` +
+      `De no regularizarse su servicio podrá restringirse conforme a la ley. Pague o solicite un convenio.`;
+
+    const porEmail = !params.canal || params.canal === 'email' || params.canal === 'ambos';
+    const porWa = !params.canal || params.canal === 'whatsapp' || params.canal === 'ambos';
+    let email = false;
+    let whatsapp = false;
+    if (porEmail && dest.email) {
+      email = (await this.enviarEmail({ destinatario: dest.email, asunto, cuerpo, tipo: 'requerimiento_pago', contratoId: params.contratoId })).enviado;
+    }
+    if (porWa && dest.telefono) {
+      whatsapp = (await this.enviarWhatsApp({ telefono: dest.telefono, mensaje: msgWa, tipo: 'requerimiento_pago', contratoId: params.contratoId })).enviado;
     }
     return { email, whatsapp };
   }

@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CarteraService } from '../cartera/cartera.service';
 
 const ESTADOS_CORTADOS = ['Cortado', 'cortado'];
 
 @Injectable()
 export class PagosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartera: CarteraService,
+  ) {}
 
   async crear(dto: {
     contratoId: string;
@@ -34,6 +38,8 @@ export class PagosService {
 
     // After payment, check if reconexion order should be auto-generated
     await this.verificarAutoReconexion(dto.contratoId);
+    // Aplica el pago a la cartera (FIFO) y refresca el estado de cuenta.
+    await this.cartera.aplicarPago(pago.id);
 
     return pago;
   }

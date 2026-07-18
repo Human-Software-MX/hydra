@@ -12,6 +12,7 @@ import {
 } from '@/api/portal';
 import { getCeaDeuda, getCeaConsumos, type CeaConsumo } from '@/api/cea';
 import type { PortalContextValue } from '@/components/PortalLayout';
+import PagarEnLinea from '@/components/portal/PagarEnLinea';
 import {
   FileText,
   BarChart3,
@@ -80,7 +81,7 @@ function StatusPill({ status }: { status: string }) {
 
 const FACTURAS_POR_PAGINA = 10;
 
-const TAB_VALUES = ['inicio', 'consumo', 'facturas', 'recibos', 'metodos-pago', 'tramites-digitales'] as const;
+const TAB_VALUES = ['inicio', 'consumo', 'facturas', 'recibos', 'pagar', 'metodos-pago', 'tramites-digitales'] as const;
 type TabValue = (typeof TAB_VALUES)[number];
 
 function isTab(s: string | null): s is TabValue {
@@ -403,6 +404,7 @@ const PortalCliente = () => {
           {/* Quick actions */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
+              { label: 'Pagar en línea', tab: 'pagar' as TabValue, icon: CreditCard, desc: 'Paga tu saldo por SPEI, OXXO o tarjeta' },
               { label: 'Ver mis facturas', tab: 'facturas' as TabValue, icon: FileText, desc: 'Historial y estado de tus facturas' },
               { label: 'Mis recibos', tab: 'recibos' as TabValue, icon: Receipt, desc: 'Pagos realizados y comprobantes' },
               { label: 'Trámites digitales', tab: 'tramites-digitales' as TabValue, icon: BarChart3, desc: 'Solicitudes y gestión de servicio' },
@@ -647,8 +649,8 @@ const PortalCliente = () => {
                   </div>
                   <div className="flex gap-3 mt-5 flex-wrap">
                     <button
-                      disabled
-                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold opacity-50 cursor-not-allowed"
+                      onClick={() => setTab('pagar')}
+                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
                     >
                       <CreditCard className="h-4 w-4" aria-hidden />
                       Pagar Ahora
@@ -950,6 +952,20 @@ const PortalCliente = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── PAGAR EN LÍNEA ─────────────────────────────────────────────────── */}
+      {activeTab === 'pagar' && contratoId && (
+        <div className="space-y-6">
+          <Breadcrumb items={[{ label: 'Portal', onClick: () => setTab('inicio') }, { label: 'Pagar en línea' }]} />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Pagar en Línea</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Genera una referencia de pago por SPEI, OXXO o tarjeta y liquida tu saldo sin salir de casa.
+            </p>
+          </div>
+          <PagarEnLinea contratoId={contratoId} />
         </div>
       )}
 

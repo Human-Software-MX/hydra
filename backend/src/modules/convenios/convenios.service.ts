@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CarteraService } from '../cartera/cartera.service';
 
 const ESTADOS_CORTADOS = ['Cortado', 'cortado'];
 
 @Injectable()
 export class ConveniosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartera: CarteraService,
+  ) {}
 
   async findAll(params: { contratoId?: string; estado?: string; page?: number; limit?: number }) {
     const page = params.page ?? 1;
@@ -127,6 +131,9 @@ export class ConveniosService {
     if (nuevoEstado === 'Completado') {
       await this.verificarAutoReconexionPorConvenio(convenio.contratoId);
     }
+
+    // Aplica la parcialidad a la cartera (FIFO) y refresca el estado de cuenta.
+    await this.cartera.aplicarPago(pago.id);
 
     return {
       pagoId: pago.id,

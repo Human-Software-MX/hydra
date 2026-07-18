@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EtlPagosService } from './etl-pagos.service';
+import { CarteraService } from '../cartera/cartera.service';
 
 @Injectable()
 export class PagosExternosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly etl: EtlPagosService,
+    private readonly cartera: CarteraService,
   ) {}
 
   async uploadArchivo(params: { recaudador: string; archivoNombre: string; contenido: string }) {
@@ -111,6 +113,9 @@ export class PagosExternosService {
       where: { id },
       data: { estado: 'conciliado', contratoId, reciboId },
     });
+
+    // Aplica el pago conciliado a la cartera (FIFO) y refresca el estado de cuenta.
+    await this.cartera.aplicarPago(pagoAplicado.id);
 
     return { pagoExternoId: id, pagoAplicadoId: pagoAplicado.id };
   }

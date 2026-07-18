@@ -39,6 +39,10 @@ import { RestriccionesModule } from './modules/restricciones/restricciones.modul
 import { IndicadoresModule } from './modules/indicadores/indicadores.module';
 import { VeeModule } from './modules/vee/vee.module';
 import { BalanceModule } from './modules/balance/balance.module';
+import { CarteraModule } from './modules/cartera/cartera.module';
+import { PasarelasModule } from './modules/pasarelas/pasarelas.module';
+import { MdmModule } from './modules/mdm/mdm.module';
+import { MigracionModule } from './modules/migracion/migracion.module';
 
 @Module({
   imports: [
@@ -80,6 +84,10 @@ import { BalanceModule } from './modules/balance/balance.module';
     IndicadoresModule,
     VeeModule,
     BalanceModule,
+    CarteraModule,
+    PasarelasModule,
+    MdmModule,
+    MigracionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
