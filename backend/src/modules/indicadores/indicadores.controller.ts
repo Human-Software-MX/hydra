@@ -32,11 +32,11 @@ class VolumenProducidoDto {
 export class IndicadoresController {
   constructor(private readonly indicadores: IndicadoresService) {}
 
-  /** Indicadores PIGOO del periodo (YYYY-MM). */
+  /** Indicadores PIGOO del periodo (YYYY-MM); sin `periodo` calcula el acumulado histórico. */
   @Get('pigoo')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
-  pigoo(@Query('periodo') periodo: string) {
-    return this.indicadores.pigoo(periodo);
+  pigoo(@Query('periodo') periodo?: string) {
+    return this.indicadores.pigoo(periodo || undefined);
   }
 
   /** Serie histórica de indicadores entre dos periodos (máx. 24). */

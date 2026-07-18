@@ -6,7 +6,8 @@ const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pct = (num: number, den: number) => (den > 0 ? r2((num / den) * 100) : null);
 
 export interface IndicadoresPigoo {
-  periodo: string;
+  /** Periodo YYYY-MM, o null cuando el cálculo es el acumulado histórico. */
+  periodo: string | null;
   // Padrón
   padronContratos: number;
   contratosActivos: number;
@@ -22,6 +23,14 @@ export interface IndicadoresPigoo {
   importeRecaudado: number;
   eficienciaComercialPct: number | null;
   eficienciaGlobalPct: number | null;
+  // Cobro (PIGOO IP.15)
+  recibosEmitidos: number;
+  recibosPagados: number;
+  eficienciaCobroPct: number | null;
+  // Pago a tiempo
+  pagosEvaluados: number;
+  pagosATiempo: number;
+  pagoATiempoPct: number | null;
   // Cartera
   carteraVencida: number;
   usuariosConAdeudo: number;
@@ -30,6 +39,9 @@ export interface IndicadoresPigoo {
   restriccionesVigentes: number;
   conveniosActivos: number;
   quejasAbiertas: number;
+  // Reclamaciones (PIGOO: quejas por cada 1,000 tomas)
+  quejasPeriodo: number;
+  reclamacionesPor1000Tomas: number | null;
 }
 
 /**
@@ -85,11 +97,25 @@ export class IndicadoresService {
 
   // ─── Cálculo PIGOO del periodo ────────────────────────────────────────────
 
-  async pigoo(periodo: string): Promise<IndicadoresPigoo> {
-    if (!/^\d{4}-\d{2}$/.test(periodo)) {
+  /**
+   * Con `periodo` (YYYY-MM) calcula los indicadores del mes; sin él calcula el
+   * acumulado histórico sobre todos los datos disponibles.
+   */
+  async pigoo(periodo?: string): Promise<IndicadoresPigoo> {
+    if (periodo !== undefined && !/^\d{4}-\d{2}$/.test(periodo)) {
       throw new BadRequestException('periodo debe tener formato YYYY-MM');
     }
     const hoy = new Date().toISOString().slice(0, 10);
+    const pagoFechaWhere = periodo ? { fecha: { startsWith: periodo } } : {};
+
+    // Rango de fechas del periodo para modelos con DateTime (quejas del mes).
+    let quejaPeriodoWhere = {};
+    if (periodo) {
+      const desde = new Date(`${periodo}-01T00:00:00.000Z`);
+      const hasta = new Date(desde);
+      hasta.setUTCMonth(hasta.getUTCMonth() + 1);
+      quejaPeriodoWhere = { fecha: { gte: desde, lt: hasta } };
+    }
 
     const [
       padronContratos,
@@ -99,27 +125,47 @@ export class IndicadoresService {
       consumosPeriodo,
       timbradosPeriodo,
       pagosPeriodo,
+      recibosEmitidos,
+      recibosPagadosRows,
+      pagosConVencimiento,
       recibosVencidos,
       pagosPorContrato,
       restriccionesVigentes,
       conveniosActivos,
       quejasAbiertas,
+      quejasPeriodo,
     ] = await Promise.all([
       this.prisma.contrato.count(),
       this.prisma.contrato.count({ where: { estado: { in: ['Activo', 'activo'] } } }),
       this.prisma.contrato.count({
         where: { estado: { in: ['Activo', 'activo'] }, medidorId: { not: null } },
       }),
-      this.prisma.volumenProducido.aggregate({ where: { periodo }, _sum: { m3: true } }),
+      this.prisma.volumenProducido.aggregate({
+        where: periodo ? { periodo } : undefined,
+        _sum: { m3: true },
+      }),
       this.prisma.consumo.aggregate({
-        where: { periodo, confirmado: true },
+        where: { ...(periodo && { periodo }), confirmado: true },
         _sum: { m3: true },
         _count: true,
       }),
-      this.prisma.timbrado.aggregate({ where: { periodo }, _sum: { total: true } }),
+      this.prisma.timbrado.aggregate({
+        where: periodo ? { periodo } : undefined,
+        _sum: { total: true },
+      }),
       this.prisma.pago.aggregate({
-        where: { fecha: { startsWith: periodo } },
+        where: pagoFechaWhere,
         _sum: { monto: true },
+      }),
+      this.prisma.recibo.count({ where: periodo ? { timbrado: { periodo } } : {} }),
+      this.prisma.pago.findMany({
+        where: { reciboId: { not: null }, ...pagoFechaWhere },
+        distinct: ['reciboId'],
+        select: { reciboId: true },
+      }),
+      this.prisma.pago.findMany({
+        where: { timbradoId: { not: null }, ...pagoFechaWhere },
+        select: { fecha: true, timbrado: { select: { fechaVencimiento: true } } },
       }),
       this.prisma.recibo.findMany({
         where: { fechaVencimiento: { lt: hoy } },
@@ -130,6 +176,7 @@ export class IndicadoresService {
       this.prisma.restriccionServicio.count({ where: { estado: { in: ['programada', 'aplicada'] } } }),
       this.prisma.convenio.count({ where: { estado: 'Activo' } }),
       this.prisma.quejaAclaracion.count({ where: { estado: { notIn: ['Cerrada', 'Resuelta', 'cerrada', 'resuelta'] } } }),
+      this.prisma.quejaAclaracion.count({ where: quejaPeriodoWhere }),
     ]);
 
     // Cartera vencida: pagos del contrato aplicados FIFO sobre los recibos
@@ -165,8 +212,14 @@ export class IndicadoresService {
         ? r2((eficienciaFisicaPct * eficienciaComercialPct) / 100)
         : null;
 
+    // Eficiencia de cobro (IP.15) y puntualidad de pago.
+    const recibosPagados = recibosPagadosRows.length;
+    const pagosATiempo = pagosConVencimiento.filter(
+      (p) => p.timbrado?.fechaVencimiento && p.fecha <= p.timbrado.fechaVencimiento,
+    ).length;
+
     return {
-      periodo,
+      periodo: periodo ?? null,
       padronContratos,
       contratosActivos,
       contratosConMedidor,
@@ -180,12 +233,21 @@ export class IndicadoresService {
       importeRecaudado,
       eficienciaComercialPct,
       eficienciaGlobalPct,
+      recibosEmitidos,
+      recibosPagados,
+      eficienciaCobroPct: pct(recibosPagados, recibosEmitidos),
+      pagosEvaluados: pagosConVencimiento.length,
+      pagosATiempo,
+      pagoATiempoPct: pct(pagosATiempo, pagosConVencimiento.length),
       carteraVencida: r2(carteraVencida),
       usuariosConAdeudo: contratosConAdeudo.size,
       rezagoPctPadron: pct(contratosConAdeudo.size, contratosActivos),
       restriccionesVigentes,
       conveniosActivos,
       quejasAbiertas,
+      quejasPeriodo,
+      reclamacionesPor1000Tomas:
+        contratosActivos > 0 ? r2((quejasPeriodo / contratosActivos) * 1000) : null,
     };
   }
 
@@ -200,7 +262,7 @@ export class IndicadoresService {
   async csv(desde: string, hasta: string): Promise<string> {
     const serie = await this.serie(desde, hasta);
     const cols: Array<[string, (i: IndicadoresPigoo) => string | number]> = [
-      ['periodo', (i) => i.periodo],
+      ['periodo', (i) => i.periodo ?? ''],
       ['padron_contratos', (i) => i.padronContratos],
       ['contratos_activos', (i) => i.contratosActivos],
       ['micromedicion_pct', (i) => i.micromedicionPct ?? ''],
@@ -211,12 +273,20 @@ export class IndicadoresService {
       ['importe_recaudado', (i) => i.importeRecaudado],
       ['eficiencia_comercial_pct', (i) => i.eficienciaComercialPct ?? ''],
       ['eficiencia_global_pct', (i) => i.eficienciaGlobalPct ?? ''],
+      ['recibos_emitidos', (i) => i.recibosEmitidos],
+      ['recibos_pagados', (i) => i.recibosPagados],
+      ['eficiencia_cobro_pct', (i) => i.eficienciaCobroPct ?? ''],
+      ['pagos_evaluados', (i) => i.pagosEvaluados],
+      ['pagos_a_tiempo', (i) => i.pagosATiempo],
+      ['pago_a_tiempo_pct', (i) => i.pagoATiempoPct ?? ''],
       ['cartera_vencida', (i) => i.carteraVencida],
       ['usuarios_con_adeudo', (i) => i.usuariosConAdeudo],
       ['rezago_pct_padron', (i) => i.rezagoPctPadron ?? ''],
       ['restricciones_vigentes', (i) => i.restriccionesVigentes],
       ['convenios_activos', (i) => i.conveniosActivos],
       ['quejas_abiertas', (i) => i.quejasAbiertas],
+      ['quejas_periodo', (i) => i.quejasPeriodo],
+      ['reclamaciones_por_1000_tomas', (i) => i.reclamacionesPor1000Tomas ?? ''],
     ];
     const header = cols.map(([n]) => n).join(',');
     const filas = serie.map((i) => cols.map(([, f]) => f(i)).join(','));
