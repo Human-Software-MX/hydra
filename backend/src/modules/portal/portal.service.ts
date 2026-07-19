@@ -144,34 +144,23 @@ export class PortalService {
     return this.pasarelas.simularPagoExitoso(intentoId);
   }
 
-  /** T13: Timbrado download metadata — in production stream the actual XML/PDF file. */
+  /**
+   * T13: Descarga del XML CFDI timbrado desde el portal.
+   * Misma fuente que `TimbradoService.obtenerXml` (columna `timbrado.xml`),
+   * pero validando SIEMPRE que el timbrado pertenezca a un contrato del
+   * usuario del portal antes de entregarlo.
+   */
   async getTimbradoDescarga(timbradoId: string, contratoIds: string[]) {
     const timbrado = await this.prisma.timbrado.findUnique({
       where: { id: timbradoId },
-      select: {
-        id: true,
-        contratoId: true,
-        uuid: true,
-        estado: true,
-        periodo: true,
-        total: true,
-        fechaEmision: true,
-      },
+      select: { id: true, contratoId: true, uuid: true, xml: true },
     });
     if (!timbrado) throw new NotFoundException('Timbrado no encontrado');
     this.assertOwns(timbrado.contratoId, contratoIds);
-
-    // Stub: return download metadata; real implementation would stream file from storage
-    return {
-      timbradoId: timbrado.id,
-      uuid: timbrado.uuid,
-      periodo: timbrado.periodo,
-      total: timbrado.total,
-      fechaEmision: timbrado.fechaEmision,
-      _stub: true,
-      message: 'Descarga no disponible en modo demo. UUID incluido para referencia SAT.',
-      xmlUrl: timbrado.uuid ? `https://sat.gob.mx/verificaxml/${timbrado.uuid}` : null,
-    };
+    if (!timbrado.xml) {
+      throw new BadRequestException('El comprobante aún no está timbrado');
+    }
+    return { xml: timbrado.xml, uuid: timbrado.uuid, timbradoId: timbrado.id };
   }
 
   /** T14: Update datos fiscales from portal. */
@@ -269,6 +258,42 @@ export class PortalService {
       where: { contratoId },
       include: { seguimientos: { orderBy: { fecha: 'desc' }, take: 3 } },
       orderBy: { fechaSolicitud: 'desc' },
+    });
+  }
+
+  /**
+   * Reporte de fuga desde el portal: se registra como `QuejaAclaracion`
+   * (tipo 'Queja', categoria 'Fuga', canal 'Portal') vinculada al contrato
+   * del usuario autenticado. El folio devuelto es el id del registro.
+   */
+  async crearReporteFuga(
+    contratoId: string,
+    contratoIds: string[],
+    data: { descripcion: string; ubicacion?: string },
+  ) {
+    this.assertOwns(contratoId, contratoIds);
+    const descripcion = data.ubicacion
+      ? `${data.descripcion}\n\nReferencia de ubicación: ${data.ubicacion}`
+      : data.descripcion;
+    return this.prisma.quejaAclaracion.create({
+      data: {
+        contratoId,
+        tipo: 'Queja',
+        categoria: 'Fuga',
+        descripcion,
+        prioridad: 'Alta',
+        canal: 'Portal',
+        areaAsignada: 'Operación y mantenimiento',
+      },
+    });
+  }
+
+  /** Reportes de fuga del contrato (quejas categoria 'Fuga') con su estado. */
+  async getReportesFuga(contratoId: string, contratoIds: string[]) {
+    this.assertOwns(contratoId, contratoIds);
+    return this.prisma.quejaAclaracion.findMany({
+      where: { contratoId, tipo: 'Queja', categoria: 'Fuga' },
+      orderBy: { fecha: 'desc' },
     });
   }
 

@@ -121,5 +121,57 @@ ok(
 );
 ok('documento en cero → null', fechaLiquidacionDocumento(0, []) === null);
 
+// ─── Uplift A/B de campañas ──────────────────────────────────────────────────
+import { enGrupoControl, hashFnv1a } from '../src/modules/cartera/cartera.util';
+import { calcularUplift, ParticipanteUplift } from '../src/modules/cartera/uplift';
+
+// Asignación determinística: mismo par campaña+contrato → siempre igual
+ok('control: determinístico', enGrupoControl('camp1', 'c-42', 20) === enGrupoControl('camp1', 'c-42', 20));
+ok('control: pct 0 nunca asigna', enGrupoControl('camp1', 'c-42', 0) === false);
+ok('control: pct 100 siempre asigna', enGrupoControl('camp1', 'c-42', 100) === true);
+ok('control: hash estable', hashFnv1a('hydra') === hashFnv1a('hydra') && hashFnv1a('hydra') !== hashFnv1a('hydrb'));
+// Con 10,000 contratos y 20% la proporción asignada debe rondar 20% (±3pp)
+const asignados = Array.from({ length: 10_000 }, (_, i) => enGrupoControl('campX', `c-${i}`, 20)).filter(Boolean).length;
+ok(`control: proporción ≈20% (${(asignados / 100).toFixed(1)}%)`, asignados > 1_700 && asignados < 2_300);
+
+// Uplift: 100 tratados (60 pagan $500 de $1,000) vs 100 control (40 pagan $500 de $1,000)
+const participante = (i: number, esControl: boolean, paga: boolean): ParticipanteUplift => ({
+  contratoId: `c${esControl ? 'c' : 't'}-${i}`,
+  esControl,
+  saldoAlMomento: 1_000,
+  montoPagado: paga ? 500 : 0,
+});
+const uplift = calcularUplift([
+  ...Array.from({ length: 100 }, (_, i) => participante(i, false, i < 60)),
+  ...Array.from({ length: 100 }, (_, i) => participante(i, true, i < 40)),
+]);
+ok('uplift: tasa tratamiento 60%', uplift.tratamiento.tasaPagoPct === 60);
+ok('uplift: tasa control 40%', uplift.control.tasaPagoPct === 40);
+ok('uplift: +20pp en tasa de pago', uplift.upliftTasaPagoPp === 20);
+// recuperación: trat 60×500/100,000 = 30% ; control 40×500/100,000 = 20% → +10pp
+ok('uplift: +10pp en recuperación', uplift.upliftRecuperacionPp === 10);
+// ingreso incremental = 10% × 100,000 = 10,000
+ok('uplift: ingreso incremental $10,000', uplift.ingresoIncrementalEstimado === 10_000);
+ok('uplift: sin advertencias con muestras de 100', uplift.advertencias.length === 0);
+
+// Sin grupo control → advertencia y uplift null
+const sinControl = calcularUplift(Array.from({ length: 50 }, (_, i) => participante(i, false, i < 25)));
+ok('uplift sin control: advertencia', sinControl.advertencias.some((a) => a.includes('no reservó grupo control')));
+ok('uplift sin control: uplift null', sinControl.upliftTasaPagoPp === null);
+
+// Muestras chicas → advertencia de cautela
+const chico = calcularUplift([
+  ...Array.from({ length: 10 }, (_, i) => participante(i, false, i < 6)),
+  ...Array.from({ length: 5 }, (_, i) => participante(i, true, i < 2)),
+]);
+ok('uplift muestras chicas: advierte', chico.advertencias.some((a) => a.includes('Muestras pequeñas')));
+
+// El pago se acota al saldo (no sobre-recuperación por pagos mayores al adeudo)
+const acotado = calcularUplift([
+  { contratoId: 'x', esControl: false, saldoAlMomento: 100, montoPagado: 500 },
+  { contratoId: 'y', esControl: true, saldoAlMomento: 100, montoPagado: 0 },
+]);
+ok('uplift: recuperado acotado al saldo', acotado.tratamiento.montoRecuperado === 100);
+
 console.log(fallos === 0 ? '\nTODO OK ✓' : `\n${fallos} FALLO(S) ✗`);
 process.exit(fallos === 0 ? 0 : 1);

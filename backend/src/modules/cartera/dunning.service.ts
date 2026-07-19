@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { RestriccionesService } from '../restricciones/restricciones.service';
-import { BUCKET_FIELD } from './cartera.util';
+import { BUCKET_FIELD, EPSILON, enGrupoControl } from './cartera.util';
+import { calcularUplift } from './uplift';
 
 /**
  * Dunning como datos: reglas configurables (`ReglaDunning`) que mapean días de
@@ -42,6 +43,8 @@ interface ContextoCampana {
   id: string;
   administracionId: string | null;
   bucketObjetivo: string | null;
+  /** % del universo reservado como grupo control (experimento A/B). */
+  grupoControlPct?: number | null;
 }
 
 @Injectable()
@@ -154,6 +157,37 @@ export class DunningService {
       });
       if (previa) {
         omitidas++;
+        continue;
+      }
+
+      // Experimento A/B: los contratos del grupo control se registran pero NO
+      // se gestionan — son la línea base contra la que se mide el uplift.
+      if (campana && enGrupoControl(campana.id, c.id, Number(campana.grupoControlPct ?? 0))) {
+        omitidas++;
+        if (!dryRun) {
+          await this.prisma.accionCobranza.create({
+            data: {
+              contratoId: c.id,
+              campanaId: campana.id,
+              reglaId: regla.id,
+              etapa: regla.orden,
+              tipo: 'control',
+              canal: 'interno',
+              estado: 'omitida',
+              esControl: true,
+              saldoAlMomento: saldoVencido,
+              diasMoraAlMomento: ec.diasMoraMax,
+              motivo: 'Grupo control del experimento A/B — sin gestión',
+            },
+          });
+        }
+        acciones.push({
+          contratoId: c.id,
+          numeroContrato: c.numeroContrato,
+          regla: regla.nombre,
+          accion: 'control',
+          estado: dryRun ? 'dry_run_control' : 'control',
+        });
         continue;
       }
 
@@ -539,9 +573,13 @@ export class DunningService {
     bucketObjetivo?: string;
     fechaInicio?: string;
     fechaFin?: string;
+    grupoControlPct?: number;
   }) {
     if (data.bucketObjetivo && !BUCKET_FIELD[data.bucketObjetivo]) {
       throw new BadRequestException(`bucketObjetivo inválido: ${data.bucketObjetivo} (use ${Object.keys(BUCKET_FIELD).join(' | ')})`);
+    }
+    if (data.grupoControlPct !== undefined && (data.grupoControlPct < 0 || data.grupoControlPct > 50)) {
+      throw new BadRequestException('grupoControlPct debe estar entre 0 y 50');
     }
     return this.prisma.campanaCobranza.create({
       data: {
@@ -549,10 +587,77 @@ export class DunningService {
         descripcion: data.descripcion ?? null,
         administracionId: data.administracionId ?? null,
         bucketObjetivo: data.bucketObjetivo ?? null,
+        grupoControlPct: data.grupoControlPct ?? null,
         fechaInicio: data.fechaInicio ? new Date(`${data.fechaInicio}T12:00:00`) : null,
         fechaFin: data.fechaFin ? new Date(`${data.fechaFin}T12:00:00`) : null,
       },
     });
+  }
+
+  /**
+   * Mide el uplift de la campaña: tasa de pago y recuperación del grupo
+   * tratamiento vs el grupo control dentro de una ventana posterior a cada
+   * acción. La diferencia es el efecto causal atribuible a la gestión.
+   */
+  async medirUplift(campanaId: string, ventanaDias = 30) {
+    const campana = await this.prisma.campanaCobranza.findUnique({
+      where: { id: campanaId },
+      select: { id: true, nombre: true, estado: true, grupoControlPct: true },
+    });
+    if (!campana) throw new NotFoundException('Campaña no encontrada');
+
+    // Primera acción por contrato (si un contrato tuvo varias etapas, la
+    // ventana corre desde la primera gestión de la campaña).
+    const acciones = await this.prisma.accionCobranza.findMany({
+      where: { campanaId },
+      orderBy: { createdAt: 'asc' },
+      select: { contratoId: true, esControl: true, saldoAlMomento: true, createdAt: true },
+    });
+    const porContrato = new Map<string, (typeof acciones)[0]>();
+    for (const a of acciones) {
+      if (!porContrato.has(a.contratoId)) porContrato.set(a.contratoId, a);
+    }
+    if (porContrato.size === 0) {
+      return { campanaId, nombre: campana.nombre, ventanaDias, participantes: 0, mensaje: 'La campaña no tiene acciones registradas; ejecútela primero' };
+    }
+
+    const contratoIds = [...porContrato.keys()];
+    const pagos = await this.prisma.pago.findMany({
+      where: { contratoId: { in: contratoIds } },
+      select: { contratoId: true, monto: true, createdAt: true },
+    });
+    const pagosPorContrato = new Map<string, Array<{ monto: number; createdAt: Date }>>();
+    for (const p of pagos) {
+      const arr = pagosPorContrato.get(p.contratoId) ?? [];
+      arr.push({ monto: Number(p.monto), createdAt: p.createdAt });
+      pagosPorContrato.set(p.contratoId, arr);
+    }
+
+    const ventanaMs = ventanaDias * 86_400_000;
+    const participantes = contratoIds.map((contratoId) => {
+      const accion = porContrato.get(contratoId)!;
+      const desde = accion.createdAt.getTime();
+      const hasta = desde + ventanaMs;
+      const montoPagado = (pagosPorContrato.get(contratoId) ?? [])
+        .filter((p) => p.createdAt.getTime() >= desde && p.createdAt.getTime() <= hasta)
+        .reduce((s, p) => s + p.monto, 0);
+      return {
+        contratoId,
+        esControl: accion.esControl,
+        saldoAlMomento: Number(accion.saldoAlMomento),
+        montoPagado: montoPagado > EPSILON ? montoPagado : 0,
+      };
+    });
+
+    return {
+      campanaId,
+      nombre: campana.nombre,
+      estado: campana.estado,
+      grupoControlPct: campana.grupoControlPct !== null ? Number(campana.grupoControlPct) : null,
+      ventanaDias,
+      participantes: participantes.length,
+      ...calcularUplift(participantes),
+    };
   }
 
   /**
@@ -580,6 +685,7 @@ export class DunningService {
         id: campana.id,
         administracionId: campana.administracionId,
         bucketObjetivo: campana.bucketObjetivo,
+        grupoControlPct: campana.grupoControlPct !== null ? Number(campana.grupoControlPct) : null,
       },
     });
     return { campanaId: id, nombre: campana.nombre, ...res };

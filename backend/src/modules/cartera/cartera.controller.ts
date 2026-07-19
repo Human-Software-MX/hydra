@@ -161,6 +161,16 @@ export class CarteraController {
     return this.dunning.ejecutarCampana(id, dto?.dryRun ?? false);
   }
 
+  /** Uplift A/B de la campaña: tratamiento vs grupo control en una ventana. */
+  @Get('campanas/:id/uplift')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  uplift(
+    @Param('id') id: string,
+    @Query('ventanaDias', new DefaultValuePipe(30), ParseIntPipe) ventanaDias = 30,
+  ) {
+    return this.dunning.medirUplift(id, Math.min(Math.max(ventanaDias, 1), 180));
+  }
+
   // ─── Historial de acciones ────────────────────────────────────────────────
 
   @Get('acciones')

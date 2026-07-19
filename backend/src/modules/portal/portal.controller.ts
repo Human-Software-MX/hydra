@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Query, Param, Body, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Get, Post, Patch, Query, Param, Body, Req, Res, UseGuards } from '@nestjs/common';
+import { Request, Response } from 'express';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PortalService } from './portal.service';
 import { CrearIntentoPortalDto } from '../pasarelas/dto/crear-intento.dto';
@@ -10,6 +11,19 @@ interface AuthUser {
   name: string;
   role: string;
   contratoIds: string[];
+}
+
+/** POST /portal/reportes-fuga — reporte de fuga desde el portal del cliente. */
+export class CrearReporteFugaDto {
+  @IsString()
+  @IsNotEmpty({ message: 'La descripción de la fuga es obligatoria' })
+  @MaxLength(2000)
+  descripcion!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  ubicacion?: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -35,10 +49,14 @@ export class PortalController {
     return this.portalService.getTimbrados(contratoId, user.contratoIds ?? []);
   }
 
+  /** Descarga del XML timbrado (CFDI) del propio contrato. */
   @Get('timbrados/:id/descargar')
-  getTimbradoDescarga(@Param('id') id: string, @Req() req: Request) {
+  async getTimbradoDescarga(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
     const user = req.user as AuthUser;
-    return this.portalService.getTimbradoDescarga(id, user.contratoIds ?? []);
+    const { xml, timbradoId } = await this.portalService.getTimbradoDescarga(id, user.contratoIds ?? []);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="cfdi-${timbradoId}.xml"`);
+    res.send(xml);
   }
 
   @Get('recibos')
@@ -107,6 +125,22 @@ export class PortalController {
   ) {
     const user = req.user as AuthUser;
     return this.portalService.simularPagoIntento(contratoId, user.contratoIds ?? [], intentoId);
+  }
+
+  @Post('reportes-fuga')
+  crearReporteFuga(
+    @Query('contratoId') contratoId: string,
+    @Body() dto: CrearReporteFugaDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as AuthUser;
+    return this.portalService.crearReporteFuga(contratoId, user.contratoIds ?? [], dto);
+  }
+
+  @Get('reportes-fuga')
+  getReportesFuga(@Query('contratoId') contratoId: string, @Req() req: Request) {
+    const user = req.user as AuthUser;
+    return this.portalService.getReportesFuga(contratoId, user.contratoIds ?? []);
   }
 
   @Get('contactos')

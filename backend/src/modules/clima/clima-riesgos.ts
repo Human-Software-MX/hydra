@@ -170,3 +170,67 @@ export function evaluarRiesgosClimaticos(
   const peso = { critica: 0, alta: 1, media: 2 } as const;
   return alertas.sort((a, b) => peso[a.severidad] - peso[b.severidad]);
 }
+
+// ─── Monitor de Sequía de México (CONAGUA/SMN) — cruce con estiaje ──────────
+
+/** Categorías del MSM en orden de severidad (esquema del US Drought Monitor). */
+export const CATEGORIAS_SEQUIA = ['D0', 'D1', 'D2', 'D3', 'D4'] as const;
+export type CategoriaSequia = (typeof CATEGORIAS_SEQUIA)[number];
+
+const DESCRIPCION_SEQUIA: Record<CategoriaSequia, string> = {
+  D0: 'Anormalmente seco',
+  D1: 'Sequía moderada',
+  D2: 'Sequía severa',
+  D3: 'Sequía extrema',
+  D4: 'Sequía excepcional',
+};
+
+/** Ranking numérico de una categoría (null/desconocida = -1, sin sequía). */
+export function rangoSequia(categoria: string | null | undefined): number {
+  return CATEGORIAS_SEQUIA.indexOf((categoria ?? '') as CategoriaSequia);
+}
+
+/**
+ * Cruza las alertas del pronóstico con la categoría vigente del Monitor de
+ * Sequía: la sequía estructural (quincenal) escala el riesgo coyuntural del
+ * pronóstico (14-16 días).
+ *
+ *  - Con estiaje pronosticado: D1 lo sube a alta; D3+ a crítica.
+ *  - Sin estiaje pronosticado pero con sequía D2+: agrega la alerta de
+ *    estiaje igualmente (la fuente ya está estresada aunque llueva algo).
+ */
+export function escalarPorSequia(
+  alertas: AlertaClimatica[],
+  categoriaMaxima: string | null,
+  contexto?: { fechaCorte?: string; municipiosAfectados?: number },
+): AlertaClimatica[] {
+  const rango = rangoSequia(categoriaMaxima);
+  if (rango < 0) return alertas;
+
+  const cat = categoriaMaxima as CategoriaSequia;
+  const sufijo = ` · Monitor de Sequía CONAGUA: ${cat} (${DESCRIPCION_SEQUIA[cat]})${
+    contexto?.fechaCorte ? ` al corte ${contexto.fechaCorte}` : ''
+  }${contexto?.municipiosAfectados ? `, ${contexto.municipiosAfectados} municipio(s) afectado(s)` : ''}`;
+
+  const resultado = [...alertas];
+  const estiaje = resultado.find((a) => a.tipo === 'estiaje');
+
+  if (estiaje) {
+    estiaje.detalle += sufijo;
+    if (rango >= rangoSequia('D3')) estiaje.severidad = 'critica';
+    else if (rango >= rangoSequia('D1') && estiaje.severidad === 'media') estiaje.severidad = 'alta';
+  } else if (rango >= rangoSequia('D2')) {
+    resultado.push({
+      tipo: 'estiaje',
+      severidad: rango >= rangoSequia('D3') ? 'critica' : 'alta',
+      fechas: [],
+      detalle: `Sequía estructural vigente${sufijo}`,
+      impacto: 'Abatimiento de fuentes, presión del balance hídrico, mayor dependencia de pozos',
+      accionRecomendada:
+        'Revisar balance por fuente, ajustar calendario de tandeo, acelerar reparación de fugas detectadas (cada m³ cuenta en estiaje)',
+    });
+  }
+
+  const peso = { critica: 0, alta: 1, media: 2 } as const;
+  return resultado.sort((a, b) => peso[a.severidad] - peso[b.severidad]);
+}

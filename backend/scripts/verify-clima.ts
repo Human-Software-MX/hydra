@@ -2,7 +2,12 @@
  * Verificación aislada del motor de riesgos climáticos.
  * Ejecuta: node -r ts-node/register/transpile-only scripts/verify-clima.ts
  */
-import { evaluarRiesgosClimaticos, DiaPronostico } from '../src/modules/clima/clima-riesgos';
+import {
+  evaluarRiesgosClimaticos,
+  escalarPorSequia,
+  rangoSequia,
+  DiaPronostico,
+} from '../src/modules/clima/clima-riesgos';
 
 let fallos = 0;
 const ok = (n: string, c: boolean) => { if (!c) fallos++; console.log(`${c ? '✓' : '✗'} ${n}`); };
@@ -79,6 +84,35 @@ const nulos = evaluarRiesgosClimaticos(
 );
 ok('datos nulos: solo estiaje (precip null = 0 acumulado), sin falsos positivos', nulos.every((a) => a.tipo === 'estiaje'));
 ok('serie vacía: sin alertas', evaluarRiesgosClimaticos([]).length === 0);
+
+// ─── Monitor de Sequía: cruce con estiaje ────────────────────────────────────
+ok('rango: D4 > D0 > sin sequía', rangoSequia('D4') > rangoSequia('D0') && rangoSequia(null) === -1);
+
+const conEstiaje = () =>
+  evaluarRiesgosClimaticos(Array.from({ length: 14 }, (_, i) => dia(i, { precipitacionMm: 0 })));
+
+// Sin sequía: no cambia nada
+const sinSequia = escalarPorSequia(conEstiaje(), null);
+ok('sequía null: estiaje se queda en media', sinSequia.find((a) => a.tipo === 'estiaje')?.severidad === 'media');
+
+// D1 + estiaje pronosticado → alta
+const d1 = escalarPorSequia(conEstiaje(), 'D1', { fechaCorte: '2026-07-15' });
+const estiajeD1 = d1.find((a) => a.tipo === 'estiaje');
+ok('D1 escala estiaje a alta', estiajeD1?.severidad === 'alta');
+ok('D1 menciona el Monitor en el detalle', Boolean(estiajeD1?.detalle.includes('Monitor de Sequía')));
+
+// D3 + estiaje pronosticado → crítica
+ok('D3 escala estiaje a crítica', escalarPorSequia(conEstiaje(), 'D3').find((a) => a.tipo === 'estiaje')?.severidad === 'critica');
+
+// D2 SIN estiaje pronosticado → agrega la alerta igualmente
+const semanaLluviosa = Array.from({ length: 14 }, (_, i) => dia(i, { precipitacionMm: 8 }));
+const d2SinEstiaje = escalarPorSequia(evaluarRiesgosClimaticos(semanaLluviosa), 'D2', { municipiosAfectados: 5 });
+const agregada = d2SinEstiaje.find((a) => a.tipo === 'estiaje');
+ok('D2 sin estiaje pronosticado: agrega alerta estructural', agregada?.severidad === 'alta');
+ok('alerta estructural menciona municipios afectados', Boolean(agregada?.detalle.includes('5 municipio(s)')));
+
+// D0 sin estiaje pronosticado: NO agrega alerta (solo anormalmente seco)
+ok('D0 sin estiaje: no agrega alerta', !escalarPorSequia(evaluarRiesgosClimaticos(semanaLluviosa), 'D0').some((a) => a.tipo === 'estiaje'));
 
 console.log(fallos === 0 ? '\nTODO OK ✓' : `\n${fallos} FALLO(S) ✗`);
 process.exit(fallos === 0 ? 0 : 1);

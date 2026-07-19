@@ -40,6 +40,26 @@ export function scoreMorosidad(docsVencidos: number, diasMoraMax: number): numbe
   return Math.min(100, 25 * docsVencidos + Math.round(diasMoraMax / 3));
 }
 
+/** Hash FNV-1a de 32 bits — determinístico y estable entre corridas. */
+export function hashFnv1a(texto: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/**
+ * Asignación determinística al grupo control de una campaña A/B: el mismo
+ * contrato cae SIEMPRE en el mismo grupo para la misma campaña (reproducible
+ * y auditable, sin estado adicional). `pct` en [0, 100).
+ */
+export function enGrupoControl(campanaId: string, contratoId: string, pct: number): boolean {
+  if (!Number.isFinite(pct) || pct <= 0) return false;
+  return hashFnv1a(`${campanaId}:${contratoId}`) % 10_000 < Math.min(pct, 100) * 100;
+}
+
 /** Mapa bucket → campo denormalizado en EstadoCuenta. */
 export const BUCKET_FIELD: Record<
   string,

@@ -1,12 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GisTrackerService } from './gis-tracker.service';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import {
+  distanciaHaversineM,
+  esPoligonoValido,
+  puntoEnPoligonoGeoJSON,
+  PoligonoGeoJSON,
+} from './gis-espacial';
 
 @Injectable()
 export class GisService {
+  private readonly logger = new Logger(GisService.name);
+  /** null = aún no probado; se cachea el resultado del sondeo PostGIS. */
+  private postgis: boolean | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tracker: GisTrackerService,
+    private readonly notificaciones: NotificacionesService,
   ) {}
 
   async getDelta(params?: { entidades?: string[] }) {
@@ -283,5 +295,175 @@ export class GisService {
       lng: Math.round((a.sumLng / a.n) * 1e6) / 1e6,
       contratosGeorreferenciados: a.n,
     }));
+  }
+
+  // ─── Consultas espaciales: PostGIS con fallback JS ─────────────────────────
+
+  private async postgisDisponible(): Promise<boolean> {
+    if (this.postgis !== null) return this.postgis;
+    try {
+      await this.prisma.$queryRaw`SELECT PostGIS_Version()`;
+      this.postgis = true;
+      this.logger.log('PostGIS detectado: consultas espaciales server-side');
+    } catch {
+      this.postgis = false;
+      this.logger.warn('PostGIS no disponible: consultas espaciales con fallback JS (haversine/ray-casting)');
+    }
+    return this.postgis;
+  }
+
+  /** Contratos con coordenadas (PS con fallback a domicilio) para el fallback JS. */
+  private async contratosGeorreferenciados() {
+    const contratos = await this.prisma.contrato.findMany({
+      where: {
+        OR: [
+          { puntoServicio: { gpsLat: { not: null }, gpsLng: { not: null } } },
+          { domicilio: { gpsLat: { not: null }, gpsLng: { not: null } } },
+        ],
+      },
+      select: {
+        id: true,
+        numeroContrato: true,
+        nombre: true,
+        estado: true,
+        tipoServicio: true,
+        zona: { select: { nombre: true } },
+        puntoServicio: { select: { gpsLat: true, gpsLng: true } },
+        domicilio: { select: { gpsLat: true, gpsLng: true } },
+      },
+    });
+    return contratos
+      .map((c) => ({
+        contratoId: c.id,
+        numeroContrato: c.numeroContrato,
+        nombre: c.nombre,
+        estado: c.estado,
+        tipoServicio: c.tipoServicio,
+        zona: c.zona?.nombre ?? null,
+        lat: Number(c.puntoServicio?.gpsLat ?? c.domicilio?.gpsLat),
+        lng: Number(c.puntoServicio?.gpsLng ?? c.domicilio?.gpsLng),
+      }))
+      .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && !(c.lat === 0 && c.lng === 0));
+  }
+
+  /**
+   * Contratos afectados dentro de un radio (metros) — caso típico: cierre de
+   * válvula o reparación de red. PostGIS (ST_DWithin geodésico) cuando la
+   * extensión existe; haversine en JS cuando no.
+   */
+  async afectadosPorRadio(params: { lat: number; lng: number; radioM: number; limit?: number }) {
+    const limit = Math.min(params.limit ?? 1_000, 10_000);
+    if (![params.lat, params.lng, params.radioM].every(Number.isFinite) || params.radioM <= 0) {
+      throw new BadRequestException('lat, lng y radioM (>0) son requeridos');
+    }
+
+    if (await this.postgisDisponible()) {
+      const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT c.id AS "contratoId", c.numero_contrato AS "numeroContrato", c.nombre,
+               c.estado, c.tipo_servicio AS "tipoServicio", z.nombre AS zona,
+               COALESCE(ps.gps_lat, d.gps_lat)::float8 AS lat,
+               COALESCE(ps.gps_lng, d.gps_lng)::float8 AS lng,
+               ROUND(ST_DistanceSphere(
+                 ST_MakePoint(COALESCE(ps.gps_lng, d.gps_lng)::float8, COALESCE(ps.gps_lat, d.gps_lat)::float8),
+                 ST_MakePoint(${params.lng}, ${params.lat})
+               )::numeric, 1)::float8 AS "distanciaM"
+        FROM contratos c
+        LEFT JOIN puntos_servicio ps ON ps.id = c.punto_servicio_id
+        LEFT JOIN domicilios d ON d.id = c.domicilio_id
+        LEFT JOIN zonas z ON z.id = c.zona_id
+        WHERE COALESCE(ps.gps_lat, d.gps_lat) IS NOT NULL
+          AND ST_DistanceSphere(
+                ST_MakePoint(COALESCE(ps.gps_lng, d.gps_lng)::float8, COALESCE(ps.gps_lat, d.gps_lat)::float8),
+                ST_MakePoint(${params.lng}, ${params.lat})
+              ) <= ${params.radioM}
+        ORDER BY "distanciaM" ASC
+        LIMIT ${limit}`;
+      return { motor: 'postgis', total: rows.length, contratos: rows };
+    }
+
+    const todos = await this.contratosGeorreferenciados();
+    const contratos = todos
+      .map((c) => ({ ...c, distanciaM: Math.round(distanciaHaversineM(params.lat, params.lng, c.lat, c.lng) * 10) / 10 }))
+      .filter((c) => c.distanciaM <= params.radioM)
+      .sort((a, b) => a.distanciaM - b.distanciaM)
+      .slice(0, limit);
+    return { motor: 'js_haversine', total: contratos.length, contratos };
+  }
+
+  /** Contratos dentro de un polígono GeoJSON (sector, colonia, zona de obra). */
+  async afectadosPorPoligono(poligono: PoligonoGeoJSON, limit = 5_000) {
+    if (!esPoligonoValido(poligono)) {
+      throw new BadRequestException('poligono debe ser un Polygon GeoJSON con anillo exterior de ≥3 vértices [lng, lat]');
+    }
+
+    if (await this.postgisDisponible()) {
+      const geojson = JSON.stringify(poligono);
+      const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT c.id AS "contratoId", c.numero_contrato AS "numeroContrato", c.nombre,
+               c.estado, c.tipo_servicio AS "tipoServicio", z.nombre AS zona,
+               COALESCE(ps.gps_lat, d.gps_lat)::float8 AS lat,
+               COALESCE(ps.gps_lng, d.gps_lng)::float8 AS lng
+        FROM contratos c
+        LEFT JOIN puntos_servicio ps ON ps.id = c.punto_servicio_id
+        LEFT JOIN domicilios d ON d.id = c.domicilio_id
+        LEFT JOIN zonas z ON z.id = c.zona_id
+        WHERE COALESCE(ps.gps_lat, d.gps_lat) IS NOT NULL
+          AND ST_Contains(
+                ST_SetSRID(ST_GeomFromGeoJSON(${geojson}), 4326),
+                ST_SetSRID(ST_MakePoint(COALESCE(ps.gps_lng, d.gps_lng)::float8, COALESCE(ps.gps_lat, d.gps_lat)::float8), 4326)
+              )
+        LIMIT ${Math.min(limit, 10_000)}`;
+      return { motor: 'postgis', total: rows.length, contratos: rows };
+    }
+
+    const todos = await this.contratosGeorreferenciados();
+    const contratos = todos
+      .filter((c) => puntoEnPoligonoGeoJSON(c.lat, c.lng, poligono))
+      .slice(0, Math.min(limit, 10_000));
+    return { motor: 'js_ray_casting', total: contratos.length, contratos };
+  }
+
+  /**
+   * Cierre de válvula / trabajo de red: identifica los contratos afectados
+   * (radio o polígono) y, si `avisar`, envía el aviso de interrupción a cada
+   * uno por email/WhatsApp. El aviso es best-effort: un contrato sin datos de
+   * contacto no detiene al resto.
+   */
+  async cierreValvula(params: {
+    lat?: number;
+    lng?: number;
+    radioM?: number;
+    poligono?: PoligonoGeoJSON;
+    motivo: string;
+    detalle?: string;
+    avisar?: boolean;
+  }) {
+    const resultado = params.poligono
+      ? await this.afectadosPorPoligono(params.poligono)
+      : await this.afectadosPorRadio({
+          lat: params.lat as number,
+          lng: params.lng as number,
+          radioM: params.radioM as number,
+        });
+
+    let avisados = 0;
+    let sinContacto = 0;
+    if (params.avisar) {
+      for (const c of resultado.contratos as Array<{ contratoId: string }>) {
+        try {
+          const r = await this.notificaciones.notificarInterrupcion({
+            contratoId: c.contratoId,
+            motivo: params.motivo,
+            detalle: params.detalle,
+          });
+          if (r.email || r.whatsapp) avisados++;
+          else sinContacto++;
+        } catch {
+          sinContacto++;
+        }
+      }
+    }
+
+    return { ...resultado, motivo: params.motivo, avisar: Boolean(params.avisar), avisados, sinContacto };
   }
 }

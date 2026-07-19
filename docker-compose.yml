@@ -4,7 +4,9 @@
 
 services:
   postgres:
-    image: postgres:15-alpine
+    # postgis/postgis = postgres:15 + extensión PostGIS (consultas espaciales del módulo GIS).
+    # Compatible con los datos existentes; la extensión se habilita por migración.
+    image: postgis/postgis:15-3.4-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

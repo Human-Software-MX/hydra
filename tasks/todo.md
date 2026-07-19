@@ -150,6 +150,54 @@ todo con servicios/librerías 100% gratuitos sobre la infraestructura actual:
 - SINA — Sistema Nacional de Información del Agua (presas, acuíferos, cuencas): https://sinav30.conagua.gob.mx
 - CLICOM/climatología histórica (estaciones): para calibrar umbrales locales
 
+## Ola 5 — Sequía, uplift A/B, portal, PostGIS espacial y multi-tenancy (2026-07-19)
+
+- [x] **Monitor de Sequía CONAGUA** (`RegistroSequia` + migración)
+  - Ingesta idempotente del corte quincenal MSM: JSON o CSV simple
+    (`cve_inegi,municipio,estado,categoria`) vía `POST /clima/sequia/ingesta`,
+    o CSV remoto (`CLIMA_SEQUIA_URL`) vía `/ingesta-remota`
+  - `escalarPorSequia` (puro): la sequía estructural escala el estiaje del
+    pronóstico — D1 sube a alta, D3+ a crítica; D2+ sin estiaje pronosticado
+    agrega la alerta igualmente. `GET /clima/sequia` (resumen, distribución,
+    municipios D2+); `GET /clima/riesgos` ahora incluye contexto de sequía
+  - Verificado: verify-clima 24/24
+- [x] **Uplift A/B en campañas de cobranza** (`grupoControlPct` + `esControl`)
+  - Asignación determinística por hash FNV-1a campaña+contrato (reproducible,
+    auditable); el grupo control se registra como acción `control` omitida y
+    NO se gestiona
+  - `GET /cartera/campanas/:id/uplift?ventanaDias=`: tasa de pago y
+    recuperación tratamiento vs control, uplift en pp, ingreso incremental
+    estimado, advertencias por muestras chicas — el efecto causal de la
+    campaña, no la propensión natural. Verificado: verify-propension 33/33
+- [x] **Portal ciudadano completo** (delegado a subagente)
+  - Descarga CFDI XML real (antes stub `_stub: true`): valida propiedad del
+    timbrado antes de entregar; frontend con fetch+blob (no window.open)
+  - Gráfica de consumo 12 periodos (recharts) con estimados vs reales
+  - Reporte de fugas → `QuejaAclaracion` (categoría Fuga, canal Portal,
+    prioridad Alta) con folio de confirmación y "Mis reportes" con estado
+- [x] **Consultas espaciales PostGIS con fallback JS** (P2.18 fase 2)
+  - `GET /gis/afectados?lat&lng&radioM` y `POST /gis/consulta-espacial`
+    (polígono GeoJSON): PostGIS (`ST_DistanceSphere`/`ST_Contains`) cuando la
+    extensión existe (sondeo cacheado), fallback haversine/ray-casting en JS
+    cuando no — funciona en ambos mundos
+  - `POST /gis/cierres-valvula`: contratos afectados por radio o polígono +
+    aviso de interrupción opcional por email/WhatsApp (`aviso_interrupcion`)
+  - docker-compose → `postgis/postgis:15-3.4-alpine`; migración habilita la
+    extensión con DO/EXCEPTION (no falla en servidores sin PostGIS)
+  - Verificado: verify-espacial 15/15
+- [x] **Multi-tenancy SaaS fase 1** (P2.19, tenant-per-database)
+  - Modelo `Organismo` (registro con slug, dbUrl, config) en la base default
+  - `TenancyMiddleware`: resuelve `X-Organismo` (o subdominio con
+    `HYDRA_TENANCY_SUBDOMAIN=true`), cache 60s, 404 organismo inexistente,
+    503 sin base configurada; ejecuta el request en AsyncLocalStorage
+  - `PrismaService` proxy multi-cliente: cada acceso delega al PrismaClient
+    del tenant activo (lazy, cacheado) — CERO cambios en los ~40 servicios;
+    sin contexto se comporta idéntico a antes (verificado con smoke test
+    runtime). CRUD `/organismos` (SUPER_ADMIN) + `GET /organismos/actual`
+  - **Limitaciones fase 1**: cron jobs corren solo en la base default;
+    secreto JWT compartido; migraciones se aplican por tenant
+- [x] Cadena `npm run verify` ampliada a 10 suites
+
 ## Pendiente para futuras sesiones (P1/P2/P3 restantes)
 
 - [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada

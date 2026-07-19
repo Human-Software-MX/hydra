@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { evaluarRiesgosClimaticos, AlertaClimatica, DiaPronostico } from './clima-riesgos';
+import {
+  evaluarRiesgosClimaticos,
+  escalarPorSequia,
+  AlertaClimatica,
+  DiaPronostico,
+} from './clima-riesgos';
 import { pronosticoOpenMeteo } from './providers/openmeteo.provider';
 import { pronosticoSmn } from './providers/smn.provider';
+import { SequiaService } from './sequia.service';
 import { GisService } from '../gis/gis.service';
 
 /**
@@ -35,7 +41,10 @@ export class ClimaService {
   private readonly logger = new Logger(ClimaService.name);
   private readonly cache = new Map<string, EntradaCache>();
 
-  constructor(private readonly gis: GisService) {}
+  constructor(
+    private readonly gis: GisService,
+    private readonly sequia: SequiaService,
+  ) {}
 
   private async obtenerPronostico(lat: number, lng: number, dias: number) {
     const key = `${lat.toFixed(3)},${lng.toFixed(3)},${dias}`;
@@ -92,6 +101,15 @@ export class ClimaService {
 
     const general = await this.pronostico({ dias: horizonte });
 
+    // Monitor de Sequía CONAGUA: la sequía estructural escala el estiaje
+    // coyuntural del pronóstico (o lo agrega si es D2+ y no fue pronosticado).
+    const sequia = await this.sequia.resumenActual();
+    const contextoSequia = {
+      fechaCorte: sequia.fechaCorte ?? undefined,
+      municipiosAfectados: sequia.municipiosAfectados,
+    };
+    const alertasGenerales = escalarPorSequia(general.alertas, sequia.categoriaMaxima, contextoSequia);
+
     const zonas: Array<{
       zonaId: string;
       zona: string;
@@ -102,7 +120,11 @@ export class ClimaService {
     for (const c of centroides) {
       try {
         const { dias } = await this.obtenerPronostico(c.lat, c.lng, horizonte);
-        const alertas = evaluarRiesgosClimaticos(dias);
+        const alertas = escalarPorSequia(
+          evaluarRiesgosClimaticos(dias),
+          sequia.categoriaMaxima,
+          contextoSequia,
+        );
         if (alertas.length > 0) {
           zonas.push({ zonaId: c.zonaId, zona: c.zona, lat: c.lat, lng: c.lng, alertas });
         }
@@ -114,7 +136,12 @@ export class ClimaService {
     return {
       horizonteDias: horizonte,
       fuente: general.fuente,
-      general: { lat: general.lat, lng: general.lng, alertas: general.alertas },
+      sequia: {
+        fechaCorte: sequia.fechaCorte,
+        categoriaMaxima: sequia.categoriaMaxima,
+        municipiosAfectados: sequia.municipiosAfectados,
+      },
+      general: { lat: general.lat, lng: general.lng, alertas: alertasGenerales },
       zonasEvaluadas: centroides.length,
       zonasConAlertas: zonas.length,
       zonas,

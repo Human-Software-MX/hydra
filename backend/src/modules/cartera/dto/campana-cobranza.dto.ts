@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Matches, Max, Min, MinLength } from 'class-validator';
 
 export class CreateCampanaDto {
   @IsString()
@@ -24,6 +24,13 @@ export class CreateCampanaDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'fechaFin debe ser YYYY-MM-DD' })
   fechaFin?: string;
+
+  /** % del universo reservado como grupo control para medir uplift (0-50). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(50)
+  grupoControlPct?: number;
 }
 
 export class EjecutarCampanaDto {

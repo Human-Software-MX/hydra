@@ -2072,6 +2072,9 @@ model CampanaCobranza {
   estado           String           @default("borrador") // borrador | activa | finalizada
   administracionId String?          @map("administracion_id")
   bucketObjetivo   String?          @map("bucket_objetivo")
+  // % del universo que se reserva como grupo control (sin gestión) para medir
+  // el uplift real de la campaña. Null/0 = sin experimento.
+  grupoControlPct  Decimal?         @map("grupo_control_pct") @db.Decimal(5, 2)
   fechaInicio      DateTime?        @map("fecha_inicio")
   fechaFin         DateTime?        @map("fecha_fin")
   createdAt        DateTime         @default(now()) @map("created_at")
@@ -2091,6 +2094,8 @@ model AccionCobranza {
   tipo              String // aviso | requerimiento | restriccion | corte | convenio_ofrecido | incobrable
   canal             String? // email | whatsapp | orden | interno
   estado            String           @default("ejecutada") // ejecutada | fallida | omitida
+  // true = contrato asignado al grupo control del experimento A/B (no se gestiona)
+  esControl         Boolean          @default(false) @map("es_control")
   saldoAlMomento    Decimal          @default(0) @map("saldo_al_momento") @db.Decimal(12, 2)
   diasMoraAlMomento Int              @default(0) @map("dias_mora_al_momento")
   notificacionLogId String?          @map("notificacion_log_id")
@@ -2260,4 +2265,42 @@ model WebhookEntrega {
   @@index([estado])
   @@index([evento])
   @@map("webhook_entregas")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Monitor de Sequía de México (CONAGUA/SMN, quincenal por municipio) y
+// multi-tenancy SaaS (registro de organismos operadores)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model RegistroSequia {
+  id         String   @id @default(cuid())
+  fechaCorte String   @map("fecha_corte") // YYYY-MM-DD del corte quincenal MSM
+  cveInegi   String   @map("cve_inegi") // clave concatenada estado+municipio (5 dígitos)
+  municipio  String
+  estado     String
+  // D0 anormalmente seco | D1 moderada | D2 severa | D3 extrema | D4 excepcional | null = sin sequía
+  categoria  String?
+  fuente     String   @default("msm_conagua")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([fechaCorte, cveInegi])
+  @@index([fechaCorte])
+  @@index([categoria])
+  @@index([estado])
+  @@map("registros_sequia")
+}
+
+model Organismo {
+  id        String   @id @default(cuid())
+  slug      String   @unique // subdominio / header X-Organismo
+  nombre    String
+  // Connection string del tenant (tenant-per-database). Null = base default.
+  dbUrl     String?  @map("db_url")
+  activo    Boolean  @default(true)
+  config    Json? // branding, sede lat/lng, parámetros por organismo
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([activo])
+  @@map("organismos")
 }

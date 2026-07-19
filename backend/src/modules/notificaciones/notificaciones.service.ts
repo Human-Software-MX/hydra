@@ -23,6 +23,7 @@ type TipoNotificacion =
   | 'aviso_cobranza'
   | 'requerimiento_pago'
   | 'folio_tramite'
+  | 'aviso_interrupcion'
   | 'prueba';
 
 /**
@@ -344,6 +345,49 @@ export class NotificacionesService {
   }
 
   // ─── Consulta de bitácora ─────────────────────────────────────────────────
+
+  /**
+   * Aviso de interrupción programada del servicio (cierre de válvula,
+   * mantenimiento de red) a un contrato afectado — usado por el módulo GIS.
+   */
+  async notificarInterrupcion(params: {
+    contratoId: string;
+    motivo: string;
+    detalle?: string;
+  }): Promise<{ email: boolean; whatsapp: boolean }> {
+    const dest = await this.destinatarioContrato(params.contratoId);
+    const asunto = 'Aviso de interrupción temporal del servicio de agua';
+    const cuerpo = `Estimado usuario${dest.nombre ? ` ${dest.nombre}` : ''}:<br/><br/>` +
+      `Le informamos que su servicio de agua potable tendrá una <b>interrupción temporal</b> por: ${params.motivo}.` +
+      `${params.detalle ? `<br/>${params.detalle}` : ''}<br/><br/>` +
+      `Le recomendamos almacenar agua con anticipación. El servicio se restablecerá al concluir los trabajos. Lamentamos las molestias.`;
+    const texto = cuerpo.replace(/<br\s*\/?\s*>/g, '\n').replace(/<\/?b>/g, '');
+
+    let email = false;
+    let whatsapp = false;
+    if (dest.email) {
+      email = (
+        await this.enviarEmail({
+          destinatario: dest.email,
+          asunto,
+          cuerpo,
+          tipo: 'aviso_interrupcion',
+          contratoId: params.contratoId,
+        })
+      ).enviado;
+    }
+    if (dest.telefono) {
+      whatsapp = (
+        await this.enviarWhatsApp({
+          telefono: dest.telefono,
+          mensaje: `${asunto}. ${texto}`,
+          tipo: 'aviso_interrupcion',
+          contratoId: params.contratoId,
+        })
+      ).enviado;
+    }
+    return { email, whatsapp };
+  }
 
   async listarLogs(params: { contratoId?: string; canal?: string; tipo?: string; limit?: number }) {
     return this.prisma.notificacionLog.findMany({
