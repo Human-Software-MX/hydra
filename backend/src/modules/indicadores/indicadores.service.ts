@@ -139,7 +139,9 @@ export class IndicadoresService {
       this.prisma.contrato.count(),
       this.prisma.contrato.count({ where: { estado: { in: ['Activo', 'activo'] } } }),
       this.prisma.contrato.count({
-        where: { estado: { in: ['Activo', 'activo'] }, medidorId: { not: null } },
+        // La relación medidor→contrato vive en Medidor.contratoId; Contrato.medidorId es un escalar
+        // huérfano que el seed no llena. Contar por la relación para no reportar micromedición 0%.
+        where: { estado: { in: ['Activo', 'activo'] }, medidor: { isNot: null } },
       }),
       this.prisma.volumenProducido.aggregate({
         where: periodo ? { periodo } : undefined,

@@ -234,7 +234,7 @@ const Factibilidades = () => {
               {relevantes.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center text-muted-foreground py-12">
-                    No hay procesos de contratación registrados
+                    No hay solicitudes de factibilidad registradas
                   </td>
                 </tr>
               )}

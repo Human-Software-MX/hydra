@@ -1,11 +1,20 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
+import { fetchContratos, hasApi } from '@/api/contratos';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const Simulador = () => {
-  const { contratos, calcularTarifa } = useData();
+  const { contratos: contextContratos, calcularTarifa } = useData();
+  const useApi = hasApi();
+  const { data: apiContratos = [] } = useQuery({
+    queryKey: ['contratos'],
+    queryFn: fetchContratos,
+    enabled: useApi,
+  });
+  const contratos = useApi ? apiContratos : contextContratos;
   const [contratoId, setContratoId] = useState('');
   const [mes, setMes] = useState('');
   const [consumo, setConsumo] = useState('');
@@ -32,10 +41,12 @@ const Simulador = () => {
         <div className="widget-card">
           <h3 className="section-title">Parámetros</h3>
           <div className="space-y-3">
-            <Select value={contratoId} onValueChange={v => { setContratoId(v); setResultado(null); }}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar contrato" /></SelectTrigger>
-              <SelectContent>{activos.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              options={activos.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+              value={contratoId}
+              onValueChange={v => { setContratoId(v); setResultado(null); }}
+              placeholder="Seleccionar contrato"
+            />
             <Input type="month" value={mes} onChange={e => setMes(e.target.value)} />
             <Input type="number" placeholder="Consumo en m³" value={consumo} onChange={e => { setConsumo(e.target.value); setResultado(null); }} />
             <Button onClick={handleSimular} disabled={!contratoId || !consumo} className="w-full">Simular</Button>

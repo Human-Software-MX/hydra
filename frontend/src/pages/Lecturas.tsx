@@ -78,14 +78,14 @@ const Lecturas = () => {
   const lecturaAnteriorParaCaptura = useMemo(() => {
     if (!captureContratoId) return null;
     const medidor = medidores.find(m => m.contratoId === captureContratoId);
-    const lastLectura = lecturasVisibles.filter(l => l.contratoId === captureContratoId).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+    const lastLectura = lecturasVisibles.filter(l => l.contratoId === captureContratoId).sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))[0];
     return lastLectura ? lastLectura.lecturaActual : (medidor?.lecturaInicial ?? 0);
   }, [captureContratoId, medidores, lecturasVisibles]);
 
   const handleCapture = () => {
     if (useApi) return;
     const medidor = medidores.find(m => m.contratoId === captureContratoId);
-    const lastLectura = lecturasVisibles.filter(l => l.contratoId === captureContratoId).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+    const lastLectura = lecturasVisibles.filter(l => l.contratoId === captureContratoId).sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))[0];
     const anterior = lastLectura ? lastLectura.lecturaActual : (medidor?.lecturaInicial || 0);
     const actual = Number(lecturaActual);
     const consumo = actual - anterior;
@@ -129,14 +129,14 @@ const Lecturas = () => {
         const max = l.lecturaMaxZona ?? RANGO_MAX;
         return l.consumo > max || l.consumo < min;
       })
-      .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.periodo.localeCompare(a.periodo));
+      .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '') || (b.periodo ?? '').localeCompare(a.periodo ?? ''));
   }, [lecturasVisibles]);
 
   // Lecturas no válidas con simulado (más recientes primero)
   const noValidasConSimulado = useMemo(() => {
     return lecturasVisibles
       .filter(l => l.estado === 'No válida')
-      .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.periodo.localeCompare(a.periodo));
+      .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '') || (b.periodo ?? '').localeCompare(a.periodo ?? ''));
   }, [lecturasVisibles]);
 
   // Historial filtrado y paginado (más nuevo al más viejo)
@@ -152,7 +152,7 @@ const Lecturas = () => {
         if (filtroFecha && l.fecha !== filtroFecha) return false;
         return true;
       })
-      .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.periodo.localeCompare(a.periodo));
+      .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? '') || (b.periodo ?? '').localeCompare(a.periodo ?? ''));
   }, [lecturasVisibles, contratos, filtroRuta, filtroZona, filtroContrato, filtroEstado, filtroPeriodo, filtroFecha]);
 
   const totalPages = Math.max(1, Math.ceil(historialFiltrado.length / PAGE_SIZE));

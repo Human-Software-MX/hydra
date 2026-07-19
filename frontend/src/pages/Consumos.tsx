@@ -2,20 +2,27 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
 import { fetchConsumos, hasApi } from '@/api/consumos';
-import StatusBadge from '@/components/StatusBadge';
+import { fetchContratos } from '@/api/contratos';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Input } from '@/components/ui/input';
 
 const Consumos = () => {
   const useApi = hasApi();
-  const { consumos: contextConsumos, addConsumo, updateConsumo, lecturas, contratos, allowedZonaIds } = useData();
+  const { consumos: contextConsumos, addConsumo, updateConsumo, contratos: contextContratos, allowedZonaIds } = useData();
   const { data: apiConsumos = [] } = useQuery({
     queryKey: ['consumos'],
     queryFn: fetchConsumos,
     enabled: useApi,
   });
+  const { data: apiContratos = [] } = useQuery({
+    queryKey: ['contratos'],
+    queryFn: fetchContratos,
+    enabled: useApi,
+  });
   const consumos = useApi ? apiConsumos : contextConsumos;
+  const contratos = useApi ? apiContratos : contextContratos;
   const [contratoId, setContratoId] = useState('');
   const [tipo, setTipo] = useState<any>('Promedio histórico');
   const [m3, setM3] = useState('');
@@ -25,12 +32,13 @@ const Consumos = () => {
     [contratos, allowedZonaIds]
   );
   const contratoIdsVisibles = useMemo(() => new Set(contratosVisibles.map(c => c.id)), [contratosVisibles]);
+  // Con API el backend ya filtra por zona/permiso; no volver a cruzar con los contratos demo del contexto.
   const consumosVisibles = useMemo(
     () =>
-      consumos
-        .filter(c => contratoIdsVisibles.has(c.contratoId))
-        .sort((a, b) => b.periodo.localeCompare(a.periodo)),
-    [consumos, contratoIdsVisibles]
+      (useApi ? consumos : consumos.filter(c => contratoIdsVisibles.has(c.contratoId)))
+        .slice()
+        .sort((a, b) => (b.periodo ?? '').localeCompare(a.periodo ?? '')),
+    [consumos, contratoIdsVisibles, useApi]
   );
   const activos = contratosVisibles.filter(c => c.estado === 'Activo');
 
@@ -80,10 +88,12 @@ const Consumos = () => {
         <div className="widget-card">
           <h3 className="section-title">Asignar consumo estimado</h3>
           <div className="space-y-3">
-            <Select value={contratoId} onValueChange={setContratoId}>
-              <SelectTrigger><SelectValue placeholder="Contrato activo" /></SelectTrigger>
-              <SelectContent>{activos.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              options={activos.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+              value={contratoId}
+              onValueChange={setContratoId}
+              placeholder="Contrato activo"
+            />
             <Select value={tipo} onValueChange={setTipo}>
               <SelectTrigger><SelectValue placeholder="Tipo de consumo" /></SelectTrigger>
               <SelectContent>
@@ -94,6 +104,11 @@ const Consumos = () => {
             </Select>
             <Input type="number" placeholder="m³ estimados" value={m3} onChange={e => setM3(e.target.value)} />
             <Button onClick={handleEstimado} disabled={useApi || !contratoId || !m3} className="w-full">Asignar estimado</Button>
+            {useApi && (
+              <p className="text-xs text-muted-foreground">
+                La asignación de consumo estimado aún no está disponible en línea (pendiente de endpoint en el backend).
+              </p>
+            )}
           </div>
         </div>
       </div>
