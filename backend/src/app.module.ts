@@ -46,6 +46,7 @@ import { MigracionModule } from './modules/migracion/migracion.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { GemeloModule } from './modules/gemelo/gemelo.module';
+import { ClimaModule } from './modules/clima/clima.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { GemeloModule } from './modules/gemelo/gemelo.module';
     AuditoriaModule,
     WebhooksModule,
     GemeloModule,
+    ClimaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

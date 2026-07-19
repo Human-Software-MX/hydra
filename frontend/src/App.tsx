@@ -22,6 +22,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Factibilidades = lazy(() => import('@/pages/Factibilidades'));
 const Construcciones = lazy(() => import('@/pages/Construcciones'));
 const PuntosServicio = lazy(() => import('@/pages/PuntosServicio'));
+const Mapa = lazy(() => import('@/pages/Mapa'));
 const Contratos = lazy(() => import('@/pages/Contratos'));
 const Medidores = lazy(() => import('@/pages/Medidores'));
 const Rutas = lazy(() => import('@/pages/Rutas'));
@@ -99,6 +100,7 @@ const App = () => (
                     <Route path="/app/factibilidades" element={<Factibilidades />} />
                     <Route path="/app/construcciones" element={<Construcciones />} />
 <Route path="/app/puntos-servicio" element={<PuntosServicio />} />
+                    <Route path="/app/mapa" element={<Mapa />} />
                     <Route path="/app/solicitudes" element={<Solicitudes />} />
                     <Route path="/app/solicitudes/nueva" element={<SolicitudServicio />} />
                     <Route path="/app/solicitudes/:id/editar" element={<SolicitudServicio />} />

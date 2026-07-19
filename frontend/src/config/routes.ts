@@ -28,6 +28,7 @@ import {
   NotebookTabs,
   Braces,
   Wallet,
+  Globe2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -68,6 +69,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
     path: 'puntos-servicio',
     label: 'Puntos de servicio',
     icon: MapPin,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
+    group: 'Infraestructura',
+  },
+  {
+    path: 'mapa',
+    label: 'Mapa operativo',
+    icon: Globe2,
     allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
     group: 'Infraestructura',
   },

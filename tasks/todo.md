@@ -107,6 +107,49 @@ multi-tenancy SaaS (P2.19), GIS visual PostGIS (P2.18), app móvil de campo
 **Acción humana pendiente**: aplicar migración `20260718000000_auditoria_webhooks`
 en el servidor (`npx prisma migrate deploy`).
 
+## Ola 4 — GIS visual + clima operativo con herramientas gratuitas (2026-07-18)
+
+Cerrada la brecha P2.18 (GIS visual) y agregada inteligencia meteorológica,
+todo con servicios/librerías 100% gratuitos sobre la infraestructura actual:
+
+- [x] **GIS visual sin costo** (P2.18)
+  - Backend: `GET /gis/padron.geojson` — padrón como FeatureCollection desde
+    `PuntoServicio.gpsLat/gpsLng` (fallback `Domicilio.gpsLat/gpsLng`, ya
+    existían en el modelo — sin migración) con propiedades para tematizar:
+    estado del servicio y cartera (categoría/saldo vencido/días mora)
+  - `GET /gis/zonas/centroides` — centroide del padrón por zona (insumo del
+    mapa y del clima por zona)
+  - Frontend: página **Mapa operativo** (`/app/mapa`) con **Leaflet +
+    react-leaflet** (MIT) y teselas de **OpenStreetMap** (gratuitas): capas
+    cartera/estado, popups por contrato, leyenda, panel de riesgos climáticos
+  - **Upgrade opcional a PostGIS** (cuando se necesiten consultas espaciales
+    server-side: buffers, sectores, "contratos afectados por cierre de
+    válvula"): cambiar imagen Docker `postgres` → `postgis/postgis`,
+    `CREATE EXTENSION postgis`, columna `geography(Point)` + índice GIST.
+    Para pintar y tematizar el padrón NO hace falta — el modelo actual basta
+- [x] **Clima operativo — anticipar incidencias** (SWAN Proactiva)
+  - Proveedores gratuitos: **Open-Meteo** (default, sin API key, 16 días) y
+    **SMN/CONAGUA** (web service oficial `method=1` por municipio, gzip;
+    `CLIMA_PROVIDER=smn` con caída controlada a Open-Meteo si falla)
+  - Motor de reglas puro `clima-riesgos.ts`: lluvia fuerte (≥30mm) /
+    torrencial (≥70mm) → protocolo de tormenta y desazolve; ola de calor
+    (≥34°C ≥3 días consecutivos) → tandeo preventivo y pipas; helada (≤0°C) →
+    proteger medidores y cuadrilla de fugas; viento (≥60 km/h rachas) →
+    plantas de emergencia en pozos; estiaje (horizonte ≥14 días seco) →
+    balance por fuente y reparación acelerada de fugas. Umbrales por parámetro
+  - `GET /clima/pronostico` (coordenada o sede) y `GET /clima/riesgos`
+    (por zona usando centroides del padrón); cache 1h para no golpear
+    servicios gratuitos
+  - Verificado: verify-clima 16/16 (consecutividad de ola de calor, no dobles
+    conteos de lluvia, umbrales custom, datos nulos sin falsos positivos)
+- [x] Cadena `npm run verify` ampliada a 9 suites
+
+**Fuentes CONAGUA/nacionales adicionales documentadas para fases futuras:**
+- SMN web services (pronóstico municipio/hora): https://smn.conagua.gob.mx/es/web-service-api
+- Monitor de Sequía de México (quincenal, shapefiles/CSV): https://smn.conagua.gob.mx/es/climatologia/monitor-de-sequia/monitor-de-sequia-en-mexico
+- SINA — Sistema Nacional de Información del Agua (presas, acuíferos, cuencas): https://sinav30.conagua.gob.mx
+- CLICOM/climatología histórica (estaciones): para calibrar umbrales locales
+
 ## Pendiente para futuras sesiones (P1/P2/P3 restantes)
 
 - [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada

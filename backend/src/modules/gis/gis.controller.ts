@@ -22,6 +22,22 @@ export class GisController {
     return this.service.getEstado();
   }
 
+  /** Padrón georreferenciado (GeoJSON) para el mapa operativo. */
+  @Get('padron.geojson')
+  padronGeojson(
+    @Query('zonaId') zonaId?: string,
+    @Query('administracionId') administracionId?: string,
+    @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit = 5000,
+  ) {
+    return this.service.padronGeojson({ zonaId, administracionId, limit });
+  }
+
+  /** Centroides del padrón por zona (mapa + pronóstico climático por zona). */
+  @Get('zonas/centroides')
+  centroides(@Query('administracionId') administracionId?: string) {
+    return this.service.centroidesZonas({ administracionId });
+  }
+
   @Get('cambios/pendientes')
   getDelta(@Query('entidades') entidades?: string) {
     return this.service.getDelta({
