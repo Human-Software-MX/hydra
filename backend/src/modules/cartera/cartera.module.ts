@@ -3,6 +3,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { RestriccionesModule } from '../restricciones/restricciones.module';
 import { CarteraService } from './cartera.service';
 import { DunningService } from './dunning.service';
+import { PropensionService } from './propension.service';
 import { CarteraController } from './cartera.controller';
 
 /**
@@ -14,7 +15,7 @@ import { CarteraController } from './cartera.controller';
 @Module({
   imports: [PrismaModule, RestriccionesModule],
   controllers: [CarteraController],
-  providers: [CarteraService, DunningService],
-  exports: [CarteraService, DunningService],
+  providers: [CarteraService, DunningService, PropensionService],
+  exports: [CarteraService, DunningService, PropensionService],
 })
 export class CarteraModule {}

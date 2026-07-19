@@ -56,5 +56,51 @@ ok('acota aparentes al total', approx(acotado.perdidas.aparentes.totalM3, acotad
 const cero = calcularBalanceM36({ suministradoM3: 0, facturadoMedidoM3: 0, facturadoNoMedidoM3: 0, importeFacturado: 0 });
 ok('sin datos → NRW null', cero.indicadores.aguaNoContabilizadaPct === null);
 
+// ─── ILI/UARL (IWA) con banda del Banco Mundial ─────────────────────────────
+// Misma entrada típica (reales = 34,250 m³/mes) + red de 100 km, 10,000 tomas, 25 m.c.a.
+// UARL = (18·100 + 0.8·10,000 + 0)·25 = 245,000 L/día = 245 m³/día → 7,350 m³/30 días
+// ILI = 34,250 / 7,350 = 4.66 → banda B
+const conIli = calcularBalanceM36({
+  suministradoM3: 100_000,
+  facturadoMedidoM3: 55_000,
+  facturadoNoMedidoM3: 5_000,
+  importeFacturado: 600_000,
+  parametros: { autorizadoNoFacturadoM3: 1_000, costoProduccionM3: 4 },
+  red: { longitudRedKm: 100, numeroTomas: 10_000, presionMediaM: 25, diasPeriodo: 30 },
+});
+ok('UARL 7,350 m³/periodo', approx(conIli.indicadores.ili?.uarlM3 ?? 0, 7_350));
+ok('CARL 1,141.67 m³/día', approx(conIli.indicadores.ili?.carlM3Dia ?? 0, 1_141.67));
+ok('ILI 4.66', approx(conIli.indicadores.ili?.ili ?? 0, 4.66));
+ok('banda B (Banco Mundial)', conIli.indicadores.ili?.banda === 'B');
+ok('sin red → ILI null', b.indicadores.ili === null);
+
+// Presión no especificada → default 20 con advertencia; sistema chico → advertencia
+const iliDefaults = calcularBalanceM36({
+  suministradoM3: 10_000,
+  facturadoMedidoM3: 6_000,
+  facturadoNoMedidoM3: 0,
+  importeFacturado: 60_000,
+  red: { longitudRedKm: 10, numeroTomas: 1_000, diasPeriodo: 30 },
+});
+ok('advierte presión default', iliDefaults.advertencias.some((a) => a.includes('presionMediaM')));
+ok('advierte sistema <3,000 tomas', iliDefaults.advertencias.some((a) => a.includes('3,000 tomas')));
+
+// ─── Data grading estilo AWWA ────────────────────────────────────────────────
+// conIli: macromedición default (5), 91.7% medido (8), fracciones default (3), red (5)
+// puntaje = 15 + 24 + 6 + 10 = 55 → nivel III
+ok('grading puntaje 55', approx(conIli.dataGrading.puntaje, 55));
+ok('grading nivel III', conIli.dataGrading.nivel === 'III');
+ok(
+  'grading recomienda sustentar aparentes',
+  conIli.dataGrading.recomendaciones.some((r) => r.includes('submedición')),
+);
+const gradoRed = (bal: typeof b) => bal.dataGrading.componentes.find((c) => c.componente === 'datos_de_red')?.grado;
+ok('sin red → grado datos_de_red 1', gradoRed(b) === 1);
+ok('con red → grado datos_de_red 5', gradoRed(conIli) === 5);
+ok(
+  'sin red recomienda capturar red',
+  b.dataGrading.recomendaciones.some((r) => r.includes('longitud de red')),
+);
+
 console.log(fallos === 0 ? '\nTODO OK ✓' : `\n${fallos} FALLO(S) ✗`);
 process.exit(fallos === 0 ? 0 : 1);

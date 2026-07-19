@@ -26,6 +26,42 @@ Se ejecuta por iteraciones autoprogramadas (/loop). Cada iteración deja código
 - [x] **It. 8 — Balance hídrico M36 / NRW** ✅: calculador puro `m36-balance.ts` con taxonomía IWA/AWWA completa (consumo autorizado facturado medido/no medido/autorizado no facturado; pérdidas aparentes = submedición % + no autorizado %, pérdidas reales = resto); valorización estándar (aparentes a tarifa media, reales a costo de producción); indicadores NRW %, eficiencia física, tarifa media, pérdidas en pesos; advertencias por macromedición inconsistente y acotamiento de estimaciones; `BalanceService` alimentado por VolumenProducido + consumos por tipo + timbrados, filtrable por administración; endpoint `GET /balance-hidrico` con parámetros de estimación por query. Verificado: verify-balance 15/15 + typecheck OK.
 - [x] **It. 9 — CI + guards** ✅: workflow `.github/workflows/ci.yml` (backend: typecheck + `npm run verify` con los 5 suites de motores; frontend: typecheck + vitest + build); scripts npm `verify:*` en backend; `JwtAuthGuard` añadido a los 4 controladores que estaban sin autenticación (consumos, medidores, rutas, prefacturas). Verificado: 5/5 suites TODO OK, frontend 9/9 tests.
 
+## Ola 2 — SWAN Proactiva (2026-07-18)
+
+Brechas cerradas contra las best practices SWAN/IWA/AWWA (docs/plan-accion/02 y 11,
+Fase 2 "Inteligencia"). SWAN publicó su estrategia 2026-2030 ("de la ambición digital
+a la implementación práctica") y el Smart Metering Playbook global — ambas líneas
+respaldan estas piezas.
+
+- [x] **ILI/UARL + bandas Banco Mundial + data grading AWWA** (balance hídrico)
+  - `calcularILI` puro en `m36-balance.ts`: UARL = (18·Lm + 0.8·Nc + 25·Lp)·P (IWA
+    Water Loss Task Force), banda A-D países en desarrollo, advertencias cuando la
+    fórmula pierde validez (<3,000 tomas, <20 tomas/km, presión <25 m.c.a.)
+  - Data grading simplificado estilo AWWA Free Water Audit Software: grado 1-10 por
+    componente (macromedición, micromedición, pérdidas aparentes, datos de red),
+    puntaje ponderado 0-100, nivel I-V y recomendaciones accionables
+  - `GET /balance-hidrico` acepta `longitudRedKm`, `numeroTomas`, `presionMediaM`,
+    `longitudAcometidasKm`, `gradoMacromedicion`; días del periodo derivados del mes
+  - Verificado: verify-balance 28/28
+- [x] **Score de propensión al pago + segmentación predictiva** (cobranza)
+  - `propension-pago.ts` puro: modelo de puntos transparente (no caja negra) sobre el
+    libro de partida abierta — puntualidad histórica, retraso promedio, tendencia
+    (últimos 6 vs previos), mora vigente, convenios activos/cancelados/completados
+  - 5 segmentos con acción recomendada: PAGADOR_CONFIABLE → recordatorio digital …
+    RIESGO_CRITICO → restricción LGA/jurídico
+  - `PropensionService` batcheado (sin N+1): `GET /cartera/segmentacion` (resumen por
+    segmento + top contratos) y `GET /cartera/contratos/:id/propension` (desglose de
+    factores por contrato)
+  - Verificado: verify-propension 19/19
+- [x] **Ranking de reemplazo de medidores** (Smart Metering Playbook / AWWA M6)
+  - `reemplazo-scorer.ts` puro: excepciones VEE caida_drastica (submedición) y
+    consumo_cero_prolongado (medidor parado), % lecturas estimadas, edad vs vida útil
+    (10 años), ingreso en riesgo por tamaño de consumo → score 0-100 + razones
+  - `GET /medidores/ranking-reemplazo` con ventana de 12 periodos, filtros por
+    zona/administración/prioridad y resumen critica/alta/media/baja
+  - Verificado: verify-reemplazo 14/14
+- [x] Cadena `npm run verify` ampliada a 7 suites (CI las corre todas)
+
 ## Pendiente para futuras sesiones (P1/P2/P3 restantes)
 
 - [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada
@@ -34,7 +70,8 @@ Se ejecuta por iteraciones autoprogramadas (/loop). Cada iteración deja código
 - [ ] App móvil de lecturista/cuadrilla (offline-first, GPS, foto)
 - [ ] GIS visual (PostGIS + mapa de padrón/tomas)
 - [ ] Multi-tenancy real para SaaS multi-organismo
-- [ ] IA: score de propensión al pago, ranking de reemplazo de medidores (base: excepciones VEE caida_drastica)
+- [x] IA: score de propensión al pago, ranking de reemplazo de medidores → hecho en Ola 2 (2026-07-18)
+- [ ] IA siguiente nivel: forecasting de facturación/recaudación, uplift A/B de campañas de cobranza (medir contra grupo control)
 - [ ] Adapter PAC real (Finkok/SW) cuando haya credenciales — implementar la interfaz `PacProvider`
 - [ ] Gateway real de WhatsApp/email — solo configurar `NOTIF_*_URL`
 

@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { calcularBalanceM36, BalanceM36, ParametrosBalance } from './m36-balance';
+import { calcularBalanceM36, BalanceM36, ParametrosBalance, ParametrosRed } from './m36-balance';
 
 /**
  * Balance hídrico M36 del periodo, alimentado con datos reales del sistema:
@@ -20,6 +20,7 @@ export class BalanceService {
     periodo: string;
     administracionId?: string;
     parametros?: ParametrosBalance;
+    red?: ParametrosRed;
   }): Promise<BalanceM36 & { periodo: string; fuenteSuministrado: string }> {
     if (!/^\d{4}-\d{2}$/.test(params.periodo)) {
       throw new BadRequestException('periodo debe tener formato YYYY-MM');
@@ -69,12 +70,17 @@ export class BalanceService {
       }),
     ]);
 
+    // Días naturales del periodo (para UARL): YYYY-MM → días del mes.
+    const [anio, mes] = params.periodo.split('-').map(Number);
+    const diasPeriodo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+
     const balance = calcularBalanceM36({
       suministradoM3,
       facturadoMedidoM3: Number(medido._sum.m3 ?? 0),
       facturadoNoMedidoM3: Number(noMedido._sum.m3 ?? 0),
       importeFacturado: Number(timbrados._sum.total ?? 0),
       parametros: params.parametros,
+      red: params.red ? { diasPeriodo, ...params.red } : undefined,
     });
 
     return { ...balance, periodo: params.periodo, fuenteSuministrado: 'volumenes_producidos' };

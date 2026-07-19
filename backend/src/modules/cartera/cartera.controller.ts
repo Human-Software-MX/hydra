@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CarteraService } from './cartera.service';
 import { DunningService } from './dunning.service';
+import { PropensionService } from './propension.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -26,6 +27,7 @@ export class CarteraController {
   constructor(
     private readonly cartera: CarteraService,
     private readonly dunning: DunningService,
+    private readonly propension: PropensionService,
   ) {}
 
   // ─── Padrón de cartera ────────────────────────────────────────────────────
@@ -62,6 +64,18 @@ export class CarteraController {
     @Query('zonaId') zonaId?: string,
   ) {
     return this.cartera.aging({ administracionId, zonaId });
+  }
+
+  /** Segmentación predictiva de la cartera (score de propensión al pago). */
+  @Get('segmentacion')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
+  segmentacion(
+    @Query('administracionId') administracionId?: string,
+    @Query('zonaId') zonaId?: string,
+    @Query('segmento') segmento?: string,
+    @Query('limit', new DefaultValuePipe(500), ParseIntPipe) limit = 500,
+  ) {
+    return this.propension.segmentacion({ administracionId, zonaId, segmento, limit });
   }
 
   // ─── Recalculo y dunning manual ───────────────────────────────────────────
@@ -167,6 +181,13 @@ export class CarteraController {
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   estadoCuenta(@Param('id') id: string) {
     return this.cartera.estadoCuentaContrato(id);
+  }
+
+  /** Score de propensión al pago del contrato con desglose de factores. */
+  @Get('contratos/:id/propension')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
+  propensionContrato(@Param('id') id: string) {
+    return this.propension.propensionContrato(id);
   }
 
   /** Marca los documentos abiertos como incobrables (siempre manual y autorizado). */

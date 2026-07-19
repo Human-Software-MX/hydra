@@ -23,12 +23,14 @@
     "migrate:resolve-failed": "prisma migrate resolve --rolled-back \"20260302000000_add_sige_hydra\"",
     "migrate:fix-p3009": "prisma db execute --schema prisma/schema.prisma --file scripts/fix-failed-migration.sql && npm run migrate:resolve-failed && prisma migrate deploy",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "verify": "npm run verify:billing && npm run verify:cfdi && npm run verify:recibo && npm run verify:vee && npm run verify:balance",
+    "verify": "npm run verify:billing && npm run verify:cfdi && npm run verify:recibo && npm run verify:vee && npm run verify:balance && npm run verify:propension && npm run verify:reemplazo",
     "verify:billing": "node -r ts-node/register/transpile-only scripts/verify-billing.ts",
     "verify:cfdi": "node -r ts-node/register/transpile-only scripts/verify-cfdi.ts",
     "verify:recibo": "node -r ts-node/register/transpile-only scripts/verify-recibo-html.ts",
     "verify:vee": "node -r ts-node/register/transpile-only scripts/verify-vee.ts",
-    "verify:balance": "node -r ts-node/register/transpile-only scripts/verify-balance.ts"
+    "verify:balance": "node -r ts-node/register/transpile-only scripts/verify-balance.ts",
+    "verify:propension": "node -r ts-node/register/transpile-only scripts/verify-propension.ts",
+    "verify:reemplazo": "node -r ts-node/register/transpile-only scripts/verify-reemplazo.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
