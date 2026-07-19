@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import {
   calcularFactura,
   redondear,
@@ -26,7 +27,10 @@ export interface FacturaConsumoResultado extends ResultadoFactura {
 
 @Injectable()
 export class FacturacionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhooks: WebhooksService,
+  ) {}
 
   // ─── Resolución de tarifas vigentes ───────────────────────────────────────
 
@@ -156,7 +160,7 @@ export class FacturacionService {
   }
 
   private async persistirFactura(factura: FacturaConsumoResultado, loteFacturacionId?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
       const timbrado = await tx.timbrado.create({
         data: {
           contratoId: factura.contratoId,
@@ -184,6 +188,19 @@ export class FacturacionService {
 
       return { timbradoId: timbrado.id, reciboId: recibo.id, factura };
     });
+
+    // Evento para integraciones externas — fuera de la transacción y sin await
+    // bloqueante: un webhook caído no afecta la facturación.
+    void this.webhooks.emitir('recibo.emitido', {
+      reciboId: resultado.reciboId,
+      timbradoId: resultado.timbradoId,
+      contratoId: factura.contratoId,
+      periodo: factura.periodo,
+      total: factura.total,
+      fechaVencimiento: factura.fechaVencimiento,
+    });
+
+    return resultado;
   }
 
   // ─── Facturación masiva por periodo ───────────────────────────────────────

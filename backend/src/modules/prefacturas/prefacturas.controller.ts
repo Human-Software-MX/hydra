@@ -1,9 +1,11 @@
 import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FacturacionService } from '../facturacion/facturacion.service';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('prefacturas')
 export class PrefacturasController {
   constructor(
@@ -17,6 +19,7 @@ export class PrefacturasController {
    * por servicio). Shape compatible con PreFacturaDto del frontend.
    */
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('periodo') periodo?: string,

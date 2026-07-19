@@ -1,10 +1,12 @@
 import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReemplazoService } from './reemplazo.service';
 import { PrioridadReemplazo } from './reemplazo-scorer';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('medidores')
 export class MedidoresController {
   constructor(
@@ -17,6 +19,7 @@ export class MedidoresController {
    * VEE (submedición/medidor parado), % lecturas estimadas, edad y consumo.
    */
   @Get('ranking-reemplazo')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async rankingReemplazo(
     @Query('zonaId') zonaId?: string,
     @Query('administracionId') administracionId?: string,
@@ -27,6 +30,7 @@ export class MedidoresController {
   }
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('zonaId') zonaId?: string,
@@ -64,6 +68,7 @@ export class MedidoresController {
   }
 
   @Get('bodega')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findBodega(
     @Query('zonaId') zonaId?: string,
     @Query('estado') estado?: string,

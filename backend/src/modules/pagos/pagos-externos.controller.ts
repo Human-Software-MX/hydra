@@ -13,14 +13,17 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { PagosExternosService } from './pagos-externos.service';
 
 @Controller('pagos-externos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class PagosExternosController {
   constructor(private readonly service: PagosExternosService) {}
 
   @Post('upload')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   @UseInterceptors(FileInterceptor('archivo'))
   async upload(
     @UploadedFile() archivo: Express.Multer.File,
@@ -34,6 +37,7 @@ export class PagosExternosController {
   }
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findAll(
     @Query('estado') estado?: string,
     @Query('recaudador') recaudador?: string,
@@ -44,6 +48,7 @@ export class PagosExternosController {
   }
 
   @Post(':id/conciliar')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   conciliar(
     @Param('id') id: string,
     @Body() body: { contratoId: string; reciboId?: string },
@@ -52,6 +57,7 @@ export class PagosExternosController {
   }
 
   @Post(':id/rechazar')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   rechazar(@Param('id') id: string, @Body() body: { motivo: string }) {
     return this.service.rechazar(id, body.motivo);
   }

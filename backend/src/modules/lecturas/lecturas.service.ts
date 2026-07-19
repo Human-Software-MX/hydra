@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 
 interface ParsedLectura {
   contrato: string;
@@ -15,7 +16,10 @@ interface ParsedLectura {
 
 @Injectable()
 export class LecturasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhooks: WebhooksService,
+  ) {}
 
   parseArchivoPlano(contenido: string): ParsedLectura[] {
     const lineas = contenido.split('\n').filter((l) => l.trim().length > 0);
@@ -102,7 +106,7 @@ export class LecturasService {
       const estado =
         p.lecturaActual !== null ? 'Valida' : esEstimada ? 'Estimada' : 'NoValida';
 
-      await this.prisma.lectura.create({
+      const lectura = await this.prisma.lectura.create({
         data: {
           loteId: lote.id,
           contratoId: p.contrato,
@@ -121,6 +125,16 @@ export class LecturasService {
           datosRaw: p.datosRaw,
         },
       });
+
+      if (estado === 'Valida' || estado === 'Estimada') {
+        void this.webhooks.emitir('lectura.capturada', {
+          lecturaId: lectura.id,
+          contratoId: p.contrato,
+          periodo: params.periodo,
+          lecturaActual: p.lecturaActual,
+          esEstimada,
+        });
+      }
 
       if (estado === 'Valida' || estado === 'Estimada') totalValidos++;
       else {

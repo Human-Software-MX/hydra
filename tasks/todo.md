@@ -62,6 +62,51 @@ respaldan estas piezas.
   - Verificado: verify-reemplazo 14/14
 - [x] Cadena `npm run verify` ampliada a 7 suites (CI las corre todas)
 
+## Ola 3 — Cierre de brechas del análisis P0-P3 (2026-07-18)
+
+Todo lo implementable en código del roadmap docs/analisis-state-of-the-art.md
+que seguía abierto (sin credenciales externas ni datos de la CEA):
+
+- [x] **RBAC granular (P0.6)**: 13 controladores de dinero/estado contractual
+  (caja, pagos, pagos-externos, recibos, prefacturas, conciliaciones,
+  contabilidad, convenios, contratos, solicitudes, ordenes, lecturas,
+  medidores) con `RolesGuard` + `@Roles` por endpoint: GET → 4 roles,
+  mutación diaria → SUPER_ADMIN/ADMIN/OPERADOR, destructivas → SUPER_ADMIN/ADMIN
+- [x] **Auditoría global unificada (P1.13)**: `AuditoriaEvento` (+migración
+  `20260718000000_auditoria_webhooks`) + `AuditoriaInterceptor` global
+  (APP_INTERCEPTOR): registra POST/PATCH/PUT/DELETE con usuario JWT, ruta,
+  entidad, status, duración, ip y body sanitizado (redacta password/token/CSD,
+  trunca a 2k); asíncrono, jamás bloquea la respuesta. `GET /auditoria` (ADMIN)
+- [x] **Webhooks de eventos (P1.12)**: `WebhookSuscripcion`/`WebhookEntrega`,
+  firma HMAC-SHA256 (`X-Hydra-Signature`), reintentos cron (máx 5), CRUD +
+  probar + entregas en `/webhooks/*`. Emisión fire-and-forget conectada a:
+  pago aplicado (cartera), recibo emitido (facturación), lectura capturada
+  (lotes). Un webhook caído jamás afecta el flujo de negocio
+- [x] **Forecasting facturación/recaudación/consumo (P3.20, SWAN F2)**:
+  `forecast.ts` puro — Holt-Winters aditivo estacionalidad 12 (≥24 meses,
+  inicialización destendida verificada contra señal exacta), naive estacional
+  (≥13), promedio móvil (<13); MAPE in-sample; huecos rellenados con
+  advertencia. `GET /indicadores/forecast?metrica=facturado|recaudado|consumo`.
+  Verificado: verify-forecast 16/16
+- [x] **Gemelo comercial (P3.22)**: `GET /gemelo-comercial/demanda` y
+  `/demanda/serie` — demanda agregada por zona/administración en m³/día y L/s
+  con tomas y dotación por toma; la interfaz comercial→modelo hidráulico
+  (EPANET/WaterGEMS) de la SWAN Digital Twin Readiness Guide
+- [x] **Caso de negocio en ranking de medidores (P2.17 completo)**:
+  `calcularCasoNegocio` — volumen recuperable anual × tarifa media (pérdida
+  aparente M36): parado 50%, caída drástica 25%, degradación 0.5%/año tras
+  vida útil (factor máximo, no suma); ingreso recuperable por medidor y por
+  prioridad en el resumen. Verificado: verify-reemplazo 20/20
+- [x] Cadena `npm run verify` ampliada a 8 suites
+
+**Fuera de alcance de código puro (requieren infraestructura/decisión CEA):**
+multi-tenancy SaaS (P2.19), GIS visual PostGIS (P2.18), app móvil de campo
+(P1.11), chatbot RAG (P3.20c), PAC real (credenciales), gateway WhatsApp
+(cuenta Business API), OGC SensorThings (P3.21b).
+
+**Acción humana pendiente**: aplicar migración `20260718000000_auditoria_webhooks`
+en el servidor (`npx prisma migrate deploy`).
+
 ## Pendiente para futuras sesiones (P1/P2/P3 restantes)
 
 - [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada

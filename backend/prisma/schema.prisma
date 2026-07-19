@@ -2201,3 +2201,63 @@ model CalendarioSuministro {
   @@index([sectorId])
   @@map("calendarios_suministro")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría global unificada (quién/qué/cuándo a nivel sistema — P1.13) y
+// webhooks de eventos para integraciones externas / apps ciudadanas (P1.12)
+// ═══════════════════════════════════════════════════════════════════════════
+
+model AuditoriaEvento {
+  id           String   @id @default(cuid())
+  usuarioId    String?  @map("usuario_id")
+  usuarioEmail String?  @map("usuario_email")
+  metodo       String // POST | PATCH | PUT | DELETE
+  ruta         String
+  entidad      String? // primer segmento de la ruta (módulo)
+  entidadId    String?  @map("entidad_id")
+  statusCode   Int      @map("status_code")
+  duracionMs   Int      @map("duracion_ms")
+  ip           String?
+  payload      Json? // body sanitizado (sin contraseñas/tokens)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([entidad])
+  @@index([usuarioEmail])
+  @@index([createdAt])
+  @@map("auditoria_eventos")
+}
+
+model WebhookSuscripcion {
+  id        String           @id @default(cuid())
+  nombre    String
+  url       String
+  eventos   String[] // pago.aplicado | recibo.emitido | lectura.capturada
+  secreto   String // firma HMAC-SHA256 del payload en header X-Hydra-Signature
+  activo    Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  entregas  WebhookEntrega[]
+
+  @@index([activo])
+  @@map("webhook_suscripciones")
+}
+
+model WebhookEntrega {
+  id            String             @id @default(cuid())
+  suscripcionId String             @map("suscripcion_id")
+  evento        String
+  payload       Json
+  estado        String             @default("pendiente") // pendiente | entregada | fallida
+  intentos      Int                @default(0)
+  statusCode    Int?               @map("status_code")
+  error         String?
+  entregadaEn   DateTime?          @map("entregada_en")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  suscripcion   WebhookSuscripcion @relation(fields: [suscripcionId], references: [id], onDelete: Cascade)
+
+  @@index([suscripcionId])
+  @@index([estado])
+  @@index([evento])
+  @@map("webhook_entregas")
+}

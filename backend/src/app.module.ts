@@ -43,6 +43,9 @@ import { CarteraModule } from './modules/cartera/cartera.module';
 import { PasarelasModule } from './modules/pasarelas/pasarelas.module';
 import { MdmModule } from './modules/mdm/mdm.module';
 import { MigracionModule } from './modules/migracion/migracion.module';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { GemeloModule } from './modules/gemelo/gemelo.module';
 
 @Module({
   imports: [
@@ -88,6 +91,9 @@ import { MigracionModule } from './modules/migracion/migracion.module';
     PasarelasModule,
     MdmModule,
     MigracionModule,
+    AuditoriaModule,
+    WebhooksModule,
+    GemeloModule,
   ],
   controllers: [AppController],
   providers: [AppService],

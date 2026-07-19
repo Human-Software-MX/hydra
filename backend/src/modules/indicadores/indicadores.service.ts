@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { adeudoFifo } from '../restricciones/restricciones.service';
+import { pronosticar, PuntoSerie } from './forecast';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pct = (num: number, den: number) => (den > 0 ? r2((num / den) * 100) : null);
@@ -291,6 +292,65 @@ export class IndicadoresService {
     const header = cols.map(([n]) => n).join(',');
     const filas = serie.map((i) => cols.map(([, f]) => f(i)).join(','));
     return [header, ...filas].join('\n');
+  }
+
+  // ─── Forecasting (SWAN Proactiva: presupuestar y anticipar desviaciones) ──
+
+  /**
+   * Pronóstico de facturación/recaudación/consumo a N periodos usando el
+   * motor puro de forecast.ts. La serie histórica sale de las mismas tablas
+   * que los indicadores: Timbrado (facturado), Pago (recaudado, agregado por
+   * mes de la fecha de pago) y Consumo confirmado (m³).
+   */
+  async forecast(params: {
+    metrica: 'facturado' | 'recaudado' | 'consumo';
+    horizonte: number;
+    administracionId?: string;
+  }) {
+    const filtroContrato = params.administracionId
+      ? { contrato: { zona: { administracionId: params.administracionId } } }
+      : {};
+
+    let serie: PuntoSerie[];
+    if (params.metrica === 'facturado') {
+      const rows = await this.prisma.timbrado.groupBy({
+        by: ['periodo'],
+        where: { ...filtroContrato },
+        _sum: { total: true },
+      });
+      serie = rows.map((r) => ({ periodo: r.periodo, valor: r2(Number(r._sum.total ?? 0)) }));
+    } else if (params.metrica === 'consumo') {
+      const rows = await this.prisma.consumo.groupBy({
+        by: ['periodo'],
+        where: { confirmado: true, ...filtroContrato },
+        _sum: { m3: true },
+      });
+      serie = rows.map((r) => ({ periodo: r.periodo, valor: r2(Number(r._sum.m3 ?? 0)) }));
+    } else if (params.metrica === 'recaudado') {
+      // Pago.fecha es String YYYY-MM-DD: se agrega por mes en memoria.
+      const pagos = await this.prisma.pago.findMany({
+        where: { ...filtroContrato },
+        select: { fecha: true, monto: true },
+      });
+      const porMes = new Map<string, number>();
+      for (const p of pagos) {
+        const periodo = (p.fecha ?? '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(periodo)) continue;
+        porMes.set(periodo, (porMes.get(periodo) ?? 0) + Number(p.monto));
+      }
+      serie = [...porMes.entries()].map(([periodo, valor]) => ({ periodo, valor: r2(valor) }));
+    } else {
+      throw new BadRequestException('metrica debe ser facturado | recaudado | consumo');
+    }
+
+    const pronostico = pronosticar(serie, params.horizonte);
+    const historicoOrdenado = [...serie].sort((a, b) => a.periodo.localeCompare(b.periodo));
+    return {
+      metrica: params.metrica,
+      administracionId: params.administracionId ?? null,
+      historico: historicoOrdenado.slice(-24),
+      pronostico,
+    };
   }
 
   private rangoPeriodos(desde: string, hasta: string): string[] {

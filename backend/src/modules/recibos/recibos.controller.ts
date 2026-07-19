@@ -12,15 +12,18 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { construirReciboHtml } from './recibo-html';
 
 @Controller('recibos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class RecibosController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('impreso') impreso?: string,
@@ -50,6 +53,7 @@ export class RecibosController {
 
   // IMPORTANT: declared before /:id to avoid NestJS route conflict
   @Get('preview/:reciboId')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async getPreview(@Param('reciboId') reciboId: string) {
     const recibo = await this.prisma.recibo.findUnique({
       where: { id: reciboId },
@@ -84,12 +88,14 @@ export class RecibosController {
   }
 
   @Post(':id/marcar-impreso')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   async marcarImpreso(@Param('id') id: string) {
     return this.prisma.recibo.update({ where: { id }, data: { impreso: true } });
   }
 
   /** Recibo imprimible (HTML listo para guardar como PDF desde el navegador). */
   @Get(':id/html')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async reciboHtml(@Param('id') id: string, @Res() res: Response) {
     const recibo = await this.prisma.recibo.findUnique({
       where: { id },
@@ -149,11 +155,12 @@ export class RecibosController {
 }
 
 @Controller('mensajes-recibo')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class MensajesReciboController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(@Query('activo') activo?: string) {
     return this.prisma.mensajeRecibo.findMany({
       where: activo !== undefined ? { activo: activo === 'true' } : undefined,
@@ -162,6 +169,7 @@ export class MensajesReciboController {
   }
 
   @Post()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   async create(
     @Body()
     body: {
@@ -184,6 +192,7 @@ export class MensajesReciboController {
   }
 
   @Post(':id/toggle')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   async toggle(@Param('id') id: string) {
     const m = await this.prisma.mensajeRecibo.findUnique({ where: { id } });
     if (!m) return null;

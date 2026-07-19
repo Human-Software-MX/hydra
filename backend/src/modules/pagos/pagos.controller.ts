@@ -9,11 +9,13 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PagosService } from './pagos.service';
 
 @Controller('pagos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class PagosController {
   constructor(
     private readonly prisma: PrismaService,
@@ -21,6 +23,7 @@ export class PagosController {
   ) {}
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('origen') origen?: string,
@@ -48,6 +51,7 @@ export class PagosController {
   }
 
   @Post()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   async crear(
     @Body()
     body: {

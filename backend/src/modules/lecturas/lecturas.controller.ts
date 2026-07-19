@@ -12,14 +12,17 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { LecturasService } from './lecturas.service';
 
 @Controller('lecturas')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class LecturasController {
   constructor(private readonly service: LecturasService) {}
 
   @Get('lotes')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findLotes(
     @Query('zonaId') zonaId?: string,
     @Query('rutaId') rutaId?: string,
@@ -30,6 +33,7 @@ export class LecturasController {
   }
 
   @Post('lotes/upload')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   @UseInterceptors(FileInterceptor('archivo'))
   async uploadLote(
     @UploadedFile() archivo: Express.Multer.File,
@@ -47,6 +51,7 @@ export class LecturasController {
   }
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findLecturas(
     @Query('loteId') loteId?: string,
     @Query('contratoId') contratoId?: string,
@@ -61,21 +66,25 @@ export class LecturasController {
   }
 
   @Get('catalogo/lecturistas')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getLecturistas() {
     return this.service.getLecturistas();
   }
 
   @Get('catalogo/incidencias')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getIncidencias() {
     return this.service.getIncidencias();
   }
 
   @Get('mensajes')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getMensajes(@Query('loteId') loteId?: string, @Query('contratoId') contratoId?: string) {
     return this.service.getMensajes({ loteId, contratoId });
   }
 
   @Post('mensajes')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   createMensaje(
     @Body() body: { loteId?: string; contratoId?: string; mensaje: string; tipo?: string },
   ) {

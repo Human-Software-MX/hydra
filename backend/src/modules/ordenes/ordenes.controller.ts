@@ -11,24 +11,29 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { OrdenesService } from './ordenes.service';
 
 @Controller('ordenes')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class OrdenesController {
   constructor(private readonly service: OrdenesService) {}
 
   @Get('estadisticas')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getEstadisticas() {
     return this.service.getEstadisticas();
   }
 
   @Get('servicio/contrato/:contratoId')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getByContrato(@Param('contratoId') contratoId: string) {
     return this.service.getByContrato(contratoId);
   }
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findAll(
     @Query('contratoId') contratoId?: string,
     @Query('tipo') tipo?: string,
@@ -44,11 +49,13 @@ export class OrdenesController {
   }
 
   @Get(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
   @Post()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   create(
     @Body()
     body: {
@@ -70,6 +77,7 @@ export class OrdenesController {
   }
 
   @Patch(':id/estado')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   updateEstado(
     @Param('id') id: string,
     @Body() body: { estado: string; nota?: string; usuario?: string },
@@ -78,16 +86,19 @@ export class OrdenesController {
   }
 
   @Patch(':id/datos-campo')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   updateDatosCampo(@Param('id') id: string, @Body() body: object) {
     return this.service.actualizarDatosCampo(id, body);
   }
 
   @Get(':id/seguimientos')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getSeguimientos(@Param('id') id: string) {
     return this.service.findOne(id).then((o) => o.seguimientos);
   }
 
   @Post(':id/seguimientos')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   addSeguimiento(
     @Param('id') id: string,
     @Body() body: { nota: string; usuario?: string; estadoNuevo?: string },

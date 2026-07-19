@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { DunningService } from './dunning.service';
 import {
   BUCKET_FIELD,
@@ -47,6 +48,7 @@ export class CarteraService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dunning: DunningService,
+    private readonly webhooks: WebhooksService,
   ) {}
 
   private jobsHabilitados(): boolean {
@@ -368,10 +370,21 @@ export class CarteraService {
     try {
       const pago = await this.prisma.pago.findUnique({
         where: { id: pagoId },
-        select: { id: true, contratoId: true },
+        select: { id: true, contratoId: true, monto: true, fecha: true, tipo: true, reciboId: true },
       });
       if (!pago) return null;
-      return await this.recalcularContrato(pago.contratoId);
+      const resultado = await this.recalcularContrato(pago.contratoId);
+      void this.webhooks.emitir('pago.aplicado', {
+        pagoId: pago.id,
+        contratoId: pago.contratoId,
+        reciboId: pago.reciboId,
+        monto: Number(pago.monto),
+        fecha: pago.fecha,
+        tipo: pago.tipo,
+        saldoTotal: resultado.saldoTotal,
+        saldoVencido: resultado.saldoVencido,
+      });
+      return resultado;
     } catch (e: any) {
       this.logger.error(`aplicarPago(${pagoId}) falló: ${e?.message}`);
       return null;

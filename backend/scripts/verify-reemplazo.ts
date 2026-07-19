@@ -2,7 +2,7 @@
  * Verificación aislada del scorer de reemplazo de medidores.
  * Ejecuta: node -r ts-node/register/transpile-only scripts/verify-reemplazo.ts
  */
-import { calcularScoreReemplazo } from '../src/modules/medidores/reemplazo-scorer';
+import { calcularCasoNegocio, calcularScoreReemplazo } from '../src/modules/medidores/reemplazo-scorer';
 
 let fallos = 0;
 const ok = (n: string, c: boolean) => { if (!c) fallos++; console.log(`${c ? '✓' : '✗'} ${n}`); };
@@ -83,6 +83,31 @@ const medio = calcularScoreReemplazo({
   consumoPromedioM3: 25,
 });
 ok('consumidor medio: score 5', medio.score === 5);
+
+// ─── Caso de negocio: volumen recuperable × tarifa media (M36) ───────────────
+const base = { edadAnios: 3 as number | null, excepcionesCaidaDrastica: 0, excepcionesConsumoCero: 0, lecturas: 12, lecturasEstimadas: 0, consumoPromedioM3: 20 };
+const approx = (a: number, b: number) => Math.abs(a - b) < 0.01;
+
+// Medidor parado: 50% de subregistro → 20 × 12 × 0.5 = 120 m³ × $12 = $1,440
+const cnParado = calcularCasoNegocio({ ...base, excepcionesConsumoCero: 1 }, 12);
+ok('caso negocio parado: 120 m³/año', approx(cnParado.volumenRecuperableM3Anual, 120));
+ok('caso negocio parado: $1,440/año', approx(cnParado.ingresoRecuperableAnual, 1_440));
+
+// Caída drástica: 25% → 60 m³ × $12 = $720
+const cnCaida = calcularCasoNegocio({ ...base, excepcionesCaidaDrastica: 2 }, 12);
+ok('caso negocio caída: $720/año', approx(cnCaida.ingresoRecuperableAnual, 720));
+
+// Señales simultáneas: se toma el factor MAYOR (0.5), no la suma
+const cnAmbos = calcularCasoNegocio({ ...base, excepcionesConsumoCero: 1, excepcionesCaidaDrastica: 3 }, 12);
+ok('caso negocio: factor máximo, no suma', cnAmbos.factorSubregistro === 0.5);
+
+// Solo edad 15 años: degradación (15−10) × 0.5% = 2.5% → 6 m³ × $12 = $72
+const cnEdad = calcularCasoNegocio({ ...base, edadAnios: 15 }, 12);
+ok('caso negocio edad: $72/año', approx(cnEdad.ingresoRecuperableAnual, 72));
+
+// Sano y joven: nada que recuperar
+const cnSano = calcularCasoNegocio(base, 12);
+ok('caso negocio sano: $0', cnSano.ingresoRecuperableAnual === 0 && cnSano.factorSubregistro === 0);
 
 console.log(fallos === 0 ? '\nTODO OK ✓' : `\n${fallos} FALLO(S) ✗`);
 process.exit(fallos === 0 ? 0 : 1);

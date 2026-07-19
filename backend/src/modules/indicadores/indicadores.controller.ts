@@ -56,6 +56,25 @@ export class IndicadoresController {
     res.send(csv);
   }
 
+  /**
+   * Pronóstico de facturación/recaudación/consumo a N periodos (default 3,
+   * máx. 24). Método en cascada según historia: Holt-Winters aditivo (≥24
+   * meses), naive estacional (≥13) o promedio móvil (<13).
+   */
+  @Get('forecast')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  forecast(
+    @Query('metrica') metrica?: string,
+    @Query('horizonte') horizonte?: string,
+    @Query('administracionId') administracionId?: string,
+  ) {
+    return this.indicadores.forecast({
+      metrica: (metrica as 'facturado' | 'recaudado' | 'consumo') || 'facturado',
+      horizonte: horizonte ? parseInt(horizonte, 10) : 3,
+      administracionId,
+    });
+  }
+
   /** Captura/actualiza el volumen producido del periodo (macromedición). */
   @Post('volumen-producido')
   @Roles('SUPER_ADMIN', 'ADMIN')

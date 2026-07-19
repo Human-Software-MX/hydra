@@ -91,3 +91,55 @@ export function calcularScoreReemplazo(e: EntradaReemplazo): ResultadoReemplazo 
 
   return { score, prioridad, razones };
 }
+
+// ─── Caso de negocio: volumen recuperable × tarifa (AWWA M36, pérdida aparente) ─
+
+export interface CasoNegocioReemplazo {
+  /** Fracción de subregistro asumida (documentada en supuestos). */
+  factorSubregistro: number;
+  volumenRecuperableM3Anual: number;
+  ingresoRecuperableAnual: number;
+  supuestos: string[];
+}
+
+/** Fracciones de subregistro asumidas por señal (conservadoras, documentadas). */
+const FACTOR_PARADO = 0.5;
+const FACTOR_CAIDA_DRASTICA = 0.25;
+const DEGRADACION_ANUAL_POST_VIDA_UTIL = 0.005; // 0.5% de exactitud por año
+const DEGRADACION_MAX = 0.1;
+
+/**
+ * Cuantifica en pesos lo que el organismo recupera al reemplazar el medidor:
+ * la submedición es pérdida aparente (agua entregada y no facturada) y se
+ * valoriza a tarifa media de venta (M36). Se toma el MAYOR factor aplicable
+ * (las señales no se suman: describen el mismo subregistro).
+ */
+export function calcularCasoNegocio(e: EntradaReemplazo, tarifaMediaM3: number): CasoNegocioReemplazo {
+  const supuestos: string[] = [];
+  let factor = 0;
+
+  if (e.excepcionesConsumoCero > 0) {
+    factor = FACTOR_PARADO;
+    supuestos.push(`Medidor parado: se asume ${FACTOR_PARADO * 100}% de subregistro sobre su propio histórico (conservador: el histórico ya está deprimido)`);
+  }
+  if (e.excepcionesCaidaDrastica > 0 && FACTOR_CAIDA_DRASTICA > factor) {
+    factor = FACTOR_CAIDA_DRASTICA;
+    supuestos.push(`Caída drástica de consumo: se asume ${FACTOR_CAIDA_DRASTICA * 100}% de subregistro`);
+  }
+  if (e.edadAnios !== null && e.edadAnios > VIDA_UTIL_ANIOS) {
+    const degradacion = Math.min((e.edadAnios - VIDA_UTIL_ANIOS) * DEGRADACION_ANUAL_POST_VIDA_UTIL, DEGRADACION_MAX);
+    if (degradacion > factor) {
+      factor = degradacion;
+      supuestos.push(`Degradación metrológica: ${(DEGRADACION_ANUAL_POST_VIDA_UTIL * 100).toFixed(1)}%/año después de ${VIDA_UTIL_ANIOS} años de vida útil`);
+    }
+  }
+
+  const volumen = e.consumoPromedioM3 * 12 * factor;
+  const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+  return {
+    factorSubregistro: factor,
+    volumenRecuperableM3Anual: r2(volumen),
+    ingresoRecuperableAnual: r2(volumen * tarifaMediaM3),
+    supuestos,
+  };
+}
