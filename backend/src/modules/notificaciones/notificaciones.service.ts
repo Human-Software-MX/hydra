@@ -24,6 +24,7 @@ type TipoNotificacion =
   | 'requerimiento_pago'
   | 'folio_tramite'
   | 'aviso_interrupcion'
+  | 'alerta_climatica'
   | 'prueba';
 
 /**

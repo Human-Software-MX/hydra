@@ -114,5 +114,131 @@ ok('alerta estructural menciona municipios afectados', Boolean(agregada?.detalle
 // D0 sin estiaje pronosticado: NO agrega alerta (solo anormalmente seco)
 ok('D0 sin estiaje: no agrega alerta', !escalarPorSequia(evaluarRiesgosClimaticos(semanaLluviosa), 'D0').some((a) => a.tipo === 'estiaje'));
 
+// ═══ Ola 6: alertamiento oficial multi-fuente (NHC, GloFAS, CAP) ═════════════
+import {
+  evaluarCiclones,
+  evaluarCrecidaRio,
+  parsearCap,
+  capAAlertas,
+  distanciaKm,
+  percentil,
+  CiclonActivo,
+  PuntoCaudal,
+} from '../src/modules/clima/alertas-oficiales';
+
+const SEDE = { lat: 20.5888, lng: -100.3899 }; // Querétaro
+
+// ─── Ciclones NHC ────────────────────────────────────────────────────────────
+const ciclon = (sobre: Partial<CiclonActivo> = {}): CiclonActivo => ({
+  id: 'ep012026',
+  nombre: 'Alma',
+  clasificacion: 'TS',
+  intensidadKt: 50,
+  presionMb: 990,
+  lat: 18.5,
+  lng: -104.0, // costa de Colima ~ 480 km de Querétaro
+  ...sobre,
+});
+
+ok('haversine: QRO-CDMX ~185 km', Math.abs(distanciaKm(20.5888, -100.3899, 19.4326, -99.1332) - 185) < 10);
+
+const tsCerca = evaluarCiclones([ciclon()], SEDE);
+ok('ciclón: TS a ~480 km → alerta alta', tsCerca.length === 1 && tsCerca[0].severidad === 'alta');
+ok('ciclón: detalle trae nombre y km/h', tsCerca[0].detalle.includes('Alma') && tsCerca[0].detalle.includes('93 km/h'));
+
+const lejano = evaluarCiclones([ciclon({ lat: 12, lng: -130 })], SEDE);
+ok('ciclón: fuera del radio de vigilancia → sin alerta', lejano.length === 0);
+
+const huMedia = evaluarCiclones([ciclon({ clasificacion: 'HU', lat: 15.5, lng: -105.5 })], SEDE); // ~750 km
+ok('ciclón: HU en radio media escala a alta', huMedia.length === 1 && huMedia[0].severidad === 'alta');
+
+const mhAlta = evaluarCiclones([ciclon({ clasificacion: 'MH' })], SEDE); // ~480 km
+ok('ciclón: huracán mayor en radio alta escala a crítica', mhAlta[0].severidad === 'critica');
+
+const mhCritica = evaluarCiclones([ciclon({ clasificacion: 'MH', lat: 20.0, lng: -102.0 })], SEDE); // ~250 km
+ok('ciclón: crítica no escala más allá de crítica', mhCritica[0].severidad === 'critica');
+ok('ciclón: claveDedup estable por sistema+severidad', mhCritica[0].claveDedup === 'nhc:ep012026:critica');
+
+ok('ciclón: coordenadas inválidas se ignoran', evaluarCiclones([ciclon({ lat: NaN })], SEDE).length === 0);
+ok('ciclón: sin sistemas activos → sin alertas', evaluarCiclones([], SEDE).length === 0);
+
+// ─── Crecida de río GloFAS ───────────────────────────────────────────────────
+ok('percentil: p90 de 1..100 ≈ 90.1', Math.abs((percentil(Array.from({ length: 100 }, (_, i) => i + 1), 90) ?? 0) - 90.1) < 0.01);
+ok('percentil: lista vacía → null', percentil([], 90) === null);
+
+const serieCaudal = (picoM3s: number, base = 10): PuntoCaudal[] => [
+  ...Array.from({ length: 60 }, (_, i) => ({
+    fecha: `2026-05-${String((i % 30) + 1).padStart(2, '0')}`,
+    caudalM3s: base + (i % 5), // régimen estable ~10-14, p90 ≈ 14
+    esPronostico: false,
+  })),
+  ...Array.from({ length: 10 }, (_, i) => ({
+    fecha: `2026-07-${String(20 + i).padStart(2, '0')}`,
+    caudalM3s: i === 5 ? picoM3s : base,
+    esPronostico: true,
+  })),
+];
+
+ok('crecida: pico 3× p90 → crítica', evaluarCrecidaRio(serieCaudal(45))[0]?.severidad === 'critica');
+ok('crecida: pico 2× p90 → alta', evaluarCrecidaRio(serieCaudal(28.5))[0]?.severidad === 'alta');
+ok('crecida: pico ~1.6× p90 → media', evaluarCrecidaRio(serieCaudal(23))[0]?.severidad === 'media');
+ok('crecida: régimen normal → sin alerta', evaluarCrecidaRio(serieCaudal(12)).length === 0);
+ok('crecida: fecha del pico en el detalle', evaluarCrecidaRio(serieCaudal(45))[0]?.detalle.includes('2026-07-25'));
+
+const arroyoSeco: PuntoCaudal[] = [
+  ...Array.from({ length: 60 }, (_, i) => ({ fecha: `2026-05-${String((i % 30) + 1).padStart(2, '0')}`, caudalM3s: 0.2, esPronostico: false })),
+  { fecha: '2026-07-25', caudalM3s: 3, esPronostico: true }, // 15× su base pero 3 m³/s absolutos
+];
+ok('crecida: arroyo seco bajo caudal mínimo absoluto → sin alerta', evaluarCrecidaRio(arroyoSeco).length === 0);
+
+const pocaHistoria = evaluarCrecidaRio([
+  ...Array.from({ length: 5 }, (_, i) => ({ fecha: `2026-07-${10 + i}`, caudalM3s: 10, esPronostico: false })),
+  { fecha: '2026-07-25', caudalM3s: 100, esPronostico: true },
+]);
+ok('crecida: sin historia suficiente → sin alerta (no falso positivo)', pocaHistoria.length === 0);
+
+// ─── CAP 1.2 ─────────────────────────────────────────────────────────────────
+const capXml = `<?xml version="1.0"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>MX-SMN-2026-0719-001</identifier>
+  <sender>smn.conagua.gob.mx</sender>
+  <sent>2026-07-19T06:00:00-06:00</sent>
+  <info>
+    <language>en-US</language>
+    <event>Severe Thunderstorm</event>
+    <severity>Severe</severity>
+    <headline>Severe storms expected</headline>
+  </info>
+  <info>
+    <language>es-MX</language>
+    <event>Tormenta severa</event>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Likely</certainty>
+    <headline>Tormentas severas en el Bajío</headline>
+    <description><![CDATA[Lluvias &gt; 70 mm con granizo]]></description>
+    <instruction>Resguardar equipos y suspender trabajo en zanjas</instruction>
+    <expires>2026-07-20T23:59:00-06:00</expires>
+    <area><areaDesc>Querétaro</areaDesc></area>
+    <area><areaDesc>Guanajuato</areaDesc></area>
+  </info>
+</alert>`;
+
+const avisos = parsearCap(capXml);
+ok('CAP: prefiere el <info> en español', avisos.length === 1 && avisos[0].evento === 'Tormenta severa');
+ok('CAP: decodifica CDATA y entidades', avisos[0].descripcion === 'Lluvias > 70 mm con granizo');
+ok('CAP: junta múltiples áreas', avisos[0].zonas.join(';') === 'Querétaro;Guanajuato');
+
+const vigentes = capAAlertas(avisos, '2026-07-19T12:00:00-06:00');
+ok('CAP: Severe → alta y conserva la instrucción oficial', vigentes[0]?.severidad === 'alta' && vigentes[0].accionRecomendada.includes('zanjas'));
+ok('CAP: aviso expirado se descarta', capAAlertas(avisos, '2026-07-21T12:00:00-06:00').length === 0);
+
+const capExtremo = parsearCap(capXml.replace(/Severe<\/severity>/g, 'Extreme</severity>'));
+ok('CAP: Extreme → crítica', capAAlertas(capExtremo, '2026-07-19T12:00:00-06:00')[0]?.severidad === 'critica');
+
+const soloIngles = parsearCap(`<alert><identifier>X1</identifier><info><language>en-US</language><event>Flood Warning</event><severity>Moderate</severity></info></alert>`);
+ok('CAP: sin español usa el primer <info>; Moderate → media', capAAlertas(soloIngles, '2026-07-19T12:00:00Z')[0]?.severidad === 'media');
+ok('CAP: XML sin <alert> → sin avisos', parsearCap('<html>not cap</html>').length === 0);
+
 console.log(fallos === 0 ? '\nTODO OK ✓' : `\n${fallos} FALLO(S) ✗`);
 process.exit(fallos === 0 ? 0 : 1);

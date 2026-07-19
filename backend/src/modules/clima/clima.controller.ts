@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { IsArray, IsOptional, IsString, Matches } from 'class-validator';
 import { ClimaService } from './clima.service';
+import { AlertasClimaService } from './alertas.service';
 import { SequiaService, RegistroSequiaEntrada } from './sequia.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -25,7 +26,30 @@ export class ClimaController {
   constructor(
     private readonly clima: ClimaService,
     private readonly sequia: SequiaService,
+    private readonly alertas: AlertasClimaService,
   ) {}
+
+  /** Alertas oficiales multi-fuente (NHC ciclones, GloFAS crecidas, avisos CAP). */
+  @Get('alertas')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
+  alertasOficiales(@Query('refrescar') refrescar?: string) {
+    return this.alertas.alertasOficiales({ refrescar: refrescar === '1' });
+  }
+
+  /** Difusión manual: envía las alertas nuevas (dedup) al personal operativo. */
+  @Post('alertas/difundir')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  difundirAlertas(@Body() dto: { severidadMinima?: 'media' | 'alta' | 'critica' }) {
+    return this.alertas.difundir({ severidadMinima: dto?.severidadMinima });
+  }
+
+  /** Bitácora de alertas ya difundidas. */
+  @Get('alertas/emitidas')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  alertasEmitidas(@Query('limit') limit?: string) {
+    const n = Number(limit);
+    return this.alertas.emitidas(limit && Number.isFinite(n) ? n : undefined);
+  }
 
   /** Resumen del corte vigente del Monitor de Sequía CONAGUA para el estado. */
   @Get('sequia')

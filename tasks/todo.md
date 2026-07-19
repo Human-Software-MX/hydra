@@ -198,6 +198,27 @@ todo con servicios/librerías 100% gratuitos sobre la infraestructura actual:
     secreto JWT compartido; migraciones se aplican por tenant
 - [x] Cadena `npm run verify` ampliada a 10 suites
 
+## Ola 6 — Alertamiento meteorológico oficial multi-fuente (2026-07-19)
+
+Objetivo: pasar del riesgo *derivado del pronóstico* (olas 4-5) al alertamiento
+con **avisos oficiales**, usando solo servicios gratuitos y sin API key.
+Fuentes evaluadas y elegidas (ver `docs/servicios-meteorologicos-gratuitos.md`):
+
+- [x] Motor puro `alertas-oficiales.ts`: `evaluarCiclones` (NHC/NOAA, distancia
+      haversine a la sede + categoría), `evaluarCrecidaRio` (GloFAS caudal
+      pronosticado vs p90 histórico) y `parsearCap`/`capAAlertas` (avisos CAP
+      1.2 de protección civil / SMN)
+- [x] Providers: `nhc.provider.ts` (CurrentStorms.json), `flood.provider.ts`
+      (Open-Meteo Flood API), `cap.provider.ts` (URLs configurables
+      `CLIMA_CAP_URLS`)
+- [x] `AlertasClimaService` + `GET /clima/alertas` (agregado multi-fuente con
+      cache y tolerancia a fallas por fuente) + difusión con dedup
+      (`AlertaClimaticaEmitida`) a personal operativo vía email/WhatsApp
+      (`POST /clima/alertas/difundir` + cron `JOB_ALERTAS_CLIMA_CRON`)
+- [x] Frontend: sección "Alertas oficiales" en Mapa (junto a riesgos climáticos)
+- [x] Migración `ola6_alertas_meteorologicas` (tabla de emisiones para dedup)
+- [x] verify-clima ampliado (ciclones, crecida, CAP) + tsc + builds
+
 ## Pendiente para futuras sesiones (P1/P2/P3 restantes)
 
 - [ ] RBAC granular (`@Roles`) en controladores legacy restantes + auditoría global unificada

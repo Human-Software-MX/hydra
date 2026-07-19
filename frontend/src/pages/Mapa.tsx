@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2, CloudRain, MapPin } from 'lucide-react';
+import { Loader2, CloudRain, MapPin, Siren } from 'lucide-react';
 import {
   fetchPadronGeojson,
   fetchRiesgosClima,
+  fetchAlertasOficiales,
   PadronFeatureProps,
   AlertaClimatica,
 } from '@/api/gis-mapa';
@@ -68,6 +69,13 @@ export default function Mapa() {
   const climaQ = useQuery({
     queryKey: ['clima-riesgos'],
     queryFn: () => fetchRiesgosClima(),
+    enabled: useApi,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const alertasQ = useQuery({
+    queryKey: ['clima-alertas-oficiales'],
+    queryFn: () => fetchAlertasOficiales(),
     enabled: useApi,
     staleTime: 30 * 60 * 1000,
   });
@@ -170,6 +178,44 @@ export default function Mapa() {
                 <div key={nombre} className="flex items-center gap-2 text-sm">
                   <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
                   <span>{nombre.replaceAll('_', ' ')}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Siren className="h-4 w-4" /> Alertas oficiales — NHC · GloFAS · CAP
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {alertasQ.isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Consultando fuentes oficiales…
+                </div>
+              )}
+              {alertasQ.isError && (
+                <p className="text-sm text-muted-foreground">
+                  Alertamiento oficial no disponible en este momento.
+                </p>
+              )}
+              {alertasQ.data && alertasQ.data.alertas.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Sin alertas oficiales vigentes (ciclones, crecidas de río ni avisos CAP).
+                </p>
+              )}
+              {(alertasQ.data?.alertas ?? []).map((a) => (
+                <div key={a.claveDedup} className="space-y-1 rounded-md border p-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={badgeSeveridad(a.severidad)}>{a.severidad.toUpperCase()}</Badge>
+                    <span className="text-sm font-medium">{a.titulo}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{a.detalle}</p>
+                  {a.zona && <p className="text-xs text-muted-foreground">Zona: {a.zona}</p>}
+                  <p className="text-xs">
+                    <span className="font-medium">Acción:</span> {a.accionRecomendada}
+                  </p>
                 </div>
               ))}
             </CardContent>

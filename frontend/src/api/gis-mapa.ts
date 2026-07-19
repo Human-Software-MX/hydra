@@ -62,3 +62,30 @@ export async function fetchRiesgosClima(administracionId?: string): Promise<Ries
   const qs = administracionId ? `?administracionId=${encodeURIComponent(administracionId)}` : '';
   return apiRequest<RiesgosClima>(`/clima/riesgos${qs}`);
 }
+
+// ─── Alertas oficiales multi-fuente (NHC ciclones, GloFAS crecidas, CAP) ────
+
+export interface AlertaOficial {
+  fuente: 'nhc_noaa' | 'glofas_openmeteo' | 'cap';
+  tipo: string;
+  severidad: 'media' | 'alta' | 'critica';
+  titulo: string;
+  detalle: string;
+  vigencia?: { desde?: string; hasta?: string };
+  zona?: string;
+  impacto: string;
+  accionRecomendada: string;
+  claveDedup: string;
+}
+
+export interface ResumenAlertasOficiales {
+  generadoEn: string;
+  sede: { lat: number; lng: number };
+  fuentes: Record<string, { activa: boolean; ok?: boolean; detalle?: string }>;
+  alertas: AlertaOficial[];
+  cache?: boolean;
+}
+
+export async function fetchAlertasOficiales(): Promise<ResumenAlertasOficiales> {
+  return apiRequest<ResumenAlertasOficiales>('/clima/alertas');
+}

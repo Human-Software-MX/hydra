@@ -2290,6 +2290,23 @@ model RegistroSequia {
   @@map("registros_sequia")
 }
 
+// Bitácora de alertas meteorológicas oficiales ya difundidas (dedup de envíos)
+model AlertaClimaticaEmitida {
+  id            String   @id @default(cuid())
+  clave         String   @unique // claveDedup estable por fuente+evento+severidad
+  fuente        String // nhc_noaa | glofas_openmeteo | cap
+  tipo          String // ciclon_tropical | crecida_rio | <event CAP>
+  severidad     String // media | alta | critica
+  titulo        String
+  detalle       String   @db.Text
+  destinatarios Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([fuente])
+  @@index([createdAt])
+  @@map("alertas_climaticas_emitidas")
+}
+
 model Organismo {
   id        String   @id @default(cuid())
   slug      String   @unique // subdominio / header X-Organismo
