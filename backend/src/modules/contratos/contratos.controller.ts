@@ -42,7 +42,20 @@ export class ContratosController {
 
   @Get()
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
-  findAll() {
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('updatedSince') updatedSince?: string,
+  ) {
+    // Con `page` presente → envelope paginado (contrato para el conector de
+    // SUPRA); sin `page` → array legacy completo (UI de Hydra intacta).
+    if (page !== undefined) {
+      return this.contratosService.findAllPaginado({
+        page: Math.max(1, Number(page) || 1),
+        limit: Math.min(500, Math.max(1, Number(limit) || 100)),
+        updatedSince,
+      });
+    }
     return this.contratosService.findAll();
   }
 

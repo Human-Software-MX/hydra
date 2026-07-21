@@ -40,7 +40,6 @@ import { IndicadoresModule } from './modules/indicadores/indicadores.module';
 import { VeeModule } from './modules/vee/vee.module';
 import { BalanceModule } from './modules/balance/balance.module';
 import { CarteraModule } from './modules/cartera/cartera.module';
-import { PasarelasModule } from './modules/pasarelas/pasarelas.module';
 import { MdmModule } from './modules/mdm/mdm.module';
 import { MigracionModule } from './modules/migracion/migracion.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
@@ -48,6 +47,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { GemeloModule } from './modules/gemelo/gemelo.module';
 import { ClimaModule } from './modules/clima/clima.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
+import { SupraModule } from './modules/supra/supra.module';
 
 @Module({
   imports: [
@@ -90,7 +90,6 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
     VeeModule,
     BalanceModule,
     CarteraModule,
-    PasarelasModule,
     MdmModule,
     MigracionModule,
     AuditoriaModule,
@@ -98,6 +97,7 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
     GemeloModule,
     ClimaModule,
     TenancyModule,
+    SupraModule,
   ],
   controllers: [AppController],
   providers: [AppService],

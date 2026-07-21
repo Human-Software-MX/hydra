@@ -61,27 +61,6 @@ export async function getIntentosPagoPortal(contratoId: string) {
   return apiRequest<IntentoPagoDto[]>(`/portal/contratos/${contratoId}/intentos-pago`);
 }
 
-// ─── Pasarelas (uso interno / demo) ──────────────────────────────────────────
-
-export async function getIntentosPago(params?: { contratoId?: string; estado?: string }) {
-  const q = new URLSearchParams();
-  if (params?.contratoId) q.set('contratoId', params.contratoId);
-  if (params?.estado) q.set('estado', params.estado);
-  const s = q.toString();
-  return apiRequest<IntentoPagoDto[]>(`/pasarelas/intentos${s ? `?${s}` : ''}`);
-}
-
-/** Demo/QA (back-office, rol ADMIN): confirma el intento como si la pasarela hubiera notificado. */
-export async function simularPagoIntento(intentoId: string) {
-  return apiRequest<ResultadoSimulacionPago>(`/pasarelas/intentos/${intentoId}/simular-pago`, {
-    method: 'POST',
-  });
-}
-
-/** Demo/QA (portal, rol CLIENTE): simula el pago de un intento del propio contrato. */
-export async function simularPagoIntentoPortal(contratoId: string, intentoId: string) {
-  return apiRequest<ResultadoSimulacionPago>(
-    `/portal/contratos/${contratoId}/intentos-pago/${intentoId}/simular`,
-    { method: 'POST' },
-  );
-}
+// La pasarela local fue retirada (SUPRA es el único motor de pagos): los
+// endpoints /pasarelas/* ya no existen y la simulación local responde 410.
+// El pago se confirma en el checkout de SUPRA (urlPago → /pay/<token>).

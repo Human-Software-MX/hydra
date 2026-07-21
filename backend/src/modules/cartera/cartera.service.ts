@@ -3,6 +3,10 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { SupraClientService, SupraObligation } from '../supra/supra-client.service';
+import { SupraMapService } from '../supra/supra-map.service';
+import { SupraOutboxService } from '../supra/supra-outbox.service';
+import { minorToPesos, supraRef } from '../supra/supra.config';
 import { DunningService } from './dunning.service';
 import {
   BUCKET_FIELD,
@@ -49,6 +53,9 @@ export class CarteraService {
     private readonly prisma: PrismaService,
     private readonly dunning: DunningService,
     private readonly webhooks: WebhooksService,
+    private readonly supraOutbox: SupraOutboxService,
+    private readonly supra: SupraClientService,
+    private readonly supraMapa: SupraMapService,
   ) {}
 
   private jobsHabilitados(): boolean {
@@ -306,7 +313,240 @@ export class CarteraService {
     });
     if (!contrato) throw new NotFoundException('Contrato no encontrado');
     const hoy = hoyIso();
+
+    // Con SUPRA activo y contrato sincronizado, la proyección se construye
+    // desde la verdad financiera de SUPRA (obligations + allocations); los
+    // contratos aún no sincronizados conservan el cálculo local.
+    if (this.supra.enabled) {
+      const customerId = await this.supraMapa.get('contrato', contratoId);
+      if (customerId) {
+        return this.recalcularContratoDesdeSupra(contratoId, customerId, hoy);
+      }
+    }
     return this.prisma.$transaction((tx) => this.recalcularContratoTx(tx, contratoId, hoy));
+  }
+
+  /**
+   * Proyección de cartera desde SUPRA (fuente de verdad):
+   *
+   *  - `DocumentoCartera` por obligation con external_ref `hydra:recibo:<id>`
+   *    (montoOriginal/montoAbonado/saldo desde amount_due/settled_minor;
+   *    written_off → incobrable; canceled → se elimina el documento).
+   *  - `AplicacionPago` re-proyectada desde las allocations de los payments
+   *    del customer (fecha de liquidación por documento — insumo de propensión).
+   *  - `EstadoCuenta` con la misma derivación local (buckets, score, categoría,
+   *    banderas enConvenio/restringido — dominio Hydra).
+   *
+   * Idempotente: puede correr por evento o por cron (reproyección) sin duplicar.
+   */
+  private async recalcularContratoDesdeSupra(
+    contratoId: string,
+    customerId: string,
+    hoy: string,
+  ): Promise<ResultadoRecalculo> {
+    // 1. Verdad financiera desde SUPRA (fuera de la transacción local).
+    const [obligations, payments] = await Promise.all([
+      this.supra.listAllObligationsByCustomer(customerId),
+      this.supra.listAllPaymentsByCustomer(customerId).catch(() => [] as never[]),
+    ]);
+    const prefijo = 'hydra:recibo:';
+    const deRecibo = obligations.filter((o) => o.external_ref?.startsWith(prefijo));
+    const reciboPorObligation = new Map<string, string>(
+      deRecibo.map((o) => [o.id, o.external_ref!.slice(prefijo.length)]),
+    );
+
+    // Allocations por obligation (detalle por payment — incluye la fecha).
+    const allocationsPorObligation = new Map<
+      string,
+      { supraPaymentId: string; monto: number; fecha: string }[]
+    >();
+    for (const p of payments) {
+      const detalle = p.allocations
+        ? p
+        : await this.supra.getPayment(p.id).catch(() => null);
+      if (!detalle?.allocations) continue;
+      for (const a of detalle.allocations) {
+        if (!reciboPorObligation.has(a.obligation)) continue;
+        const lista = allocationsPorObligation.get(a.obligation) ?? [];
+        lista.push({
+          supraPaymentId: detalle.id,
+          monto: minorToPesos(a.amount),
+          fecha: (detalle.received_at ?? detalle.created_at ?? '').substring(0, 10),
+        });
+        allocationsPorObligation.set(a.obligation, lista);
+      }
+    }
+
+    // Mapa payment SUPRA → pago espejo local (para AplicacionPago.pagoId).
+    const espejoPorSupraId = new Map<string, string>();
+    for (const p of payments) {
+      const ref = p.external_ref;
+      if (ref?.startsWith('hydra:pago:')) {
+        espejoPorSupraId.set(p.id, ref.slice('hydra:pago:'.length));
+      } else {
+        const local = await this.supraMapa.reverse('pago', p.id);
+        if (local) espejoPorSupraId.set(p.id, local);
+      }
+    }
+    const pagosLocales = await this.prisma.pago.findMany({
+      where: { id: { in: [...new Set(espejoPorSupraId.values())] } },
+      select: { id: true },
+    });
+    const pagosExistentes = new Set(pagosLocales.map((p) => p.id));
+
+    // Metadatos de presentación desde el recibo/timbrado local (periodo, emisión).
+    const recibosLocales = await this.prisma.recibo.findMany({
+      where: { id: { in: [...reciboPorObligation.values()] } },
+      select: {
+        id: true,
+        fechaVencimiento: true,
+        createdAt: true,
+        timbrado: { select: { periodo: true, fechaEmision: true } },
+      },
+    });
+    const reciboLocal = new Map(recibosLocales.map((r) => [r.id, r]));
+
+    const [convenioActivo, restriccionVigente] = await Promise.all([
+      this.prisma.convenio.findFirst({ where: { contratoId, estado: 'Activo' }, select: { id: true } }),
+      this.prisma.restriccionServicio.findFirst({
+        where: { contratoId, estado: { in: ['programada', 'aplicada'] } },
+        select: { id: true },
+      }),
+    ]);
+
+    // 2. Proyección transaccional.
+    return this.prisma.$transaction(async (tx) => {
+      let saldoTotal = 0;
+      let saldoCorriente = 0;
+      let saldoVencido = 0;
+      const buckets = { bucketCorriente: 0, bucket1_30: 0, bucket31_60: 0, bucket61_90: 0, bucket90_mas: 0 };
+      let docsVencidos = 0;
+      let diasMoraMax = 0;
+      let aplicacionesNuevas = 0;
+      let documentosProyectados = 0;
+
+      for (const o of deRecibo) {
+        const reciboId = reciboPorObligation.get(o.id)!;
+
+        if (o.status === 'canceled') {
+          // Lote cancelado / refacturación: el documento sale de cartera.
+          await tx.aplicacionPago.deleteMany({ where: { documento: { reciboId } } });
+          await tx.documentoCartera.deleteMany({ where: { reciboId } });
+          continue;
+        }
+
+        const local = reciboLocal.get(reciboId);
+        const montoOriginal = round2(minorToPesos(o.amount_due_minor));
+        const abonado = round2(minorToPesos(o.amount_settled_minor));
+        const saldo = Math.max(0, round2(montoOriginal - abonado));
+        const esIncobrable = o.status === 'written_off';
+        const fechaVencimiento =
+          local?.fechaVencimiento ?? (o.due_at ? o.due_at.substring(0, 10) : hoy);
+        const fechaEmision =
+          local?.timbrado?.fechaEmision ||
+          local?.createdAt.toISOString().slice(0, 10) ||
+          o.created_at.substring(0, 10);
+        const dias = !esIncobrable && saldo > EPSILON ? Math.max(0, diasEntre(fechaVencimiento, hoy)) : 0;
+        const bucket = bucketPorDias(dias);
+
+        let estado: string;
+        if (esIncobrable) estado = 'incobrable';
+        else if (saldo <= EPSILON) estado = 'pagado';
+        else if (convenioActivo) estado = 'en_convenio';
+        else if (dias > 0) estado = 'vencido';
+        else if (abonado > EPSILON) estado = 'parcial';
+        else estado = 'vigente';
+
+        const doc = await tx.documentoCartera.upsert({
+          where: { reciboId },
+          create: {
+            contratoId,
+            reciboId,
+            tipo: 'recibo',
+            periodo: local?.timbrado?.periodo ?? null,
+            montoOriginal,
+            montoAbonado: abonado,
+            saldo,
+            fechaEmision,
+            fechaVencimiento,
+            diasVencido: dias,
+            bucket,
+            estado,
+            convenioId: estado === 'en_convenio' ? convenioActivo!.id : null,
+            recalculadoEn: new Date(),
+          },
+          update: {
+            montoOriginal,
+            montoAbonado: abonado,
+            saldo,
+            periodo: local?.timbrado?.periodo ?? null,
+            fechaEmision,
+            fechaVencimiento,
+            diasVencido: dias,
+            bucket,
+            estado,
+            convenioId: estado === 'en_convenio' ? convenioActivo!.id : null,
+            recalculadoEn: new Date(),
+          },
+        });
+        documentosProyectados++;
+
+        // AplicacionPago = proyección exacta de las allocations de SUPRA.
+        await tx.aplicacionPago.deleteMany({ where: { documentoCarteraId: doc.id } });
+        for (const a of allocationsPorObligation.get(o.id) ?? []) {
+          const pagoLocal = espejoPorSupraId.get(a.supraPaymentId);
+          if (!pagoLocal || !pagosExistentes.has(pagoLocal)) continue; // espejo aún no materializado
+          await tx.aplicacionPago.create({
+            data: {
+              pagoId: pagoLocal,
+              documentoCarteraId: doc.id,
+              monto: a.monto,
+              fecha: a.fecha || hoy,
+            },
+          });
+          aplicacionesNuevas++;
+        }
+
+        if (esIncobrable || saldo <= EPSILON) continue;
+        saldoTotal = round2(saldoTotal + saldo);
+        if (estado === 'en_convenio') continue;
+        buckets[BUCKET_FIELD[bucket]] = round2(buckets[BUCKET_FIELD[bucket]] + saldo);
+        if (dias > 0) {
+          saldoVencido = round2(saldoVencido + saldo);
+          docsVencidos++;
+          if (dias > diasMoraMax) diasMoraMax = dias;
+        } else {
+          saldoCorriente = round2(saldoCorriente + saldo);
+        }
+      }
+
+      const datosEstado = {
+        saldoTotal,
+        saldoCorriente,
+        saldoVencido,
+        ...buckets,
+        docsVencidos,
+        diasMoraMax,
+        scoreMorosidad: scoreMorosidad(docsVencidos, diasMoraMax),
+        categoria: categoriaPorDias(diasMoraMax),
+        enConvenio: Boolean(convenioActivo),
+        restringido: Boolean(restriccionVigente),
+        recalculadoEn: new Date(),
+      };
+      await tx.estadoCuenta.upsert({
+        where: { contratoId },
+        create: { contratoId, ...datosEstado },
+        update: datosEstado,
+      });
+
+      return {
+        contratoId,
+        documentos: documentosProyectados,
+        aplicacionesNuevas,
+        saldoTotal,
+        saldoVencido,
+      };
+    });
   }
 
   /** Recalcula un contrato o, sin argumento, toda la cartera (backfill). */
@@ -402,7 +642,7 @@ export class CarteraService {
 
     const abiertos = await this.prisma.documentoCartera.findMany({
       where: { contratoId, saldo: { gt: EPSILON }, estado: { notIn: ['pagado', 'incobrable'] } },
-      select: { id: true, saldo: true, diasVencido: true },
+      select: { id: true, saldo: true, diasVencido: true, reciboId: true },
     });
     if (abiertos.length === 0) {
       throw new BadRequestException('El contrato no tiene documentos abiertos que marcar como incobrables');
@@ -429,6 +669,17 @@ export class CarteraService {
         },
       });
     });
+
+    // SUPRA (fuente de verdad financiera): write-off de las obligations de los
+    // recibos marcados, encolado con reintentos (autorización ya validada aquí).
+    for (const d of abiertos) {
+      if (!d.reciboId) continue;
+      await this.supraOutbox.encolar(
+        'obligation.write_off',
+        { reciboId: d.reciboId, contratoId, motivo: params.motivo },
+        `${supraRef.recibo(d.reciboId)}:write_off`,
+      );
+    }
 
     // Refresca el estado de cuenta (los incobrables salen de saldos y buckets).
     await this.recalcularContrato(contratoId);

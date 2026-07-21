@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { adeudoFifo } from '../restricciones/restricciones.service';
+import { SupraClientService } from '../supra/supra-client.service';
 import { pronosticar, PuntoSerie } from './forecast';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -56,7 +57,10 @@ export interface IndicadoresPigoo {
  */
 @Injectable()
 export class IndicadoresService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly supra: SupraClientService,
+  ) {}
 
   // ─── Captura de volumen producido (macromedición) ─────────────────────────
 
@@ -194,13 +198,26 @@ export class IndicadoresService {
       recibosPorContrato.set(r.contratoId, lista);
     }
     let carteraVencida = 0;
-    const contratosConAdeudo = new Set<string>();
-    for (const [contratoId, lista] of recibosPorContrato) {
-      const { monto } = adeudoFifo(lista, pagadoPorContrato.get(contratoId) ?? 0);
-      if (monto > 0.01) {
-        carteraVencida += monto;
-        contratosConAdeudo.add(contratoId);
+    let usuariosConAdeudoCount = 0;
+    if (this.supra.enabled) {
+      // Proyección alimentada por eventos de SUPRA: una sola fuente de aging
+      // (misma que dunning/cartera), sin re-computar el FIFO aquí.
+      const [agg, conAdeudo] = await Promise.all([
+        this.prisma.estadoCuenta.aggregate({ _sum: { saldoVencido: true } }),
+        this.prisma.estadoCuenta.count({ where: { saldoVencido: { gt: 0.01 } } }),
+      ]);
+      carteraVencida = Number(agg._sum.saldoVencido ?? 0);
+      usuariosConAdeudoCount = conAdeudo;
+    } else {
+      const contratosConAdeudo = new Set<string>();
+      for (const [contratoId, lista] of recibosPorContrato) {
+        const { monto } = adeudoFifo(lista, pagadoPorContrato.get(contratoId) ?? 0);
+        if (monto > 0.01) {
+          carteraVencida += monto;
+          contratosConAdeudo.add(contratoId);
+        }
       }
+      usuariosConAdeudoCount = contratosConAdeudo.size;
     }
 
     const volumenProducidoM3 = volumenProducido._sum.m3 ? Number(volumenProducido._sum.m3) : null;
@@ -243,8 +260,8 @@ export class IndicadoresService {
       pagosATiempo,
       pagoATiempoPct: pct(pagosATiempo, pagosConVencimiento.length),
       carteraVencida: r2(carteraVencida),
-      usuariosConAdeudo: contratosConAdeudo.size,
-      rezagoPctPadron: pct(contratosConAdeudo.size, contratosActivos),
+      usuariosConAdeudo: usuariosConAdeudoCount,
+      rezagoPctPadron: pct(usuariosConAdeudoCount, contratosActivos),
       restriccionesVigentes,
       conveniosActivos,
       quejasAbiertas,

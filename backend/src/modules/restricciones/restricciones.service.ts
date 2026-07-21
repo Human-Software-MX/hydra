@@ -2,6 +2,9 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { SupraClientService } from '../supra/supra-client.service';
+import { SupraMapService } from '../supra/supra-map.service';
+import { minorToPesos } from '../supra/supra.config';
 
 /**
  * Motor de mínimo vital — Ley General de Aguas (DOF 11-dic-2025).
@@ -56,11 +59,38 @@ export class RestriccionesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificaciones: NotificacionesService,
+    private readonly supra: SupraClientService,
+    private readonly supraMapa: SupraMapService,
   ) {}
 
   // ─── Adeudo de un contrato (recibos vencidos impagos) ─────────────────────
 
+  /**
+   * Adeudo vencido del contrato. Con SUPRA activo es la decisión de
+   * restringir/revertir sobre la VERDAD financiera (obligations abiertas
+   * vencidas en SUPRA); el cálculo FIFO local queda para el camino legacy.
+   */
   private async adeudoContrato(contratoId: string): Promise<{ monto: number; recibosVencidos: number }> {
+    if (this.supra.enabled) {
+      const customerId = await this.supraMapa.get('contrato', contratoId);
+      if (customerId) {
+        const abiertas = await this.supra.listOpenObligations(customerId);
+        const ahora = Date.now();
+        let monto = 0;
+        let vencidos = 0;
+        for (const o of abiertas) {
+          const abierto = Number(o.amount_due_minor) - Number(o.amount_settled_minor);
+          if (abierto <= 0) continue;
+          if (o.due_at && new Date(o.due_at).getTime() < ahora) {
+            monto += abierto;
+            vencidos++;
+          }
+        }
+        return { monto: minorToPesos(monto), recibosVencidos: vencidos };
+      }
+      // Contrato sin sincronizar a SUPRA: sin verdad financiera allá — cae al
+      // cálculo local (mismo criterio que la proyección de cartera).
+    }
     const hoy = new Date().toISOString().slice(0, 10);
     const [recibos, pagadoAgg] = await Promise.all([
       this.prisma.recibo.findMany({
@@ -99,6 +129,51 @@ export class RestriccionesService {
   async candidatos(params: { minRecibosVencidos?: number; limit?: number } = {}) {
     const minVencidos = params.minRecibosVencidos ?? 2;
     const limit = params.limit ?? 50;
+
+    // Con SUPRA activo, los candidatos salen de la PROYECCIÓN (EstadoCuenta,
+    // alimentado por eventos de SUPRA): elimina el scan global Recibo+Pago y
+    // la tercera implementación FIFO. Las exclusiones duras se conservan.
+    if (this.supra.enabled) {
+      const estados = await this.prisma.estadoCuenta.findMany({
+        where: { saldoVencido: { gt: 0.01 }, docsVencidos: { gte: minVencidos }, enConvenio: false, restringido: false },
+        orderBy: { saldoVencido: 'desc' },
+        take: limit * 3, // margen para las exclusiones por contrato
+        select: {
+          contratoId: true,
+          saldoVencido: true,
+          docsVencidos: true,
+          contrato: {
+            select: {
+              numeroContrato: true,
+              nombre: true,
+              bloqueadoJuridico: true,
+              puntoServicio: { select: { cortable: true } },
+            },
+          },
+        },
+      });
+      const resultado: Array<{
+        contratoId: string;
+        numeroContrato: number;
+        nombre: string;
+        adeudo: number;
+        recibosVencidos: number;
+      }> = [];
+      for (const e of estados) {
+        if (resultado.length >= limit) break;
+        if (e.contrato.bloqueadoJuridico) continue;
+        if (e.contrato.puntoServicio?.cortable === false) continue; // usuario protegido
+        resultado.push({
+          contratoId: e.contratoId,
+          numeroContrato: e.contrato.numeroContrato,
+          nombre: e.contrato.nombre,
+          adeudo: Number(e.saldoVencido),
+          recibosVencidos: e.docsVencidos,
+        });
+      }
+      return resultado;
+    }
+
     const hoy = new Date().toISOString().slice(0, 10);
 
     const [recibosVencidos, pagosPorContrato] = await Promise.all([

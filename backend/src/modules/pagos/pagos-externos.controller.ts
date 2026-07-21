@@ -47,6 +47,30 @@ export class PagosExternosController {
     return this.service.findAll({ estado, recaudador, page, limit });
   }
 
+  // ── Verificación contra la statement reconciliation de SUPRA ──────────────
+  // (rutas estáticas declaradas ANTES de /:id/* para evitar colisión de rutas)
+
+  @Get('conciliacion-supra/excepciones')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  excepciones(@Query('status') status?: string) {
+    return this.service.excepcionesConciliacion(status);
+  }
+
+  @Post('conciliacion-supra/excepciones/:id/resolver')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  resolverExcepcion(
+    @Param('id') id: string,
+    @Body() body: { resolution: 'write_off' | 'corrected' | 'matched_late' | 'rejected'; note?: string },
+  ) {
+    return this.service.resolverExcepcionConciliacion(id, body);
+  }
+
+  @Post('conciliacion-supra/:recaudador/reconciliar')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  reconciliar(@Param('recaudador') recaudador: string) {
+    return this.service.reconciliarRecaudador(recaudador);
+  }
+
   @Post(':id/conciliar')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   conciliar(

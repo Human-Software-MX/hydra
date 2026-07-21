@@ -426,8 +426,12 @@ model Pago {
   fecha       String
   tipo        String // legacy: Efectivo | Transferencia | Tarjeta | SPEI | OXXO | CoDi | WEB
   concepto    String
-  origen      String     @default("nativo") // nativo | externo
+  origen      String     @default("nativo") // nativo | externo | supra
   oficina     String?
+  // Vínculo operativo pago↔cajero/sesión (corte de caja correcto por sesión;
+  // SUPRA no modela estos metadatos — viven solo en el espejo local).
+  usuarioId    String?   @map("usuario_id")
+  sesionCajaId String?   @map("sesion_caja_id")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
   contrato    Contrato   @relation(fields: [contratoId], references: [id], onDelete: Cascade)
@@ -442,6 +446,7 @@ model Pago {
   @@index([reciboId])
   @@index([convenioId])
   @@index([formaPagoId])
+  @@index([sesionCajaId])
   @@map("pagos")
 }
 
@@ -2320,4 +2325,67 @@ model Organismo {
 
   @@index([activo])
   @@map("organismos")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Integración SUPRA (Payment Engine): mapa de IDs, inbox de eventos y
+// outbox de comandos. SUPRA es la fuente de verdad del dominio financiero;
+// estas tablas solo soportan la integración (nunca estado financiero propio).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model SupraMapa {
+  id        String   @id @default(cuid())
+  // contrato | recibo | pago | convenio | intento
+  entidad   String
+  hydraId   String   @map("hydra_id")
+  supraId   String   @map("supra_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([entidad, hydraId])
+  @@unique([entidad, supraId])
+  @@index([supraId])
+  @@map("supra_mapa")
+}
+
+model SupraEventoInbox {
+  id         String    @id @default(cuid())
+  eventId    String    @unique @map("event_id") // Supra-Event-Id (evt_...)
+  tipo       String
+  // Orden total del outbox de SUPRA; permite detectar huecos.
+  sequence   BigInt?
+  payload    Json
+  // pendiente | procesado | error | cuarentena
+  estado     String    @default("pendiente")
+  intentos   Int       @default(0)
+  error      String?
+  recibidoEn DateTime  @default(now()) @map("recibido_en")
+  procesadoEn DateTime? @map("procesado_en")
+
+  @@index([estado])
+  @@index([tipo])
+  @@map("supra_evento_inbox")
+}
+
+model SupraComandoOutbox {
+  id             String    @id @default(cuid())
+  // p.ej. payments.record | obligations.create | payment_plans.create
+  tipo           String
+  metodo         String // POST | GET ...
+  ruta           String // ruta relativa /v1/...
+  payload        Json?
+  idempotencyKey String    @unique @map("idempotency_key")
+  // pendiente | enviado | error | muerto
+  estado         String    @default("pendiente")
+  intentos       Int       @default(0)
+  proximoIntento DateTime? @map("proximo_intento")
+  respuesta      Json?
+  error          String?
+  correlationId  String?   @map("correlation_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([estado, proximoIntento])
+  @@index([tipo])
+  @@map("supra_comando_outbox")
 }

@@ -10,7 +10,9 @@ function parseOriginList(value: string | undefined): string[] {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  // rawBody: necesario para verificar la firma HMAC de los webhooks de SUPRA
+  // sobre el cuerpo crudo (POST /api/integraciones/supra/webhook).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.setGlobalPrefix('api');
 
   // Global validation pipe — rejects unknown fields and validates DTOs

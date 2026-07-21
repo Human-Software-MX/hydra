@@ -8,6 +8,9 @@ import { CreateContratoDto } from './dto/create-contrato.dto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { crearHitoInicialSolicitudCompletado } from '../procesos-contratacion/hito-inicial.util';
 import { BillingEngineService } from './billing-engine.service';
+import { SupraClientService } from '../supra/supra-client.service';
+import { SupraMapService } from '../supra/supra-map.service';
+import { minorToPesos } from '../supra/supra.config';
 
 function isFeatureEnabled(flag: string): boolean {
   return process.env[flag]?.toLowerCase() === 'true';
@@ -99,10 +102,56 @@ export class ContratosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billingEngine: BillingEngineService,
+    private readonly supra: SupraClientService,
+    private readonly supraMapa: SupraMapService,
   ) {}
+
+  /**
+   * Saldo por cobrar del contrato. Con SUPRA activo y contrato sincronizado,
+   * la verdad es `GET /v1/customers/:id/balance`; si no, el cálculo local
+   * (Σ timbrado − Σ pago). Alimenta candados de trámites y contexto 360.
+   */
+  private async saldoPorCobrar(contratoId: string): Promise<number> {
+    if (this.supra.enabled) {
+      const customerId = await this.supraMapa.get('contrato', contratoId);
+      if (customerId) {
+        const balance = await this.supra.getBalance(customerId);
+        return minorToPesos(balance.receivable_balance);
+      }
+    }
+    const [facturadoAgg, pagadoAgg] = await Promise.all([
+      this.prisma.timbrado.aggregate({
+        where: { contratoId, estado: 'Timbrada OK' },
+        _sum: { total: true },
+      }),
+      this.prisma.pago.aggregate({ where: { contratoId }, _sum: { monto: true } }),
+    ]);
+    return Number(facturadoAgg._sum.total ?? 0) - Number(pagadoAgg._sum.monto ?? 0);
+  }
 
   async findAll() {
     return this.prisma.contrato.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  /**
+   * Listado paginado con filtro incremental para integradores (conector de
+   * ingesta de SUPRA): orden estable ascendente + `updatedSince` server-side.
+   * El GET sin `page` conserva la respuesta legacy (array completo).
+   */
+  async findAllPaginado(params: { page: number; limit: number; updatedSince?: string }) {
+    const where = params.updatedSince
+      ? { updatedAt: { gte: new Date(params.updatedSince) } }
+      : {};
+    const [data, total] = await Promise.all([
+      this.prisma.contrato.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+      this.prisma.contrato.count({ where }),
+    ]);
+    return { data, total, page: params.page, limit: params.limit };
   }
 
   async findOne(id: string) {
@@ -215,24 +264,15 @@ export class ContratosService {
     });
     if (!contrato) throw new NotFoundException('Contrato no encontrado');
 
-    const [totalFacturadoAgg, totalPagadoAgg, convenioActivo] = await Promise.all([
-      this.prisma.timbrado.aggregate({
-        where: { contratoId, estado: 'Timbrada OK' },
-        _sum: { total: true },
-      }),
-      this.prisma.pago.aggregate({
-        where: { contratoId },
-        _sum: { monto: true },
-      }),
+    const [saldo, convenioActivo] = await Promise.all([
+      this.saldoPorCobrar(contratoId),
       this.prisma.convenio.findFirst({
         where: { contratoId, estado: 'Activo' },
         select: { id: true, estado: true },
       }),
     ]);
 
-    const totalFacturado = Number(totalFacturadoAgg._sum.total ?? 0);
-    const totalPagado = Number(totalPagadoAgg._sum.monto ?? 0);
-    const montoAdeudo = Math.max(0, totalFacturado - totalPagado);
+    const montoAdeudo = Math.max(0, saldo);
     const tieneAdeudo = montoAdeudo > 0.01;
 
     const estadoNorm = contrato.estado ?? '';
@@ -328,16 +368,9 @@ export class ContratosService {
     });
     if (!contrato) throw new NotFoundException('Contrato no encontrado');
 
-    const [totalFacturadoAgg, totalPagadoAgg, ultimosPagos, ultimasFacturas, quejasAbiertas] =
+    const [saldoSupra, ultimosPagos, ultimasFacturas, quejasAbiertas] =
       await Promise.all([
-        this.prisma.timbrado.aggregate({
-          where: { contratoId, estado: 'Timbrada OK' },
-          _sum: { total: true },
-        }),
-        this.prisma.pago.aggregate({
-          where: { contratoId },
-          _sum: { monto: true },
-        }),
+        this.saldoPorCobrar(contratoId),
         this.prisma.pago.findMany({
           where: { contratoId },
           orderBy: { fecha: 'desc' },
@@ -368,9 +401,18 @@ export class ContratosService {
         }),
       ]);
 
+    // Totales de presentación desde el espejo local (proyección completa);
+    // el saldo autoritativo viene de saldoPorCobrar (SUPRA cuando aplica).
+    const [totalFacturadoAgg, totalPagadoAgg] = await Promise.all([
+      this.prisma.timbrado.aggregate({
+        where: { contratoId, estado: 'Timbrada OK' },
+        _sum: { total: true },
+      }),
+      this.prisma.pago.aggregate({ where: { contratoId }, _sum: { monto: true } }),
+    ]);
     const totalFacturado = Number(totalFacturadoAgg._sum.total ?? 0);
     const totalPagado = Number(totalPagadoAgg._sum.monto ?? 0);
-    const saldo = totalFacturado - totalPagado;
+    const saldo = saldoSupra;
 
     return {
       contrato,

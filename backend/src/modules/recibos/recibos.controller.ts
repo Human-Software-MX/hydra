@@ -27,13 +27,22 @@ export class RecibosController {
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('impreso') impreso?: string,
+    @Query('updatedSince') updatedSince?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit = 20,
   ) {
     const where = {
       ...(contratoId && { contratoId }),
       ...(impreso !== undefined && { impreso: impreso === 'true' }),
+      // Filtro incremental server-side para integradores (conector SUPRA):
+      // por fecha de modificación real, no por fechaVencimiento.
+      ...(updatedSince && { updatedAt: { gte: new Date(updatedSince) } }),
     };
+    // Con updatedSince, orden estable ascendente (recorrido incremental sin
+    // omisiones por inserciones concurrentes); sin él, la UI conserva desc.
+    const orderBy = updatedSince
+      ? [{ createdAt: 'asc' as const }, { id: 'asc' as const }]
+      : [{ createdAt: 'desc' as const }];
     const [data, total] = await Promise.all([
       this.prisma.recibo.findMany({
         where,
@@ -42,7 +51,7 @@ export class RecibosController {
           contrato: { select: { nombre: true, estado: true } },
           pagos: { select: { id: true, monto: true, fecha: true, tipo: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),

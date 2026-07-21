@@ -15,7 +15,6 @@ import { getPortalSaldos } from '@/api/portal';
 import {
   crearIntentoPagoPortal,
   getIntentosPagoPortal,
-  simularPagoIntentoPortal,
   type IntentoPagoCreadoDto,
   type MetodoPagoPasarela,
 } from '@/api/pasarelas';
@@ -133,22 +132,6 @@ const PagarEnLinea = ({ contratoId }: { contratoId: string }) => {
     },
     onError: (e: Error) =>
       toast({ title: 'No se pudo generar el pago', description: e.message, variant: 'destructive' }),
-  });
-
-  const simularMut = useMutation({
-    mutationFn: (intentoId: string) => simularPagoIntentoPortal(contratoId, intentoId),
-    onSuccess: () => {
-      toast({
-        title: 'Pago confirmado (simulación)',
-        description: 'El pago fue aplicado a tu contrato.',
-      });
-      setResultado(null);
-      setMontoTouched(false);
-      queryClient.invalidateQueries({ queryKey: ['portal-intentos-pago', contratoId] });
-      queryClient.invalidateQueries({ queryKey: ['portal-saldos', contratoId] });
-    },
-    onError: (e: Error) =>
-      toast({ title: 'No se pudo simular el pago', description: e.message, variant: 'destructive' }),
   });
 
   const intentos = intentosQ.data ?? [];
@@ -412,20 +395,18 @@ const PagarEnLinea = ({ contratoId }: { contratoId: string }) => {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {i.estado === 'pendiente' && (
-                      <button
-                        onClick={() => simularMut.mutate(i.id)}
-                        disabled={simularMut.isPending}
-                        title="Modo demo: confirma el pago como si la pasarela hubiera notificado"
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 border border-blue-200 rounded-lg px-2.5 py-1.5 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                    {/* El pago se confirma en el checkout de SUPRA (urlPago);
+                        la simulación local fue retirada con la pasarela. */}
+                    {i.estado === 'pendiente' && i.urlPago && (
+                      <a
+                        href={i.urlPago}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 border border-blue-200 rounded-lg px-2.5 py-1.5 hover:bg-blue-50 transition-colors"
                       >
-                        {simularMut.isPending && simularMut.variables === i.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                        ) : (
-                          <PlayCircle className="h-3.5 w-3.5" aria-hidden />
-                        )}
-                        Simular pago
-                      </button>
+                        <PlayCircle className="h-3.5 w-3.5" aria-hidden />
+                        Ir a pagar
+                      </a>
                     )}
                   </td>
                 </tr>

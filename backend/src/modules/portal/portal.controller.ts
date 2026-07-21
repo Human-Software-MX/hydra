@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PortalService } from './portal.service';
-import { CrearIntentoPortalDto } from '../pasarelas/dto/crear-intento.dto';
+import { CrearIntentoPortalDto } from './dto/crear-intento-portal.dto';
 
 interface AuthUser {
   id: string;

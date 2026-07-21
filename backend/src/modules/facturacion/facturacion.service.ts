@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { SupraClientService } from '../supra/supra-client.service';
+import { SupraMapService } from '../supra/supra-map.service';
+import { SupraOutboxService } from '../supra/supra-outbox.service';
+import { minorToPesos, supraRef } from '../supra/supra.config';
 import {
   calcularFactura,
   redondear,
@@ -30,6 +34,9 @@ export class FacturacionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhooks: WebhooksService,
+    private readonly supraOutbox: SupraOutboxService,
+    private readonly supraCliente: SupraClientService,
+    private readonly supraMapa: SupraMapService,
   ) {}
 
   // ─── Resolución de tarifas vigentes ───────────────────────────────────────
@@ -188,6 +195,15 @@ export class FacturacionService {
 
       return { timbradoId: timbrado.id, reciboId: recibo.id, factura };
     });
+
+    // SUPRA (fuente de verdad de la cuenta por cobrar): la obligation del
+    // recibo se ENCOLA — SUPRA caído nunca detiene la facturación; el worker
+    // del outbox la entrega con reintentos (idempotente por hydra:recibo:<id>).
+    await this.supraOutbox.encolar(
+      'obligation.create',
+      { reciboId: resultado.reciboId },
+      `${supraRef.recibo(resultado.reciboId)}:create`,
+    );
 
     // Evento para integraciones externas — fuera de la transacción y sin await
     // bloqueante: un webhook caído no afecta la facturación.
@@ -437,6 +453,12 @@ export class FacturacionService {
     estadoFinal: 'cancelado' | 'reprocesado',
   ) {
     const { lote, timbradoIds, reciboIds } = ctx;
+    // Captura contratoId por recibo ANTES del borrado (los comandos de
+    // cancelación en SUPRA lo necesitan para resolver la obligation).
+    const recibosACancelar = await this.prisma.recibo.findMany({
+      where: { id: { in: reciboIds } },
+      select: { id: true, contratoId: true },
+    });
     await this.prisma.$transaction([
       this.prisma.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } }),
       this.prisma.recibo.deleteMany({ where: { id: { in: reciboIds } } }),
@@ -453,6 +475,16 @@ export class FacturacionService {
         },
       }),
     ]);
+
+    // Cancela en SUPRA las obligations de los recibos eliminados (encolado con
+    // reintentos; si nunca llegaron a SUPRA, el comando termina en no-op).
+    for (const r of recibosACancelar) {
+      await this.supraOutbox.encolar(
+        'obligation.cancel',
+        { reciboId: r.id, contratoId: r.contratoId },
+        `${supraRef.recibo(r.id)}:cancel`,
+      );
+    }
 
     return {
       loteId: lote.id,
@@ -563,6 +595,15 @@ export class FacturacionService {
         }),
       ]);
 
+      // Cancela en SUPRA las obligations de los recibos sustituidos.
+      for (const reciboId of reciboIds) {
+        await this.supraOutbox.encolar(
+          'obligation.cancel',
+          { reciboId, contratoId: consumo.contratoId },
+          `${supraRef.recibo(reciboId)}:cancel`,
+        );
+      }
+
       const nuevo = await this.facturarConsumo(consumoId);
       const importeAnterior = Number(timbrado.total);
       return {
@@ -632,7 +673,23 @@ export class FacturacionService {
    * duplica (y compone) la deuda. Además `Pago.reciboId` es opcional: el nivel
    * contrato evita perder pagos hechos sobre el recibo más reciente.
    */
+  /**
+   * Arrastre (saldo pendiente de recibos anteriores) impreso en el recibo
+   * nuevo. Con SUPRA activo, la verdad son sus obligations abiertas de recibo
+   * (la del consumo actual aún no existe al momento del cálculo); el camino
+   * legacy conserva el neto local facturado − pagado.
+   */
   private async calcularSaldoVencido(contratoId: string, consumoIdActual: string): Promise<number> {
+    if (this.supraCliente.enabled) {
+      const customerId = await this.supraMapa.get('contrato', contratoId);
+      if (customerId) {
+        const abiertas = await this.supraCliente.listOpenObligations(customerId);
+        const abiertoMinor = abiertas
+          .filter((o) => o.external_ref?.startsWith('hydra:recibo:'))
+          .reduce((s, o) => s + Number(o.amount_due_minor) - Number(o.amount_settled_minor), 0);
+        return redondear(Math.max(0, minorToPesos(abiertoMinor)));
+      }
+    }
     const [facturadoAgg, pagadoAgg] = await Promise.all([
       this.prisma.recibo.aggregate({
         where: { contratoId, timbrado: { consumoId: { not: consumoIdActual } } },
