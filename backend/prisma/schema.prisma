@@ -2355,7 +2355,9 @@ model SupraEventoInbox {
   // Orden total del outbox de SUPRA; permite detectar huecos.
   sequence   BigInt?
   payload    Json
-  // pendiente | procesado | error | cuarentena
+  // pendiente | procesando | procesado | error | cuarentena
+  // (`procesando` = claim atómico multi-réplica; mientras dura, procesadoEn
+  //  guarda el timestamp del claim para recuperar huérfanos por timeout)
   estado     String    @default("pendiente")
   intentos   Int       @default(0)
   error      String?
@@ -2364,6 +2366,8 @@ model SupraEventoInbox {
 
   @@index([estado])
   @@index([tipo])
+  // Gap detection: la ventana LEAD(sequence) ORDER BY sequence escanea por este índice.
+  @@index([sequence])
   @@map("supra_evento_inbox")
 }
 
@@ -2375,7 +2379,9 @@ model SupraComandoOutbox {
   ruta           String // ruta relativa /v1/...
   payload        Json?
   idempotencyKey String    @unique @map("idempotency_key")
-  // pendiente | enviado | error | muerto
+  // pendiente | procesando | enviado | error | muerto
+  // (`procesando` = claim atómico multi-réplica; huérfanos se recuperan por
+  //  timeout sobre updatedAt)
   estado         String    @default("pendiente")
   intentos       Int       @default(0)
   proximoIntento DateTime? @map("proximo_intento")

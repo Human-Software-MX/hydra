@@ -1,12 +1,16 @@
 import { Global, Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { CarteraModule } from '../cartera/cartera.module';
+import { SupraAdminController } from './supra-admin.controller';
+import { SupraAdminService } from './supra-admin.service';
 import { SupraClientService } from './supra-client.service';
 import { SupraConciliacionController } from './supra-conciliacion.controller';
 import { SupraConciliacionService } from './supra-conciliacion.service';
 import { SupraEventosService } from './supra-eventos.service';
 import { SupraMapService } from './supra-map.service';
 import { SupraOutboxService } from './supra-outbox.service';
+import { SupraSettlementsController } from './supra-settlements.controller';
+import { SupraSettlementsService } from './supra-settlements.service';
 import { SupraWebhookController } from './supra-webhook.controller';
 
 /**
@@ -19,13 +23,20 @@ import { SupraWebhookController } from './supra-webhook.controller';
 @Global()
 @Module({
   imports: [PrismaModule, CarteraModule],
-  controllers: [SupraWebhookController, SupraConciliacionController],
+  controllers: [
+    SupraWebhookController,
+    SupraConciliacionController,
+    SupraSettlementsController,
+    SupraAdminController,
+  ],
   providers: [
     SupraClientService,
     SupraMapService,
     SupraEventosService,
     SupraOutboxService,
     SupraConciliacionService,
+    SupraSettlementsService,
+    SupraAdminService,
   ],
   exports: [
     SupraClientService,
@@ -33,6 +44,7 @@ import { SupraWebhookController } from './supra-webhook.controller';
     SupraEventosService,
     SupraOutboxService,
     SupraConciliacionService,
+    SupraSettlementsService,
   ],
 })
 export class SupraModule {}

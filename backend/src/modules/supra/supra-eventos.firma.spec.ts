@@ -68,4 +68,32 @@ describe('verificarFirma (Supra-Signature)', () => {
     );
     expect(() => svc.verificarFirma(firmar(body), Buffer.from(body))).toThrow(UnauthorizedException);
   });
+
+  describe('rotación de secreto (SUPRA_WEBHOOK_SECRET_NEXT)', () => {
+    const NEXT = 'whsec_next_secret';
+
+    function servicioDual(): SupraEventosService {
+      return new SupraEventosService(
+        undefined as never,
+        {
+          config: { webhookSecret: SECRET, webhookSecretNext: NEXT, webhookToleranceSec: 300 },
+        } as never,
+        undefined as never,
+        undefined as never,
+      );
+    }
+
+    it('acepta firmas del secreto vigente Y del siguiente', () => {
+      const svc = servicioDual();
+      const t = Math.floor(Date.now() / 1000);
+      expect(() => svc.verificarFirma(firmar(body, t, SECRET), Buffer.from(body))).not.toThrow();
+      expect(() => svc.verificarFirma(firmar(body, t, NEXT), Buffer.from(body))).not.toThrow();
+    });
+
+    it('sigue rechazando cualquier otro secreto', () => {
+      const svc = servicioDual();
+      const header = firmar(body, Math.floor(Date.now() / 1000), 'whsec_ajeno');
+      expect(() => svc.verificarFirma(header, Buffer.from(body))).toThrow(UnauthorizedException);
+    });
+  });
 });

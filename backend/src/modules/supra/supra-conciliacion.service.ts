@@ -32,6 +32,8 @@ export class SupraConciliacionService {
     private readonly supra: SupraClientService,
   ) {}
 
+  /** Corre la conciliación dejando bitácora en LogProceso (subTipo
+   *  `conciliacion-supra`) — insumo de GET /integraciones/supra/admin/salud. */
   async conciliar(muestra = 100): Promise<{
     revisados: number;
     conDiferencia: number;
@@ -39,6 +41,45 @@ export class SupraConciliacionService {
     diferencias: DiferenciaConciliacion[];
   }> {
     this.supra.assertEnabled();
+    const log = await this.prisma.logProceso.create({
+      data: { tipo: 'batch', subTipo: 'conciliacion-supra', estado: 'Iniciado' },
+    });
+    const inicio = Date.now();
+    try {
+      const resultado = await this.conciliarCore(muestra);
+      await this.prisma.logProceso.update({
+        where: { id: log.id },
+        data: {
+          estado: 'Completado',
+          fin: new Date(),
+          duracionMs: Date.now() - inicio,
+          registros: resultado.revisados,
+          errores: resultado.conDiferencia,
+          detalle: JSON.parse(JSON.stringify({ ...resultado, diferencias: resultado.diferencias.slice(0, 20) })),
+        },
+      });
+      return resultado;
+    } catch (e) {
+      await this.prisma.logProceso.update({
+        where: { id: log.id },
+        data: {
+          estado: 'Error',
+          fin: new Date(),
+          duracionMs: Date.now() - inicio,
+          errores: 1,
+          errorMsg: e instanceof Error ? e.message : String(e),
+        },
+      });
+      throw e;
+    }
+  }
+
+  private async conciliarCore(muestra: number): Promise<{
+    revisados: number;
+    conDiferencia: number;
+    tolerancia: number;
+    diferencias: DiferenciaConciliacion[];
+  }> {
     const TOLERANCIA = 0.01;
 
     // Muestra: los contratos sincronizados con actividad más reciente.

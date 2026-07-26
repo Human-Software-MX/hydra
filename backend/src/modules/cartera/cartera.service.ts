@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
-import { SupraClientService, SupraObligation } from '../supra/supra-client.service';
+import { SupraClientService, SupraObligation, SupraPayment } from '../supra/supra-client.service';
 import { SupraMapService } from '../supra/supra-map.service';
 import { SupraOutboxService } from '../supra/supra-outbox.service';
 import { minorToPesos, supraRef } from '../supra/supra.config';
@@ -347,7 +347,7 @@ export class CarteraService {
     // 1. Verdad financiera desde SUPRA (fuera de la transacción local).
     const [obligations, payments] = await Promise.all([
       this.supra.listAllObligationsByCustomer(customerId),
-      this.supra.listAllPaymentsByCustomer(customerId).catch(() => [] as never[]),
+      this.supra.listAllPaymentsByCustomer(customerId).catch(() => [] as SupraPayment[]),
     ]);
     const prefijo = 'hydra:recibo:';
     const deRecibo = obligations.filter((o) => o.external_ref?.startsWith(prefijo));
@@ -356,14 +356,25 @@ export class CarteraService {
     );
 
     // Allocations por obligation (detalle por payment — incluye la fecha).
+    // Los payments sin allocations en el listado se resuelven con GET por lotes
+    // de 10 en paralelo (antes: un GET secuencial por payment — N+1).
+    const sinDetalle = payments.filter((p) => !p.allocations);
+    const detallePorId = new Map(payments.filter((p) => p.allocations).map((p) => [p.id, p]));
+    for (let i = 0; i < sinDetalle.length; i += 10) {
+      const lote = await Promise.all(
+        sinDetalle.slice(i, i + 10).map((p) => this.supra.getPayment(p.id).catch(() => null)),
+      );
+      for (const detalle of lote) {
+        if (detalle) detallePorId.set(detalle.id, detalle);
+      }
+    }
+
     const allocationsPorObligation = new Map<
       string,
       { supraPaymentId: string; monto: number; fecha: string }[]
     >();
     for (const p of payments) {
-      const detalle = p.allocations
-        ? p
-        : await this.supra.getPayment(p.id).catch(() => null);
+      const detalle = detallePorId.get(p.id);
       if (!detalle?.allocations) continue;
       for (const a of detalle.allocations) {
         if (!reciboPorObligation.has(a.obligation)) continue;
@@ -378,15 +389,19 @@ export class CarteraService {
     }
 
     // Mapa payment SUPRA → pago espejo local (para AplicacionPago.pagoId).
+    // El reverse de los no-referenciados por external_ref va en UNA query.
     const espejoPorSupraId = new Map<string, string>();
+    const sinRef: string[] = [];
     for (const p of payments) {
       const ref = p.external_ref;
       if (ref?.startsWith('hydra:pago:')) {
         espejoPorSupraId.set(p.id, ref.slice('hydra:pago:'.length));
       } else {
-        const local = await this.supraMapa.reverse('pago', p.id);
-        if (local) espejoPorSupraId.set(p.id, local);
+        sinRef.push(p.id);
       }
+    }
+    for (const [supraId, hydraId] of await this.supraMapa.reverseMany('pago', sinRef)) {
+      espejoPorSupraId.set(supraId, hydraId);
     }
     const pagosLocales = await this.prisma.pago.findMany({
       where: { id: { in: [...new Set(espejoPorSupraId.values())] } },
@@ -656,6 +671,18 @@ export class CarteraService {
         where: { id: { in: abiertos.map((d) => d.id) } },
         data: { estado: 'incobrable', recalculadoEn: new Date() },
       });
+      // SUPRA (fuente de verdad financiera): write-off de las obligations de
+      // los recibos marcados, encolado en la MISMA transacción del cambio
+      // local (autorización ya validada aquí).
+      for (const d of abiertos) {
+        if (!d.reciboId) continue;
+        await this.supraOutbox.encolar(
+          'obligation.write_off',
+          { reciboId: d.reciboId, contratoId, motivo: params.motivo },
+          `${supraRef.recibo(d.reciboId)}:write_off`,
+          { tx },
+        );
+      }
       return tx.accionCobranza.create({
         data: {
           contratoId,
@@ -669,17 +696,6 @@ export class CarteraService {
         },
       });
     });
-
-    // SUPRA (fuente de verdad financiera): write-off de las obligations de los
-    // recibos marcados, encolado con reintentos (autorización ya validada aquí).
-    for (const d of abiertos) {
-      if (!d.reciboId) continue;
-      await this.supraOutbox.encolar(
-        'obligation.write_off',
-        { reciboId: d.reciboId, contratoId, motivo: params.motivo },
-        `${supraRef.recibo(d.reciboId)}:write_off`,
-      );
-    }
 
     // Refresca el estado de cuenta (los incobrables salen de saldos y buckets).
     await this.recalcularContrato(contratoId);

@@ -193,17 +193,20 @@ export class FacturacionService {
         },
       });
 
+      // SUPRA (fuente de verdad de la cuenta por cobrar): la obligation del
+      // recibo se ENCOLA EN LA MISMA TRANSACCIÓN que el recibo — o existe el
+      // recibo con su comando, o no existe ninguno; SUPRA caído nunca detiene
+      // la facturación (el worker del outbox entrega con reintentos,
+      // idempotente por hydra:recibo:<id>).
+      await this.supraOutbox.encolar(
+        'obligation.create',
+        { reciboId: recibo.id },
+        `${supraRef.recibo(recibo.id)}:create`,
+        { tx },
+      );
+
       return { timbradoId: timbrado.id, reciboId: recibo.id, factura };
     });
-
-    // SUPRA (fuente de verdad de la cuenta por cobrar): la obligation del
-    // recibo se ENCOLA — SUPRA caído nunca detiene la facturación; el worker
-    // del outbox la entrega con reintentos (idempotente por hydra:recibo:<id>).
-    await this.supraOutbox.encolar(
-      'obligation.create',
-      { reciboId: resultado.reciboId },
-      `${supraRef.recibo(resultado.reciboId)}:create`,
-    );
 
     // Evento para integraciones externas — fuera de la transacción y sin await
     // bloqueante: un webhook caído no afecta la facturación.
@@ -459,32 +462,33 @@ export class FacturacionService {
       where: { id: { in: reciboIds } },
       select: { id: true, contratoId: true },
     });
-    await this.prisma.$transaction([
-      this.prisma.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } }),
-      this.prisma.recibo.deleteMany({ where: { id: { in: reciboIds } } }),
-      this.prisma.timbrado.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } });
+      await tx.recibo.deleteMany({ where: { id: { in: reciboIds } } });
+      await tx.timbrado.updateMany({
         where: { id: { in: timbradoIds } },
         data: { estado: 'Cancelado', consumoId: null },
-      }),
-      this.prisma.loteFacturacion.update({
+      });
+      await tx.loteFacturacion.update({
         where: { id: lote.id },
         data: {
           estado: estadoFinal,
           motivoCancelacion: dto.motivo,
           canceladoPor: dto.canceladoPor ?? null,
         },
-      }),
-    ]);
-
-    // Cancela en SUPRA las obligations de los recibos eliminados (encolado con
-    // reintentos; si nunca llegaron a SUPRA, el comando termina en no-op).
-    for (const r of recibosACancelar) {
-      await this.supraOutbox.encolar(
-        'obligation.cancel',
-        { reciboId: r.id, contratoId: r.contratoId },
-        `${supraRef.recibo(r.id)}:cancel`,
-      );
-    }
+      });
+      // Cancela en SUPRA las obligations de los recibos eliminados — encolado
+      // en la MISMA transacción del borrado (si nunca llegaron a SUPRA, el
+      // comando termina en no-op).
+      for (const r of recibosACancelar) {
+        await this.supraOutbox.encolar(
+          'obligation.cancel',
+          { reciboId: r.id, contratoId: r.contratoId },
+          `${supraRef.recibo(r.id)}:cancel`,
+          { tx },
+        );
+      }
+    });
 
     return {
       loteId: lote.id,
@@ -586,23 +590,24 @@ export class FacturacionService {
       const reciboIds = timbrado.recibos.map((r) => r.id);
       await this.verificarSinPagos([timbrado.id], reciboIds, 'La factura del consumo');
 
-      await this.prisma.$transaction([
-        this.prisma.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } }),
-        this.prisma.recibo.deleteMany({ where: { id: { in: reciboIds } } }),
-        this.prisma.timbrado.update({
+      await this.prisma.$transaction(async (tx) => {
+        await tx.documentoCartera.deleteMany({ where: { reciboId: { in: reciboIds } } });
+        await tx.recibo.deleteMany({ where: { id: { in: reciboIds } } });
+        await tx.timbrado.update({
           where: { id: timbrado.id },
           data: { estado: 'Cancelado', consumoId: null },
-        }),
-      ]);
-
-      // Cancela en SUPRA las obligations de los recibos sustituidos.
-      for (const reciboId of reciboIds) {
-        await this.supraOutbox.encolar(
-          'obligation.cancel',
-          { reciboId, contratoId: consumo.contratoId },
-          `${supraRef.recibo(reciboId)}:cancel`,
-        );
-      }
+        });
+        // Cancela en SUPRA las obligations de los recibos sustituidos —
+        // encolado en la MISMA transacción del borrado.
+        for (const reciboId of reciboIds) {
+          await this.supraOutbox.encolar(
+            'obligation.cancel',
+            { reciboId, contratoId: consumo.contratoId },
+            `${supraRef.recibo(reciboId)}:cancel`,
+            { tx },
+          );
+        }
+      });
 
       const nuevo = await this.facturarConsumo(consumoId);
       const importeAnterior = Number(timbrado.total);

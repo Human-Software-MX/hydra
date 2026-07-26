@@ -149,11 +149,12 @@ export class PagosService {
   }
 
   /**
-   * Listado con SUPRA como fuente de verdad. `GET /v1/payments` no filtra por
-   * customer, así que se recorren páginas (cap defensivo) y se filtra aquí;
-   * cada pago se enriquece con el espejo local (tipo/concepto/contrato) vía
-   * external_ref. Pagos aún no espejados (p. ej. checkout SUPRA recién
-   * confirmado) se muestran con metadatos mínimos.
+   * Listado con SUPRA como fuente de verdad. Con contrato, el filtro es
+   * server-side (`GET /v1/payments?customer=`); sin contrato se recorren
+   * páginas del tenant (cap defensivo con warning). Cada pago se enriquece
+   * con el espejo local (tipo/concepto/contrato) vía external_ref. Pagos aún
+   * no espejados (p. ej. checkout SUPRA recién confirmado) se muestran con
+   * metadatos mínimos.
    */
   async listar(params: { contratoId?: string; origen?: string; page: number; limit: number }) {
     const { contratoId, origen, page, limit } = params;
@@ -169,17 +170,35 @@ export class PagosService {
       contratoId: string | null;
     }[] = [];
     let cursor: string | undefined;
-    for (let i = 0; i < 20 && recolectados.length < objetivo + 1; i++) {
-      const res = await this.supra.listPayments({ limit: 100, starting_after: cursor });
+    const MAX_PAGINAS = 20;
+    let agotado = false;
+    for (let i = 0; i < MAX_PAGINAS && recolectados.length < objetivo + 1; i++) {
+      const res = await this.supra.listPayments({
+        customer: supraCustomerId ?? undefined,
+        limit: 100,
+        starting_after: cursor,
+      });
       for (const p of res.data) {
+        // Defensa en profundidad: el filtro real ya es server-side.
         if (supraCustomerId && p.customer !== supraCustomerId) continue;
         const ctr = supraCustomerId
           ? contratoId!
           : await this.supraMapa.reverse('contrato', p.customer);
         recolectados.push({ supra: p, contratoId: ctr });
       }
-      if (!res.has_more || !res.next_cursor) break;
+      if (!res.has_more || !res.next_cursor) {
+        agotado = true;
+        break;
+      }
       cursor = res.next_cursor;
+    }
+    // Solo el cap duro es truncación real; parar por tener la página completa
+    // es la paginación esperada.
+    if (!agotado && recolectados.length < objetivo + 1) {
+      this.logger.warn(
+        `listar(contratoId=${contratoId ?? '-'}, page=${page}): cap de ${MAX_PAGINAS} páginas alcanzado ` +
+          `con has_more=true (${recolectados.length} pagos) — el total reportado está TRUNCADO`,
+      );
     }
 
     // Enriquecimiento con el espejo local por external_ref (hydra:pago:<id>).

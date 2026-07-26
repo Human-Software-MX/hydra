@@ -9,6 +9,8 @@ export class SupraApiError extends Error {
     message: string,
     public readonly param?: string,
     public readonly retryable = false,
+    /** ms sugeridos por el header Retry-After de un 429 (si vino). */
+    public readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'SupraApiError';
@@ -118,6 +120,17 @@ export interface SupraBalance {
   receivable_balance: string;
 }
 
+/** Envelope de evento del log replayable de SUPRA (`GET /v1/events`). */
+export interface SupraEventoRemoto {
+  object?: string;
+  id: string;
+  type: string;
+  created: string;
+  tenant_id: string;
+  data: Record<string, unknown>;
+  sequence?: number | string;
+}
+
 /**
  * Cliente HTTP server-to-server hacia la API /v1 de SUPRA.
  *
@@ -133,6 +146,14 @@ export class SupraClientService {
   private readonly logger = new Logger(SupraClientService.name);
   readonly config: SupraConfig = supraConfig();
 
+  // ── Circuit breaker de LECTURAS (fail-fast; §E.1 de la auditoría) ──────────
+  // Solo aplica a GETs: los POST idempotentes ya tienen outbox/reintentos y
+  // nunca deben quedar en fail-fast silencioso.
+  private static readonly BREAKER_UMBRAL = 5;
+  private static readonly BREAKER_COOLDOWN_MS = 30_000;
+  private fallosConsecutivosLectura = 0;
+  private breakerAbiertoHasta = 0;
+
   get enabled(): boolean {
     return this.config.enabled;
   }
@@ -144,7 +165,72 @@ export class SupraClientService {
     }
   }
 
+  /**
+   * Request con reintentos (§E.1): backoff exponencial + jitter, máx 3 intentos
+   * para GETs y POSTs idempotentes (misma Idempotency-Key en cada intento),
+   * 429 honrando Retry-After. Los POST sin Idempotency-Key NO se reintentan.
+   */
   async request<T>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+    opts?: { idempotencyKey?: string; correlationId?: string },
+  ): Promise<T> {
+    const esLectura = method === 'GET';
+    const reintentable = esLectura || Boolean(opts?.idempotencyKey);
+    const maxIntentos = reintentable ? 3 : 1;
+
+    if (esLectura && Date.now() < this.breakerAbiertoHasta) {
+      throw new SupraApiError(
+        0,
+        'circuit_open',
+        `SUPRA en fail-fast por fallos consecutivos (cooldown ${SupraClientService.BREAKER_COOLDOWN_MS / 1000}s)`,
+        undefined,
+        true,
+      );
+    }
+
+    let ultimoError: unknown;
+    for (let intento = 1; intento <= maxIntentos; intento++) {
+      try {
+        const resultado = await this.requestOnce<T>(method, path, body, opts);
+        if (esLectura) this.fallosConsecutivosLectura = 0;
+        return resultado;
+      } catch (err) {
+        ultimoError = err;
+        const apiErr = err instanceof SupraApiError ? err : null;
+        const transitorio =
+          apiErr !== null &&
+          (apiErr.status === 0 || apiErr.status === 429 || apiErr.status >= 500 || apiErr.retryable);
+
+        // El breaker solo cuenta indisponibilidad real (red/timeout/5xx).
+        if (esLectura && apiErr && (apiErr.status === 0 || apiErr.status >= 500)) {
+          this.fallosConsecutivosLectura++;
+          if (this.fallosConsecutivosLectura >= SupraClientService.BREAKER_UMBRAL) {
+            this.breakerAbiertoHasta = Date.now() + SupraClientService.BREAKER_COOLDOWN_MS;
+            this.fallosConsecutivosLectura = 0;
+            this.logger.warn(
+              `Circuit breaker de lecturas SUPRA abierto por ${SupraClientService.BREAKER_COOLDOWN_MS / 1000}s`,
+            );
+          }
+        }
+
+        if (!transitorio || intento >= maxIntentos) throw err;
+        const backoff = Math.min(250 * 2 ** (intento - 1), 2_000) + Math.floor(Math.random() * 250);
+        const espera =
+          apiErr?.status === 429 && apiErr.retryAfterMs
+            ? Math.min(apiErr.retryAfterMs, 5_000)
+            : backoff;
+        this.logger.warn(
+          `SUPRA ${method} ${path} intento ${intento}/${maxIntentos} falló (${apiErr?.code ?? 'error'}); reintento en ${espera}ms`,
+        );
+        await new Promise((r) => setTimeout(r, espera));
+      }
+    }
+    throw ultimoError;
+  }
+
+  private async requestOnce<T>(
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: unknown,
@@ -175,7 +261,15 @@ export class SupraClientService {
       if (!res.ok) {
         const code = json?.code ?? 'unknown';
         const message = json?.message ?? `HTTP ${res.status} de SUPRA en ${method} ${path}`;
-        throw new SupraApiError(res.status, code, message, json?.param, Boolean(json?.retryable));
+        const retryAfterSec = Number(res.headers?.get?.('retry-after'));
+        throw new SupraApiError(
+          res.status,
+          code,
+          message,
+          json?.param,
+          Boolean(json?.retryable),
+          Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : undefined,
+        );
       }
       return json as T;
     } catch (err) {
@@ -335,21 +429,27 @@ export class SupraClientService {
   async listAllPaymentsByCustomer(customerId: string): Promise<SupraPayment[]> {
     const out: SupraPayment[] = [];
     let cursor: string | undefined;
-    for (let i = 0; i < 50; i++) {
+    const MAX_PAGINAS = 50;
+    for (let i = 0; i < MAX_PAGINAS; i++) {
       const res = await this.listPayments({ customer: customerId, limit: 100, starting_after: cursor });
       out.push(...res.data);
-      if (!res.has_more || !res.next_cursor) break;
+      if (!res.has_more || !res.next_cursor) return out;
       cursor = res.next_cursor;
     }
+    this.logger.warn(
+      `listAllPaymentsByCustomer(${customerId}): cap de ${MAX_PAGINAS} páginas alcanzado con has_more=true — resultado TRUNCADO`,
+    );
     return out;
   }
 
   /** Todas las obligations de un customer en todos los estados (paginado). */
   async listAllObligationsByCustomer(customerId: string): Promise<SupraObligation[]> {
     const out: SupraObligation[] = [];
+    const MAX_PAGINAS = 50;
     for (const status of ['issued', 'partially_settled', 'settled', 'canceled', 'written_off']) {
       let cursor: string | undefined;
-      for (let i = 0; i < 50; i++) {
+      let agotado = false;
+      for (let i = 0; i < MAX_PAGINAS; i++) {
         const res = await this.listObligations({
           customer: customerId,
           status,
@@ -357,11 +457,29 @@ export class SupraClientService {
           starting_after: cursor,
         });
         out.push(...res.data);
-        if (!res.has_more || !res.next_cursor) break;
+        if (!res.has_more || !res.next_cursor) {
+          agotado = true;
+          break;
+        }
         cursor = res.next_cursor;
+      }
+      if (!agotado) {
+        this.logger.warn(
+          `listAllObligationsByCustomer(${customerId}): cap de ${MAX_PAGINAS} páginas alcanzado en status=${status} — resultado TRUNCADO`,
+        );
       }
     }
     return out;
+  }
+
+  // ── Events (log replayable de SUPRA — backfill de huecos del inbox) ─────────
+
+  /** Página del log de eventos del tenant a partir de un sequence exclusivo. */
+  listEvents(params: { after?: string | number | bigint; limit?: number }): Promise<SupraList<SupraEventoRemoto>> {
+    const q = new URLSearchParams();
+    if (params.after !== undefined) q.set('after', String(params.after));
+    q.set('limit', String(params.limit ?? 100));
+    return this.request<SupraList<SupraEventoRemoto>>('GET', `/v1/events?${q.toString()}`);
   }
 
   // ── Payment plans ───────────────────────────────────────────────────────────

@@ -60,15 +60,25 @@ export class ConveniosService {
 
       const planes: SupraPaymentPlan[] = [];
       let cursor: string | undefined;
-      for (let i = 0; i < 20; i++) {
+      const MAX_PAGINAS = 20;
+      let agotado = false;
+      for (let i = 0; i < MAX_PAGINAS; i++) {
         const res = await this.supra.listPaymentPlans({
           customer: customerId ?? undefined,
           limit: 100,
           starting_after: cursor,
         });
         planes.push(...res.data);
-        if (!res.has_more || !res.next_cursor) break;
+        if (!res.has_more || !res.next_cursor) {
+          agotado = true;
+          break;
+        }
         cursor = res.next_cursor;
+      }
+      if (!agotado) {
+        this.logger.warn(
+          `findAll convenios: cap de ${MAX_PAGINAS} páginas de payment plans alcanzado con has_more=true — listado TRUNCADO`,
+        );
       }
 
       const mapeados = await Promise.all(planes.map((p) => this.planADto(p)));
