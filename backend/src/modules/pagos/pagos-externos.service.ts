@@ -268,7 +268,8 @@ export class PagosExternosService {
       const sourceId = await this.supraMapa.get('statement_source', recaudador);
       if (!sourceId) return; // el archivo se subió antes de habilitar la exportación
       let cursor: string | undefined;
-      for (let i = 0; i < 20; i++) {
+      const MAX_PAGINAS = 20;
+      for (let i = 0; i < MAX_PAGINAS; i++) {
         const res = await this.supra.listStatementLines({
           source: sourceId,
           limit: 100,
@@ -288,6 +289,9 @@ export class PagosExternosService {
         if (!res.has_more || !res.next_cursor) return;
         cursor = res.next_cursor;
       }
+      this.logger.warn(
+        `matchearLineaSupra(${pagoExternoId}): cap de ${MAX_PAGINAS} páginas alcanzado sin localizar la línea — búsqueda TRUNCADA`,
+      );
     } catch (err) {
       this.logger.warn(
         `Match de statement line falló (${pagoExternoId}): ${err instanceof Error ? err.message : err}`,

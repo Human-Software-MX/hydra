@@ -12,6 +12,12 @@ export interface SupraConfig {
   apiKey: string;
   /** Secreto whsec_… devuelto por POST /v1/webhook_endpoints. */
   webhookSecret: string;
+  /**
+   * Secreto ADICIONAL aceptado durante una rotación (SUPRA_WEBHOOK_SECRET_NEXT):
+   * se despliega el nuevo secreto aquí, se rota en SUPRA y luego se promueve a
+   * SUPRA_WEBHOOK_SECRET — sin ventana de webhooks rechazados.
+   */
+  webhookSecretNext: string;
   /** Tolerancia anti-replay del webhook, en segundos. */
   webhookToleranceSec: number;
   /** Timeout por request HTTP a SUPRA, en ms. */
@@ -30,6 +36,7 @@ export function supraConfig(): SupraConfig {
     baseUrl,
     apiKey: process.env.SUPRA_API_KEY ?? '',
     webhookSecret: process.env.SUPRA_WEBHOOK_SECRET ?? '',
+    webhookSecretNext: process.env.SUPRA_WEBHOOK_SECRET_NEXT ?? '',
     webhookToleranceSec: Number(process.env.SUPRA_WEBHOOK_TOLERANCE ?? 300),
     httpTimeoutMs: Number(process.env.SUPRA_HTTP_TIMEOUT_MS ?? 10_000),
     publicUrl: (process.env.SUPRA_PUBLIC_URL ?? baseUrl).replace(/\/+$/, ''),

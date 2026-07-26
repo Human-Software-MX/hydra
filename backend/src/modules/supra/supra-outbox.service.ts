@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,14 +6,22 @@ import { SupraApiError, SupraClientService } from './supra-client.service';
 import { SupraMapService } from './supra-map.service';
 import { supraRef } from './supra.config';
 
+/** Claims en `procesando` más viejos que esto se consideran huérfanos (réplica caída). */
+const CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+
 /**
  * Outbox de comandos hacia SUPRA (`supra_comando_outbox`).
  *
  * Para operaciones donde SUPRA no debe estar en el camino crítico (facturación
  * masiva, cancelación de lotes, incobrables): el comando se ENCOLA en la misma
- * conversación que el cambio local y un worker lo entrega con reintentos y
- * backoff. La idempotencia extremo-a-extremo la garantizan la Idempotency-Key
- * determinista y los external_ref (`hydra:<entidad>:<id>`) del lado SUPRA.
+ * transacción que el cambio local (pasando el TransactionClient a `encolar`) y
+ * un worker lo entrega con reintentos y backoff. La idempotencia
+ * extremo-a-extremo la garantizan la Idempotency-Key determinista y los
+ * external_ref (`hydra:<entidad>:<id>`) del lado SUPRA.
+ *
+ * Concurrencia multi-réplica: el claim de cada comando es atómico en BD
+ * (updateMany condicionado por estado → `procesando`); los claims huérfanos
+ * se recuperan por timeout usando `updatedAt`.
  *
  * Comandos semánticos (payload mínimo; la resolución de IDs ocurre al procesar):
  *   obligation.create    { reciboId }
@@ -23,7 +31,6 @@ import { supraRef } from './supra.config';
 @Injectable()
 export class SupraOutboxService {
   private readonly logger = new Logger(SupraOutboxService.name);
-  private procesando = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -31,23 +38,28 @@ export class SupraOutboxService {
     private readonly mapa: SupraMapService,
   ) {}
 
-  /** Encola un comando (idempotente por key) y dispara el worker sin bloquear. */
+  /**
+   * Encola un comando (idempotente por key). Con `opts.tx` el INSERT ocurre en
+   * la MISMA transacción del cambio local (atomicidad cambio+comando); sin tx,
+   * además dispara el worker sin bloquear.
+   */
   async encolar(
     tipo: 'obligation.create' | 'obligation.cancel' | 'obligation.write_off',
     payload: Record<string, unknown>,
     idempotencyKey: string,
-    correlationId?: string,
+    opts?: { correlationId?: string; tx?: Prisma.TransactionClient },
   ): Promise<void> {
     if (!this.client.enabled) return;
+    const db = opts?.tx ?? this.prisma;
     try {
-      await this.prisma.supraComandoOutbox.create({
+      await db.supraComandoOutbox.create({
         data: {
           tipo,
           metodo: 'POST',
           ruta: '/v1/obligations',
           payload: payload as Prisma.InputJsonValue,
           idempotencyKey,
-          correlationId: correlationId ?? null,
+          correlationId: opts?.correlationId ?? null,
         },
       });
     } catch (err) {
@@ -55,9 +67,13 @@ export class SupraOutboxService {
       if ((err as { code?: string }).code !== 'P2002') throw err;
       return;
     }
-    void this.procesarPendientes().catch((e) =>
-      this.logger.error(`Worker de outbox falló: ${e instanceof Error ? e.message : e}`),
-    );
+    // Dentro de una transacción el comando aún no es visible para el worker;
+    // lo recoge el cron (≤1 min tras el commit).
+    if (!opts?.tx) {
+      void this.procesarPendientes().catch((e) =>
+        this.logger.error(`Worker de outbox falló: ${e instanceof Error ? e.message : e}`),
+      );
+    }
   }
 
   /** Worker: cada minuto entrega comandos pendientes/en reintento. */
@@ -68,40 +84,70 @@ export class SupraOutboxService {
   }
 
   async procesarPendientes(): Promise<void> {
-    if (this.procesando || !this.client.enabled) return;
-    this.procesando = true;
-    try {
-      const ahora = new Date();
-      const pendientes = await this.prisma.supraComandoOutbox.findMany({
-        where: {
-          estado: { in: ['pendiente', 'error'] },
-          OR: [{ proximoIntento: null }, { proximoIntento: { lte: ahora } }],
-        },
-        orderBy: { createdAt: 'asc' },
-        take: 200,
-      });
+    if (!this.client.enabled) return;
 
-      for (const cmd of pendientes) {
-        try {
-          const respuesta = await this.ejecutar(
-            cmd.tipo,
-            (cmd.payload ?? {}) as Record<string, unknown>,
-          );
-          await this.prisma.supraComandoOutbox.update({
-            where: { id: cmd.id },
-            data: {
-              estado: 'enviado',
-              respuesta: (respuesta ?? {}) as Prisma.InputJsonValue,
-              error: null,
-            },
-          });
-        } catch (err) {
-          await this.registrarFallo(cmd.id, cmd.intentos, err);
-        }
+    // Recupera claims huérfanos de réplicas caídas (procesando desde hace >10 min).
+    await this.prisma.supraComandoOutbox.updateMany({
+      where: { estado: 'procesando', updatedAt: { lt: new Date(Date.now() - CLAIM_TIMEOUT_MS) } },
+      data: { estado: 'pendiente', proximoIntento: null },
+    });
+
+    const ahora = new Date();
+    const candidatos = await this.prisma.supraComandoOutbox.findMany({
+      where: {
+        estado: { in: ['pendiente', 'error'] },
+        OR: [{ proximoIntento: null }, { proximoIntento: { lte: ahora } }],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+      select: { id: true },
+    });
+
+    for (const { id } of candidatos) {
+      // Claim atómico: solo una réplica gana el comando.
+      const claim = await this.prisma.supraComandoOutbox.updateMany({
+        where: { id, estado: { in: ['pendiente', 'error'] } },
+        data: { estado: 'procesando' },
+      });
+      if (claim.count === 0) continue; // otra réplica lo tomó
+
+      const cmd = await this.prisma.supraComandoOutbox.findUnique({ where: { id } });
+      if (!cmd) continue;
+      try {
+        const respuesta = await this.ejecutar(
+          cmd.tipo,
+          (cmd.payload ?? {}) as Record<string, unknown>,
+        );
+        await this.prisma.supraComandoOutbox.update({
+          where: { id: cmd.id },
+          data: {
+            estado: 'enviado',
+            respuesta: (respuesta ?? {}) as Prisma.InputJsonValue,
+            error: null,
+          },
+        });
+      } catch (err) {
+        await this.registrarFallo(cmd.id, cmd.intentos, err);
       }
-    } finally {
-      this.procesando = false;
     }
+  }
+
+  /** Revive un comando `muerto` (admin): reset de intentos/estado. */
+  async replayMuerto(id: string): Promise<{ id: string; estado: string }> {
+    const cmd = await this.prisma.supraComandoOutbox.findUnique({
+      where: { id },
+      select: { id: true, estado: true },
+    });
+    if (!cmd) throw new NotFoundException('Comando de outbox no encontrado');
+    if (cmd.estado !== 'muerto') {
+      throw new NotFoundException(`El comando ${id} no está muerto (estado: ${cmd.estado})`);
+    }
+    await this.prisma.supraComandoOutbox.update({
+      where: { id },
+      data: { estado: 'pendiente', intentos: 0, proximoIntento: null, error: null },
+    });
+    void this.procesarPendientes().catch(() => undefined);
+    return { id, estado: 'pendiente' };
   }
 
   private async registrarFallo(id: string, intentosPrevios: number, err: unknown): Promise<void> {

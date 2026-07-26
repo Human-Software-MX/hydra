@@ -44,6 +44,16 @@ export class SupraMapService {
     return row?.hydraId ?? null;
   }
 
+  /** Reverse masivo (una sola query): supraId → hydraId de los mapeados. */
+  async reverseMany(entidad: SupraEntidad, supraIds: string[]): Promise<Map<string, string>> {
+    if (supraIds.length === 0) return new Map();
+    const rows = await this.prisma.supraMapa.findMany({
+      where: { entidad, supraId: { in: supraIds } },
+      select: { hydraId: true, supraId: true },
+    });
+    return new Map(rows.map((r) => [r.supraId, r.hydraId]));
+  }
+
   async save(entidad: SupraEntidad, hydraId: string, supraId: string): Promise<void> {
     await this.prisma.supraMapa.upsert({
       where: { entidad_hydraId: { entidad, hydraId } },
@@ -131,10 +141,12 @@ export class SupraMapService {
 
   /** Busca una obligation por external_ref recorriendo las del customer. */
   async findObligationByRef(customerId: string, ref: string): Promise<SupraObligation | null> {
+    const MAX_PAGINAS = 10;
     for (const status of ['issued', 'partially_settled', 'settled', 'canceled', 'written_off']) {
       let cursor: string | undefined;
+      let agotado = false;
       // Cap defensivo de 10 páginas por estado (1000 obligations por contrato).
-      for (let page = 0; page < 10; page++) {
+      for (let page = 0; page < MAX_PAGINAS; page++) {
         const res = await this.client.listObligations({
           customer: customerId,
           status,
@@ -143,8 +155,17 @@ export class SupraMapService {
         });
         const hit = res.data.find((o) => o.external_ref === ref);
         if (hit) return hit;
-        if (!res.has_more || !res.next_cursor) break;
+        if (!res.has_more || !res.next_cursor) {
+          agotado = true;
+          break;
+        }
         cursor = res.next_cursor;
+      }
+      if (!agotado) {
+        this.logger.warn(
+          `findObligationByRef(${ref}): cap de ${MAX_PAGINAS} páginas alcanzado en status=${status} ` +
+            `del customer ${customerId} — la búsqueda quedó TRUNCADA y puede reportar un falso negativo`,
+        );
       }
     }
     this.logger.warn(`Obligation con external_ref=${ref} no localizada en customer ${customerId}`);
