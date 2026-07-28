@@ -89,6 +89,32 @@ describe('SupraClientService.request', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('status=partially_settled');
   });
 
+  // El backfill de huecos mandaba `after=<sequence>`, un parámetro que SUPRA no
+  // conoce: lo ignoraba y devolvía la página MÁS VIEJA, así que el hueco nunca
+  // se rellenaba y la corrida parecía exitosa. El nombre del parámetro es el
+  // contrato; se fija aquí.
+  it('listEvents pagina por sequence con after_sequence (no after, no starting_after)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      respuesta(200, { object: 'list', data: [], has_more: false, next_cursor: null }),
+    );
+    const c = cliente();
+    await c.listEvents({ afterSequence: 40n, limit: 100 });
+
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain('after_sequence=40');
+    expect(url).not.toMatch(/[?&]after=/);
+    expect(url).not.toContain('starting_after');
+  });
+
+  it('listEvents sin cursor no manda after_sequence', async () => {
+    fetchMock.mockResolvedValueOnce(
+      respuesta(200, { object: 'list', data: [], has_more: false, next_cursor: null }),
+    );
+    const c = cliente();
+    await c.listEvents({ limit: 50 });
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('after_sequence');
+  });
+
   it('assertEnabled lanza 503 con la integración apagada', () => {
     process.env.SUPRA_INTEGRACION_ENABLED = 'false';
     const c = new SupraClientService();

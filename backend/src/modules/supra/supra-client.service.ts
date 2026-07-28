@@ -475,9 +475,24 @@ export class SupraClientService {
   // ── Events (log replayable de SUPRA — backfill de huecos del inbox) ─────────
 
   /** Página del log de eventos del tenant a partir de un sequence exclusivo. */
-  listEvents(params: { after?: string | number | bigint; limit?: number }): Promise<SupraList<SupraEventoRemoto>> {
+  /**
+   * Log de eventos de SUPRA. Para backfill de huecos se pagina con
+   * `after_sequence` (cursor por `sequence`, NO por id de evento): cuando
+   * detectamos que nos faltan las sequences 41..43 no tenemos sus ids —
+   * precisamente porque nunca nos llegaron—, así que el cursor por id
+   * (`starting_after`) no puede expresar la petición.
+   *
+   * Un cursor inservible devuelve 400: SUPRA nunca reinicia en silencio desde
+   * el evento más viejo.
+   */
+  listEvents(params: {
+    afterSequence?: string | number | bigint;
+    limit?: number;
+  }): Promise<SupraList<SupraEventoRemoto>> {
     const q = new URLSearchParams();
-    if (params.after !== undefined) q.set('after', String(params.after));
+    if (params.afterSequence !== undefined) {
+      q.set('after_sequence', String(params.afterSequence));
+    }
     q.set('limit', String(params.limit ?? 100));
     return this.request<SupraList<SupraEventoRemoto>>('GET', `/v1/events?${q.toString()}`);
   }

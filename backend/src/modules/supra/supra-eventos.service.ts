@@ -305,7 +305,7 @@ export class SupraEventosService {
     let after = desde - 1n;
     // Cap defensivo: nunca más de 50 páginas por hueco.
     for (let pagina = 0; pagina < 50; pagina++) {
-      const res = await this.client.listEvents({ after, limit: 100 });
+      const res = await this.client.listEvents({ afterSequence: after, limit: 100 });
       if (res.data.length === 0) break;
       let ultimo = after;
       for (const evento of res.data) {
@@ -340,9 +340,10 @@ export class SupraEventosService {
         return this.onPlanEstado(parsear(planSchema, evento.data, evento.type), 'Vencido');
       case 'payment_plan.completed':
         return this.onPlanCompleted(parsear(planSchema, evento.data, evento.type));
-      case 'installment_paid':
-      case 'installment.paid':
-        return this.onInstallmentPaid(parsear(installmentSchema, evento.data, evento.type));
+      // Nota: SUPRA no emite un evento por parcialidad. Una parcialidad ES una
+      // obligación, así que su liquidación llega como `obligation.settled` con
+      // `payment_plan` en el payload; ahí se sincroniza el espejo del convenio
+      // (ver el case de obligation.* más abajo).
       case 'payment_plan.created':
         return this.reproyectarPorCustomer(evento.data as { customer?: string });
       // Cambios de estado de la cuenta por cobrar → reproyección de cartera
@@ -352,7 +353,15 @@ export class SupraEventosService {
       case 'obligation.canceled':
       case 'obligation.reopened':
       case 'obligation.settled':
-      case 'obligation.partially_settled':
+      case 'obligation.partially_settled': {
+        // Si la obligación liquidada es una parcialidad de un plan, el payload
+        // trae `payment_plan`: además de reproyectar, se refresca el espejo del
+        // convenio (parcialidades restantes / estado).
+        const datos = parsear(installmentSchema, evento.data, evento.type);
+        const planId = datos.payment_plan ?? datos.plan ?? null;
+        if (planId) return this.onParcialidadLiquidada(planId);
+        return this.reproyectarPorObligation(evento.data as { id?: string; customer?: string });
+      }
       case 'obligation.written_off':
         return this.reproyectarPorObligation(evento.data as { id?: string; customer?: string });
       case 'refund.succeeded':
@@ -503,19 +512,15 @@ export class SupraEventosService {
   }
 
   /**
-   * installment_paid: avance de parcialidad. Se sincroniza el espejo del
-   * convenio (estado + parcialidades restantes) desde el plan de SUPRA y se
-   * reproyecta la cartera. Si el plan no está mapeado localmente solo se deja
-   * bitácora (el read-model financiero vive en SUPRA).
+   * Avance de parcialidad: llega como `obligation.settled` /
+   * `obligation.partially_settled` con `payment_plan` en el payload (una
+   * parcialidad ES una obligación; SUPRA no emite un evento aparte por
+   * parcialidad). Se sincroniza el espejo del convenio (estado + parcialidades
+   * restantes) desde el plan de SUPRA y se reproyecta la cartera. Si el plan no
+   * está mapeado localmente solo se deja bitácora (el read-model financiero
+   * vive en SUPRA).
    */
-  private async onInstallmentPaid(data: z.infer<typeof installmentSchema>): Promise<void> {
-    const planId = data.plan ?? data.payment_plan ?? null;
-    if (!planId) {
-      if (data.customer) return this.reproyectarPorCustomer({ customer: data.customer });
-      this.logger.warn(`installment_paid sin plan ni customer en el payload; sin efecto local`);
-      return;
-    }
-
+  private async onParcialidadLiquidada(planId: string): Promise<void> {
     const convenioId = await this.mapa.reverse('convenio', planId);
     const plan = await this.client.getPaymentPlan(planId);
 
@@ -536,7 +541,7 @@ export class SupraEventosService {
         data: { parcialidadesRestantes: abiertas, estado },
       });
     } else {
-      this.logger.log(`installment_paid: plan ${planId} sin convenio espejo; solo reproyección de cartera`);
+      this.logger.log(`Parcialidad liquidada: plan ${planId} sin convenio espejo; solo reproyección de cartera`);
     }
 
     await this.reproyectarPorCustomer({ customer: plan.customer });
