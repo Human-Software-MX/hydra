@@ -292,6 +292,23 @@ export interface AjusteFacturaParams {
   observacion?: string;
 }
 
+/** Registro (kardex) de un ajuste aplicado a una prefactura */
+export interface AjusteFacturaRegistro {
+  id: string;
+  preFacturaId: string;
+  tipoAjusteId: TipoAjusteFacturacionId;
+  tipoLabel: string;
+  area: string;
+  consumoAnterior?: number;
+  consumoNuevo?: number;
+  descuentoAplicado?: number;
+  totalAnterior: number;
+  totalNuevo: number;
+  observacion?: string;
+  /** ISO */
+  fecha: string;
+}
+
 /** Área que gestiona el convenio */
 export type ConvenioArea = 'Atención a clientes' | 'Cartera' | 'Jurídico' | 'Facturación';
 export type ConvenioEstado = 'Vigente' | 'Cumplido' | 'Vencido' | 'Cancelado';
@@ -792,6 +809,8 @@ interface DataContextType {
   calcularTarifa: (tipoServicio: string, m3: number) => { subtotal: number; cargoFijo: number; total: number };
   /** Aplica un ajuste a una prefactura según el tipo de ajuste (algoritmo por tipo). */
   aplicarAjusteFactura: (params: AjusteFacturaParams) => boolean;
+  /** Kardex de ajustes aplicados a prefacturas */
+  ajustesFactura: AjusteFacturaRegistro[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -812,6 +831,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [tarifas] = useState(initialTarifas);
   const [descuentos] = useState(initialDescuentos);
   const [preFacturas, setPreFacturas] = useState(initialPreFacturas);
+  const [ajustesFactura, setAjustesFactura] = useState<AjusteFacturaRegistro[]>([]);
   const [timbrados, setTimbrados] = useState(initialTimbrados);
   const [recibos, setRecibos] = useState(initialRecibos);
   const [pagos, setPagos] = useState(initialPagos);
@@ -958,6 +978,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const contrato = contratos.find(c => c.id === pf.contratoId);
     if (!contrato) return false;
     const tipo = params.tipoAjusteId;
+    const meta = TIPOS_AJUSTE_FACTURACION.find(t => t.id === tipo);
+    /** Agrega la entrada de kardex del ajuste aplicado */
+    const registrarAjuste = (cambios: Pick<AjusteFacturaRegistro, 'totalAnterior' | 'totalNuevo'> & Partial<AjusteFacturaRegistro>) => {
+      setAjustesFactura(prev => [
+        ...prev,
+        {
+          id: genId('AJF'),
+          preFacturaId: params.preFacturaId,
+          tipoAjusteId: tipo,
+          tipoLabel: meta?.label ?? tipo,
+          area: meta?.area ?? '',
+          observacion: params.observacion,
+          fecha: new Date().toISOString(),
+          ...cambios,
+        },
+      ]);
+    };
     if (tipo === 'actualizacion_datos' || tipo === 'correccion_lectura') {
       if (params.consumoM3 != null) {
         const { subtotal, cargoFijo, total } = calcularTarifa(contrato.tipoServicio, params.consumoM3);
@@ -969,6 +1006,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               : p
           )
         );
+        registrarAjuste({
+          consumoAnterior: pf.consumoM3,
+          consumoNuevo: params.consumoM3,
+          totalAnterior: pf.total,
+          totalNuevo: nuevoTotal,
+        });
         return true;
       }
     }
@@ -981,10 +1024,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           p.id === params.preFacturaId ? { ...p, descuento: nuevoDescuento, total: nuevoTotal } : p
         )
       );
+      registrarAjuste({
+        descuentoAplicado: descuentoAdicional,
+        totalAnterior: pf.total,
+        totalNuevo: nuevoTotal,
+      });
       return true;
     }
     if (tipo === 'corte_reconexion') {
       // Solo registro; no cambia importes por defecto
+      registrarAjuste({ totalAnterior: pf.total, totalNuevo: pf.total });
       return true;
     }
     return false;
@@ -1004,7 +1053,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addContrato, updateContrato, addMedidor, updateMedidor, addRuta, updateRuta, moveContratoToRuta,
       addLectura, updateLectura, addConsumo, updateConsumo, addPreFactura, updatePreFactura,
       addTimbrado, updateTimbrado, addRecibo, updateRecibo, addPago, calcularTarifa,
-      aplicarAjusteFactura,
+      aplicarAjusteFactura, ajustesFactura,
       addAdministracion, updateAdministracion, addZona, updateZona, addDistrito, updateDistrito,
     }}>
       {children}
