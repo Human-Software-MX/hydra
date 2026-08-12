@@ -53,6 +53,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Zero context switching required from the user
 - Go fix failing CI tests without being told how
 
+## Bug Logging
+
+When you SPOT a bug that is NOT part of the task you were asked to do (while reading code, reviewing, or debugging something else):
+
+1. Do NOT fix it or go down the rabbit hole — stay on your current task.
+2. Append an entry to `tasks/bugs.md` (create it from the template inside if missing) with:
+   - **Where**: `path/to/file.ts:line`
+   - **What**: one or two sentences — simple explanation, no jargon
+   - **How it fails**: concrete scenario (input/state → wrong result), if known
+   - Status `pending`, today's date
+3. Mention in your reply to the user that you logged it.
+
+Entries must be self-contained: another agent with zero context from your session will pick them up and fix them. Bugs you were explicitly asked to fix do NOT go here — just fix those.
+
 ## Task Management
 
 1. **Plan First**: Write plan to `tasks/todo.md` with checkable items

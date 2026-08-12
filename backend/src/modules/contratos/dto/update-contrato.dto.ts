@@ -1,14 +1,20 @@
 import { IsString, IsOptional, IsBoolean, IsNumber } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * PATCH /contratos/:id — must align with `ContratosService.update` and global ValidationPipe
  * (whitelist + forbidNonWhitelisted in `main.ts`).
  */
 export class UpdateContratoDto {
+  @ApiPropertyOptional({ nullable: true, description: 'Número de contrato CEA.' })
   @IsOptional() @IsString() ceaNumContrato?: string | null;
+  @ApiPropertyOptional({ description: 'Estado del contrato.' })
   @IsOptional() @IsString() estado?: string;
+  @ApiPropertyOptional({ description: 'Cobro domiciliado activo.' })
   @IsOptional() @IsBoolean() domiciliado?: boolean;
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional() @IsString() fechaReconexionPrevista?: string | null;
+  @ApiPropertyOptional({ description: 'Bloqueo jurídico del contrato.' })
   @IsOptional() @IsBoolean() bloqueadoJuridico?: boolean;
   @IsOptional() @IsString() razonSocial?: string | null;
   @IsOptional() @IsString() regimenFiscal?: string | null;

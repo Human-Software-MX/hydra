@@ -2,6 +2,7 @@
  * Shared UI primitives for all portal tramite wizard forms.
  * Import from here to keep tramite pages DRY.
  */
+import { createContext, useContext, useId, type ReactNode } from 'react';
 import { CheckCircle2, Upload } from 'lucide-react';
 
 // ─── Step indicator ────────────────────────────────────────────────────────
@@ -68,15 +69,71 @@ export function StepDots({ current, total }: { current: number; total: number })
 
 // ─── Form primitives ───────────────────────────────────────────────────────
 
-export function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
+/**
+ * Accesibilidad de los formularios de trámite.
+ *
+ * `Field` genera un id estable (`useId`) y lo comparte por contexto con el
+ * `Label` (→ `htmlFor`) y el control (`TextInput`/`TextArea` → `id`), de modo
+ * que el lector de pantalla anuncia la etiqueta al enfocar el campo sin tener
+ * que pasar ids a mano en cada sitio. Si hay error, `Field` lo pinta con un id
+ * propio y el control lo referencia vía `aria-describedby` + `aria-invalid`.
+ *
+ * Sólo debe envolver campos con UN control etiquetable. Para grupos (radios,
+ * checkboxes) sigue usándose `<Label>` suelto — cada opción ya lleva su propio
+ * `<label>` que envuelve al input.
+ */
+interface FieldContextValue {
+  inputId: string;
+  errorId?: string;
+  invalid: boolean;
+}
+
+const FieldContext = createContext<FieldContextValue | null>(null);
+
+export function Field({
+  children,
+  error,
+  className,
+}: {
+  children: ReactNode;
+  error?: string;
+  className?: string;
+}) {
+  const inputId = useId();
+  const errorId = error ? `${inputId}-error` : undefined;
   return (
-    <label className="block text-sm font-medium text-gray-700 mb-1">
+    <FieldContext.Provider value={{ inputId, errorId, invalid: Boolean(error) }}>
+      <div className={className}>
+        {children}
+        {error && (
+          <p id={errorId} className="text-xs text-red-500 mt-1">
+            {error}
+          </p>
+        )}
+      </div>
+    </FieldContext.Provider>
+  );
+}
+
+export function Label({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  const ctx = useContext(FieldContext);
+  return (
+    <label htmlFor={htmlFor ?? ctx?.inputId} className="block text-sm font-medium text-gray-700 mb-1">
       {children}
       {required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
   );
 }
 
+/** Standalone error line for fields not wrapped in `<Field>` (e.g. radio groups). */
 export function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="text-xs text-red-500 mt-1">{msg}</p>;
@@ -89,6 +146,7 @@ export function TextInput({
   readOnly,
   type = 'text',
   hint,
+  id,
 }: {
   value: string;
   onChange?: (v: string) => void;
@@ -96,22 +154,34 @@ export function TextInput({
   readOnly?: boolean;
   type?: string;
   hint?: string;
+  id?: string;
 }) {
+  const ctx = useContext(FieldContext);
+  const inputId = id ?? ctx?.inputId;
+  const hintId = hint && inputId ? `${inputId}-hint` : undefined;
+  const describedBy = [ctx?.errorId, hintId].filter(Boolean).join(' ') || undefined;
   return (
     <>
       <input
+        id={inputId}
         type={type}
         value={value}
         readOnly={readOnly}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
+        aria-invalid={ctx?.invalid || undefined}
+        aria-describedby={describedBy}
         className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
           readOnly
             ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
             : 'bg-white border-gray-200 text-gray-900'
         }`}
       />
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {hint && (
+        <p id={hintId} className="text-xs text-gray-400 mt-1">
+          {hint}
+        </p>
+      )}
     </>
   );
 }
@@ -121,18 +191,25 @@ export function TextArea({
   onChange,
   placeholder,
   rows = 4,
+  id,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  id?: string;
 }) {
+  const ctx = useContext(FieldContext);
+  const inputId = id ?? ctx?.inputId;
   return (
     <textarea
+      id={inputId}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
+      aria-invalid={ctx?.invalid || undefined}
+      aria-describedby={ctx?.errorId}
       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
     />
   );

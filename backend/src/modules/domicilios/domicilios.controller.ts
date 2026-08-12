@@ -7,15 +7,12 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DomiciliosService, CreateDomicilioDto, UpdateDomicilioDto } from './domicilios.service';
 
 @Controller('domicilios')
-@UseGuards(JwtAuthGuard)
 export class DomiciliosController {
   constructor(private readonly service: DomiciliosService) {}
 

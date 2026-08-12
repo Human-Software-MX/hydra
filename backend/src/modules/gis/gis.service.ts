@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GisTrackerService } from './gis-tracker.service';
+import { conMonitoreo } from '../../common/monitoreo.helper';
 
 @Injectable()
 export class GisService {
@@ -23,19 +24,26 @@ export class GisService {
   }
 
   async iniciarSync(): Promise<{ logId: string; totalCambiosPendientes: number }> {
-    const desde = await this.tracker.getFechaUltimaSyncExitosa();
-    const cambiosPendientes = await this.tracker.getCambiosPendientes({ desde: desde ?? undefined });
+    return conMonitoreo(this.prisma, 'GIS_EXPORT', async (ctx) => {
+      const desde = await this.tracker.getFechaUltimaSyncExitosa();
+      const cambiosPendientes = await this.tracker.getCambiosPendientes({
+        desde: desde ?? undefined,
+      });
 
-    const log = await this.prisma.logSincronizacion.create({
-      data: {
-        tipo: 'GIS',
-        estado: 'en_progreso',
-        totalCambios: cambiosPendientes.length,
-        cambios: { connect: cambiosPendientes.map((c) => ({ id: c.id })) },
-      },
+      const log = await this.prisma.logSincronizacion.create({
+        data: {
+          tipo: 'GIS',
+          estado: 'en_progreso',
+          totalCambios: cambiosPendientes.length,
+          cambios: { connect: cambiosPendientes.map((c) => ({ id: c.id })) },
+        },
+      });
+
+      ctx.registros = cambiosPendientes.length;
+      ctx.detalle = { logId: log.id, desde: desde?.toISOString() ?? null };
+
+      return { logId: log.id, totalCambiosPendientes: cambiosPendientes.length };
     });
-
-    return { logId: log.id, totalCambiosPendientes: cambiosPendientes.length };
   }
 
   async completarSync(

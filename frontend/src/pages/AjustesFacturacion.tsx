@@ -1,6 +1,6 @@
 import { Fragment, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Filter, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Filter, Info, Search } from 'lucide-react';
 import {
   useData,
   TIPOS_AJUSTE_FACTURACION,
@@ -10,7 +10,6 @@ import {
 } from '@/context/DataContext';
 import { hasApi } from '@/api/client';
 import { fetchAjustesTarifarios, crearAjusteTarifario } from '@/api/tarifas';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +28,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Table,
   TableBody,
@@ -70,6 +70,24 @@ function detalleAjusteLocal(a: AjusteFacturaRegistro) {
   return '—';
 }
 
+/**
+ * ¿Las prefacturas que ajusta esta pantalla viven en el servidor?
+ *
+ * Todavía no: `GET /prefacturas` deriva prefacturas de los consumos confirmados con
+ * `subtotal`/`descuento`/`total` en 0 y no existe endpoint para actualizarlas, así que
+ * la pantalla trabaja sobre el dataset demo en memoria de `DataContext`.
+ *
+ * Mientras siga así, el kardex NO puede persistirse en el servidor: la prefactura
+ * vuelve a su estado inicial en cada recarga y el ajuste persistido seguiría
+ * anunciando un "antes → después" que ya no corresponde a la fila (síntoma
+ * reportado: fila con 22 m³ y kardex "consumo 24 → 30 m³"). El kardex tiene que
+ * salir de la misma fuente que la fila que describe.
+ *
+ * Al exponer importes reales y actualización en `/prefacturas`, poner en `true`:
+ * el POST y el mapeo por contrato+periodo ya están implementados abajo.
+ */
+const PREFACTURAS_EN_SERVIDOR = false;
+
 type FiltroAjuste = 'todas' | 'con' | 'sin';
 const PILLS: { value: FiltroAjuste; label: string }[] = [
   { value: 'todas', label: 'Todas' },
@@ -78,13 +96,13 @@ const PILLS: { value: FiltroAjuste; label: string }[] = [
 ];
 
 const AjustesFacturacion = () => {
-  const useApi = hasApi();
+  /** El kardex se lee y se escribe en la misma fuente que la prefactura mostrada */
+  const useApi = hasApi() && PREFACTURAS_EN_SERVIDOR;
   const {
     preFacturas,
     contratos,
     aplicarAjusteFactura,
     ajustesFactura,
-    calcularTarifa,
     timbrados,
   } = useData();
   const { toast } = useToast();
@@ -132,6 +150,10 @@ const AjustesFacturacion = () => {
         const arr = map.get(preFacturaId);
         if (arr) arr.push(row);
         else map.set(preFacturaId, [row]);
+      }
+      /** Ajuste más reciente primero, sin importar el origen (backend, local o sin sincronizar) */
+      for (const arr of map.values()) {
+        arr.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       }
       return map;
     };
@@ -247,35 +269,25 @@ const AjustesFacturacion = () => {
     setEnviando(false);
   };
 
-  /** Persiste el ajuste como AjusteTarifario (contrato + periodo, monto original → ajustado) */
+  /**
+   * Persiste el ajuste como AjusteTarifario (contrato + periodo, monto original → ajustado).
+   * Los importes provienen del registro devuelto por `aplicarAjusteFactura`, es decir,
+   * exactamente los mismos que quedaron aplicados a la prefactura: no se recalculan aquí.
+   */
   const registrarAjusteEnServidor = (
     pf: typeof preFacturas[0],
-    tipo: TipoAjusteFacturacionId,
-    params: AjusteFacturaParams
+    registro: AjusteFacturaRegistro
   ) => {
-    const meta = TIPOS_AJUSTE_FACTURACION.find((t) => t.id === tipo);
-    const label = meta?.label ?? tipo;
-    let concepto = `${label} (solo registro)`;
-    let totalNuevo = pf.total;
-    if ((tipo === 'actualizacion_datos' || tipo === 'correccion_lectura') && params.consumoM3 != null) {
-      const contrato = contratos.find((c) => c.id === pf.contratoId);
-      // mismo algoritmo que aplicarAjusteFactura para conocer el total resultante
-      const { subtotal, cargoFijo } = calcularTarifa(contrato?.tipoServicio ?? '', params.consumoM3);
-      totalNuevo = Math.max(0, subtotal + cargoFijo - pf.descuento);
-      concepto = `${label}: consumo ${pf.consumoM3} → ${params.consumoM3} m³`;
-    } else if (tipo !== 'corte_reconexion') {
-      const descuento = params.descuentoAdicional ?? 0;
-      totalNuevo = Math.max(0, pf.total - descuento);
-      concepto = `${label}: descuento adicional ${formatCurrency(descuento)}`;
-    }
-    const motivo = observacion || label;
+    const { tipoAjusteId: tipo, tipoLabel: label, totalAnterior, totalNuevo } = registro;
+    const concepto = `${label}: ${detalleAjusteLocal(registro)}`;
+    const motivo = registro.observacion || label;
     crearAjusteMut.mutate(
       {
         contratoId: pf.contratoId,
         periodo: pf.periodo,
         tipo,
         concepto,
-        montoOriginal: pf.total,
+        montoOriginal: totalAnterior,
         montoAjustado: totalNuevo,
         motivo,
       },
@@ -286,11 +298,11 @@ const AjustesFacturacion = () => {
             {
               id: `sin-sync-${pf.id}-${Date.now()}`,
               preFacturaId: pf.id,
-              fecha: new Date().toISOString(),
+              fecha: registro.fecha,
               tipoLabel: label,
-              area: meta?.area ?? '—',
+              area: registro.area || '—',
               detalle: concepto,
-              totalAnterior: pf.total,
+              totalAnterior,
               totalNuevo,
               observacion: motivo,
               sinSincronizar: true,
@@ -316,51 +328,56 @@ const AjustesFacturacion = () => {
       preFacturaId: pf.id,
       observacion: observacion || undefined,
     };
-    if (consumoM3 !== '' && !Number.isNaN(Number(consumoM3))) {
-      params.consumoM3 = Number(consumoM3);
+    // `min={0}` en el input no impide teclear o pegar un negativo: un consumo o un
+    // descuento negativos son importes inválidos, no un ajuste "sin valor".
+    const consumo = Number(consumoM3);
+    const descuento = Number(descuentoAdicional);
+    if (consumoM3 !== '' && Number.isFinite(consumo) && consumo >= 0) {
+      params.consumoM3 = consumo;
     }
-    if (descuentoAdicional !== '' && !Number.isNaN(Number(descuentoAdicional))) {
-      params.descuentoAdicional = Number(descuentoAdicional);
+    if (descuentoAdicional !== '' && Number.isFinite(descuento) && descuento >= 0) {
+      params.descuentoAdicional = descuento;
     }
-    const ok = aplicarAjusteFactura(params);
-    setMensaje(ok ? 'ok' : 'error');
-    if (!ok) {
+    const registro = aplicarAjusteFactura(params);
+    setMensaje(registro ? 'ok' : 'error');
+    if (!registro) {
       setEnviando(false);
       return;
     }
-    if (useApi) registrarAjusteEnServidor(pf, tipo, params);
+    if (useApi) registrarAjusteEnServidor(pf, registro);
     setTimeout(cerrarDialogo, 1200);
   };
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
+      <div className="page-header flex items-center gap-2">
         <h1 className="page-title">Ajustes a la facturación</h1>
-      </div>
-
-      <div className="widget-card">
-        <h2 className="section-title">Catálogo de tipos de ajuste</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Cada tipo de ajuste aplica un algoritmo distinto al modificar la factura (actualización de datos, corrección por lectura, descuento por área, etc.).
-        </p>
-        <div className="overflow-x-auto min-w-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Área</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              aria-label="Catálogo de tipos de ajuste"
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80" align="start">
+            <p className="text-sm font-medium">Catálogo de tipos de ajuste</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Cada tipo de ajuste aplica un algoritmo distinto al modificar la factura (actualización de datos, corrección por lectura, descuento por área, etc.).
+            </p>
+            <div className="mt-3 divide-y">
               {TIPOS_AJUSTE_FACTURACION.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell>{t.label}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.area}</TableCell>
-                </TableRow>
+                <div key={t.id} className="flex justify-between gap-4 py-1">
+                  <span className="text-xs">{t.label}</span>
+                  <span className="text-xs text-muted-foreground">{t.area}</span>
+                </div>
               ))}
-            </TableBody>
-          </Table>
-        </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <div className="widget-card">
@@ -479,17 +496,23 @@ const AjustesFacturacion = () => {
                       <TableRow>
                         <TableCell className="p-0 pl-2">
                           {kardex.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              aria-label={abierto ? 'Ocultar kardex' : 'Ver kardex de ajustes'}
-                              onClick={() => toggleExpandido(pf.id)}
-                            >
-                              {abierto
-                                ? <ChevronDown className="h-4 w-4" />
-                                : <ChevronRight className="h-4 w-4" />}
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                aria-label={`${abierto ? 'Ocultar' : 'Ver'} kardex de ajustes (${kardex.length} ajuste${kardex.length === 1 ? '' : 's'} aplicado${kardex.length === 1 ? '' : 's'})`}
+                                title={`${kardex.length} ajuste${kardex.length === 1 ? '' : 's'} aplicado${kardex.length === 1 ? '' : 's'} — clic para ver kardex`}
+                                onClick={() => toggleExpandido(pf.id)}
+                              >
+                                {abierto
+                                  ? <ChevronDown className="h-4 w-4" />
+                                  : <ChevronRight className="h-4 w-4" />}
+                              </Button>
+                              <span className="text-[10px] font-medium leading-none px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                {kardex.length}
+                              </span>
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">{pf.id}</TableCell>
@@ -499,14 +522,7 @@ const AjustesFacturacion = () => {
                         <TableCell className="tabular-nums">{formatCurrency(pf.subtotal)}</TableCell>
                         <TableCell className="tabular-nums">{formatCurrency(pf.total)}</TableCell>
                         <TableCell>
-                          <div className="flex flex-col items-start gap-1">
-                            <StatusBadge status={pf.estado} />
-                            {kardex.length > 0 && (
-                              <Badge variant="secondary" className="text-[10px] font-medium">
-                                Ajustado ({kardex.length})
-                              </Badge>
-                            )}
-                          </div>
+                          <StatusBadge status={pf.estado} />
                         </TableCell>
                         <TableCell>
                           <Button variant="outline" size="sm" onClick={() => abrirDialogo(pf)}>
@@ -525,7 +541,7 @@ const AjustesFacturacion = () => {
                                   <TableHead className="text-xs h-8">Tipo de ajuste</TableHead>
                                   <TableHead className="text-xs h-8">Área</TableHead>
                                   <TableHead className="text-xs h-8">Detalle</TableHead>
-                                  <TableHead className="text-xs h-8">Total</TableHead>
+                                  <TableHead className="text-xs h-8">Total ajustado</TableHead>
                                   <TableHead className="text-xs h-8">Observación</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -542,7 +558,8 @@ const AjustesFacturacion = () => {
                                     <TableCell className="text-xs text-muted-foreground">{a.area}</TableCell>
                                     <TableCell className="text-xs">{a.detalle}</TableCell>
                                     <TableCell className="text-xs tabular-nums whitespace-nowrap">
-                                      {formatCurrency(a.totalAnterior)} → {formatCurrency(a.totalNuevo)}
+                                      {formatCurrency(a.totalNuevo)}{' '}
+                                      <span className="text-muted-foreground">(antes {formatCurrency(a.totalAnterior)})</span>
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{a.observacion || '—'}</TableCell>
                                   </TableRow>

@@ -1,10 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { CatalogosOperativosService } from './catalogos-operativos.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('catalogos-operativos')
-@UseGuards(JwtAuthGuard)
 export class CatalogosOperativosController {
   constructor(private readonly service: CatalogosOperativosService) {}
 

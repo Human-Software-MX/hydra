@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { conMonitoreo } from '../../common/monitoreo.helper';
 
 @Injectable()
 export class ContabilidadService {
@@ -24,6 +25,21 @@ export class ContabilidadService {
   }
 
   async generarPolizaCobros(fecha: string, periodo: string) {
+    return conMonitoreo(
+      this.prisma,
+      'POLIZA_COBROS',
+      async (ctx) => {
+        const res = await this.generarPolizaCobrosInterno(fecha, periodo);
+        if ('totalLineas' in res && typeof res.totalLineas === 'number')
+          ctx.registros = res.totalLineas;
+        ctx.detalle = { fecha, periodo, ...res };
+        return res;
+      },
+      { subTipo: periodo },
+    );
+  }
+
+  private async generarPolizaCobrosInterno(fecha: string, periodo: string) {
     const pagos = await this.prisma.pago.findMany({
       where: { fecha },
       include: { contrato: { select: { id: true, zonaId: true } } },
@@ -89,6 +105,21 @@ export class ContabilidadService {
   }
 
   async generarPolizaFacturacion(fecha: string, periodo: string) {
+    return conMonitoreo(
+      this.prisma,
+      'POLIZA_FACTURACION',
+      async (ctx) => {
+        const res = await this.generarPolizaFacturacionInterno(fecha, periodo);
+        if ('timbrados' in res && typeof res.timbrados === 'number')
+          ctx.registros = res.timbrados;
+        ctx.detalle = { fecha, periodo, ...res };
+        return res;
+      },
+      { subTipo: periodo },
+    );
+  }
+
+  private async generarPolizaFacturacionInterno(fecha: string, periodo: string) {
     const timbrados = await this.prisma.timbrado.findMany({
       where: { fechaEmision: fecha, estado: 'Timbrada OK' },
     });

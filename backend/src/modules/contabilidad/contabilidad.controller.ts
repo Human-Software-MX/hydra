@@ -5,17 +5,14 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContabilidadService } from './contabilidad.service';
 
 @Controller('contabilidad')
-@UseGuards(JwtAuthGuard)
 export class ContabilidadController {
   constructor(private readonly service: ContabilidadService) {}
 

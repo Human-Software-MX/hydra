@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Query, Param, Body, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PortalGuard } from '../auth/portal.guard';
+import { AllowPortal } from '../auth/allow-portal.decorator';
 import { PortalService } from './portal.service';
 
 interface AuthUser {
@@ -11,7 +12,11 @@ interface AuthUser {
   contratoIds: string[];
 }
 
-@UseGuards(JwtAuthGuard)
+// Superficie del portal de clientes. El JWT lo valida el guard global;
+// @AllowPortal() levanta el filtro de audiencia interna y PortalGuard cierra
+// el otro lado: aquí sólo entran tokens con rol CLIENTE.
+@AllowPortal()
+@UseGuards(PortalGuard)
 @Controller('portal')
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}

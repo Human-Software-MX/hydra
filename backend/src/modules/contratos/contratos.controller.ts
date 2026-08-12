@@ -7,20 +7,22 @@ import {
   Param,
   Query,
   Res,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
+  HttpException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContratosService } from './contratos.service';
 import { CreateContratoDto } from './dto/create-contrato.dto';
 import { UpdateContratoDto } from './dto/update-contrato.dto';
 import { TiposContratacionService } from '../tipos-contratacion/tipos-contratacion.service';
 import { BillingEngineService } from './billing-engine.service';
 
+@ApiTags('contratos')
+@ApiBearerAuth()
 @Controller('contratos')
-@UseGuards(JwtAuthGuard)
 export class ContratosController {
   constructor(
     private readonly contratosService: ContratosService,
@@ -29,6 +31,7 @@ export class ContratosController {
   ) {}
 
   // IMPORTANT: static routes declared BEFORE /:id
+  @ApiOperation({ summary: 'Busca contratos por número, titular o RFC' })
   @Get('search')
   search(
     @Query('q') q: string,
@@ -37,6 +40,7 @@ export class ContratosController {
     return this.contratosService.search(q ?? '', limit);
   }
 
+  @ApiOperation({ summary: 'Lista todos los contratos' })
   @Get()
   findAll() {
     return this.contratosService.findAll();
@@ -79,23 +83,39 @@ export class ContratosController {
     return this.contratosService.crearFacturaContratacion(id);
   }
 
+  @ApiOperation({
+    summary: 'Previsualiza la facturación de un tipo de contratación',
+    description: 'Calcula conceptos y montos sin persistir. Una tarifa inválida devuelve 422 con el detalle.',
+  })
   @Post('preview-facturacion')
-  previewFacturacion(
+  async previewFacturacion(
     @Body() body: { tipoContratacionId: string; variables: Record<string, string | number | boolean> },
   ) {
-    return this.billingEngine.calcular(body.tipoContratacionId, body.variables ?? {});
+    try {
+      return await this.billingEngine.calcular(body.tipoContratacionId, body.variables ?? {});
+    } catch (err: unknown) {
+      // B3: safeEvalArithmetic lanza Error con la expresión ofensiva. El preview
+      // debe devolver ese mensaje descriptivo al wizard, NO un 500 enmascarado.
+      if (err instanceof HttpException) throw err;
+      throw new UnprocessableEntityException(
+        err instanceof Error ? err.message : 'No se pudo calcular la facturación (tarifa inválida).',
+      );
+    }
   }
 
+  @ApiOperation({ summary: 'Obtiene un contrato por id' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.contratosService.findOne(id);
   }
 
+  @ApiOperation({ summary: 'Crea un contrato definitivo (cierre del wizard de alta)' })
   @Post()
   create(@Body() dto: CreateContratoDto) {
     return this.contratosService.create(dto);
   }
 
+  @ApiOperation({ summary: 'Actualiza campos de un contrato existente' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {
     return this.contratosService.update(id, dto);

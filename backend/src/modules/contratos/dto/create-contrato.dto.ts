@@ -9,35 +9,45 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PersonaRelacionContratoDto {
+  @ApiPropertyOptional({ description: 'Id de Persona existente; si se omite, se crea desde los datos planos.' })
   @IsOptional() @IsString() personaId?: string;
-  @IsOptional() @IsString() nombre?: string;
-  @IsOptional() @IsString() rfc?: string;
-  @IsOptional() @IsString() curp?: string;
-  @IsOptional() @IsString() email?: string;
-  @IsOptional() @IsString() telefono?: string;
-  @IsOptional() @IsString() razonSocial?: string;
-  @IsOptional() @IsString() regimenFiscal?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() nombre?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() rfc?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() curp?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() telefono?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() razonSocial?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() regimenFiscal?: string;
 }
 
 export class ConceptoOverrideDto {
+  @ApiProperty({ description: 'Id del concepto de cobro a sobrescribir.' })
   @IsString() conceptoCobroId: string;
+  @ApiProperty({ description: 'Cantidad (unidades/m3) para recalcular el concepto.' })
   @IsNumber() cantidad: number;
 }
 
 export class CreateContratoDto {
-  @IsOptional() @IsString() tomaId?: string;
-  @IsOptional() @IsString() puntoServicioId?: string;
-  @IsOptional() @IsString() domicilioId?: string;
-  @IsOptional() @IsString() tipoContratacionId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tomaId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() puntoServicioId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() domicilioId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tipoContratacionId?: string;
+  @ApiProperty({ description: 'Tipo de contrato (catálogo).' })
   @IsString() tipoContrato: string;
+  @ApiProperty({ description: 'Tipo de servicio (AGUA, ALCANTARILLADO, etc.).' })
   @IsString() tipoServicio: string;
+  @ApiProperty({ description: 'Nombre del titular.' })
   @IsString() nombre: string;
+  @ApiProperty({ description: 'RFC del titular.' })
   @IsString() rfc: string;
-  @IsOptional() @IsString() direccion?: string;
-  @IsOptional() @IsString() contacto?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() direccion?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() contacto?: string;
+  @ApiProperty({ description: 'Estado del contrato.' })
   @IsString() estado: string;
+  @ApiProperty({ description: 'Fecha del contrato (ISO 8601).', example: '2026-08-11' })
   @IsString() fecha: string;
   @IsOptional() @IsString() medidorId?: string;
   @IsOptional() @IsString() rutaId?: string;
@@ -76,6 +86,7 @@ export class CreateContratoDto {
   @IsOptional() @IsBoolean() omitirRegistroPersonaTitular?: boolean;
 
   /** Checklist de documentos marcados como recibidos durante la contratación. */
+  @ApiPropertyOptional({ type: [String], description: 'Ids/claves de documentos marcados como recibidos.' })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(100)
@@ -90,22 +101,30 @@ export class CreateContratoDto {
   @IsOptional() @IsString() plantillaContratacionId?: string;
 
   /** Persona fiscal relacionada (rol FISCAL). */
+  @ApiPropertyOptional({ type: () => PersonaRelacionContratoDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => PersonaRelacionContratoDto)
   personaFiscal?: PersonaRelacionContratoDto;
 
   /** Persona de contacto relacionada (rol CONTACTO). */
+  @ApiPropertyOptional({ type: () => PersonaRelacionContratoDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => PersonaRelacionContratoDto)
   personaContacto?: PersonaRelacionContratoDto;
 
   /** Variables dinámicas capturadas durante el wizard (superficie, unidades, etc.). */
+  @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
+    description: 'Variables dinámicas del tipo de contratación (clave → valor).',
+  })
   @IsOptional()
   variablesCapturadas?: Record<string, string | number | boolean>;
 
   /** Override de cantidades por concepto desde el wizard paso 6. */
+  @ApiPropertyOptional({ type: () => [ConceptoOverrideDto] })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

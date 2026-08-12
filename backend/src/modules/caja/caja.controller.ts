@@ -5,15 +5,12 @@ import {
   Body,
   Query,
   Request,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CajaService } from './caja.service';
 
 @Controller('caja')
-@UseGuards(JwtAuthGuard)
 export class CajaController {
   constructor(private readonly service: CajaService) {}
 

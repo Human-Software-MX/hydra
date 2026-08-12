@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateContratoDto } from './dto/create-contrato.dto';
@@ -569,6 +571,31 @@ export class ContratosService {
     }
 
     const omitirPersona = dto.omitirRegistroPersonaTitular === true;
+
+    // B3 — Pre-valida las tarifas ANTES de abrir la transacción de alta.
+    // `billingEngine.calcular` es solo-lectura; si una expresión de tarifa es
+    // inválida, `safeEvalArithmetic` lanza con la expresión ofensiva. Aquí lo
+    // convertimos en un 4xx descriptivo de forma que un tipo mal configurado
+    // NO haga trabajo parcial (rollback del contrato completo) ni facture cero.
+    if (
+      dto.generarFacturaContratacion &&
+      isFeatureEnabled('FEATURE_FACTURACION_CONTRATACION') &&
+      tipoContratacionId
+    ) {
+      try {
+        await this.billingEngine.calcular(
+          tipoContratacionId,
+          (dto.variablesCapturadas as Record<string, string | number | boolean>) ?? {},
+        );
+      } catch (err: unknown) {
+        if (err instanceof HttpException) throw err;
+        throw new UnprocessableEntityException(
+          `No se puede crear el contrato: tarifa inválida — ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let procesoGestionadoEnAlta = false;

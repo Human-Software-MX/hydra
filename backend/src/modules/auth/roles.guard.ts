@@ -2,6 +2,13 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from './roles.decorator';
 
+/**
+ * RolesGuard — registrado como `APP_GUARD` global en `AppModule`, después de
+ * `JwtAuthGuard` e `InternalGuard`.
+ *
+ * Sin metadata `@Roles(...)` la ruta queda en "cualquier usuario autenticado"
+ * (que, por el InternalGuard, ya significa "cualquier usuario interno").
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}

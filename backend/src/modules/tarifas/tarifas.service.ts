@@ -118,7 +118,7 @@ export class TarifasService {
     if (!tarifas.length) throw new BadRequestException('No hay tarifas vigentes para el servicio indicado');
 
     let subtotal = 0;
-    let desglose: Array<{ rango: string; m3: number; precio: number; subtotal: number }> = [];
+    const desglose: Array<{ rango: string; m3: number; precio: number; subtotal: number }> = [];
 
     for (const t of tarifas) {
       if (t.tipoCalculo === 'fijo') {

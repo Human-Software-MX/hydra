@@ -6,15 +6,12 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PersonasService } from './personas.service';
 
 @Controller('personas')
-@UseGuards(JwtAuthGuard)
 export class PersonasController {
   constructor(private readonly service: PersonasService) {}
 

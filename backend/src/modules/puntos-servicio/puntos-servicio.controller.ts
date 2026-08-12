@@ -7,16 +7,13 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
   ParseFloatPipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PuntosServicioService } from './puntos-servicio.service';
 
 @Controller('puntos-servicio')
-@UseGuards(JwtAuthGuard)
 export class PuntosServicioController {
   constructor(private readonly service: PuntosServicioService) {}
 

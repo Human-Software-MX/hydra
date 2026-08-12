@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, createContext, useContext, useId, type ReactNode } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { PortalContextValue } from '@/components/PortalLayout';
 import {
@@ -134,9 +134,53 @@ function StepIndicator({ current }: { current: number }) {
 
 // ─── Input helpers ─────────────────────────────────────────────────────────
 
-function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
+// Accesibilidad: `Field` genera un id (useId) y lo comparte por contexto con
+// `Label` (htmlFor) y el control (id), de modo que el lector de pantalla anuncia
+// la etiqueta al enfocar. Con error, lo referencia vía aria-describedby/invalid.
+interface FieldContextValue {
+  inputId: string;
+  errorId?: string;
+  invalid: boolean;
+}
+const FieldContext = createContext<FieldContextValue | null>(null);
+
+function Field({
+  children,
+  error,
+  className,
+}: {
+  children: ReactNode;
+  error?: string;
+  className?: string;
+}) {
+  const inputId = useId();
+  const errorId = error ? `${inputId}-error` : undefined;
   return (
-    <label className="block text-sm font-medium text-gray-700 mb-1">
+    <FieldContext.Provider value={{ inputId, errorId, invalid: Boolean(error) }}>
+      <div className={className}>
+        {children}
+        {error && (
+          <p id={errorId} className="text-xs text-red-500 mt-1">
+            {error}
+          </p>
+        )}
+      </div>
+    </FieldContext.Provider>
+  );
+}
+
+function Label({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  const ctx = useContext(FieldContext);
+  return (
+    <label htmlFor={htmlFor ?? ctx?.inputId} className="block text-sm font-medium text-gray-700 mb-1">
       {children}
       {required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
@@ -149,20 +193,27 @@ function Input({
   placeholder,
   readOnly,
   type = 'text',
+  id,
 }: {
   value: string;
   onChange?: (v: string) => void;
   placeholder?: string;
   readOnly?: boolean;
   type?: string;
+  id?: string;
 }) {
+  const ctx = useContext(FieldContext);
+  const inputId = id ?? ctx?.inputId;
   return (
     <input
+      id={inputId}
       type={type}
       value={value}
       readOnly={readOnly}
       onChange={(e) => onChange?.(e.target.value)}
       placeholder={placeholder}
+      aria-invalid={ctx?.invalid || undefined}
+      aria-describedby={ctx?.errorId}
       className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
         readOnly
           ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
@@ -177,18 +228,25 @@ function Textarea({
   onChange,
   placeholder,
   rows = 4,
+  id,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  id?: string;
 }) {
+  const ctx = useContext(FieldContext);
+  const inputId = id ?? ctx?.inputId;
   return (
     <textarea
+      id={inputId}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
+      aria-invalid={ctx?.invalid || undefined}
+      aria-describedby={ctx?.errorId}
       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
     />
   );
@@ -459,52 +517,49 @@ const TramiteBajaDefinitiva = () => {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
+                <Field>
                   <Label required>Número de contrato</Label>
                   <Input value={form.numeroContrato} readOnly placeholder="CT001" />
                   <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                     <ShieldCheck className="h-3 w-3" aria-hidden /> Pre-llenado desde tu sesión
                   </p>
-                </div>
-                <div>
+                </Field>
+                <Field>
                   <Label>Número de medidor</Label>
                   <Input
                     value={form.numeroMedidor}
                     onChange={(v) => set('numeroMedidor', v)}
                     placeholder="Ej. M-0012345"
                   />
-                </div>
+                </Field>
               </div>
 
-              <div>
+              <Field error={errors.nombreTitular}>
                 <Label required>Nombre del titular</Label>
                 <Input
                   value={form.nombreTitular}
                   onChange={(v) => set('nombreTitular', v)}
                   placeholder="Nombre completo del titular del contrato"
                 />
-                {errors.nombreTitular && <p className="text-xs text-red-500 mt-1">{errors.nombreTitular}</p>}
-              </div>
+              </Field>
 
-              <div>
+              <Field error={errors.direccion}>
                 <Label required>Dirección del predio</Label>
                 <Input
                   value={form.direccion}
                   onChange={(v) => set('direccion', v)}
                   placeholder="Calle, número exterior e interior"
                 />
-                {errors.direccion && <p className="text-xs text-red-500 mt-1">{errors.direccion}</p>}
-              </div>
+              </Field>
 
-              <div>
+              <Field error={errors.colonia}>
                 <Label required>Colonia</Label>
                 <Input
                   value={form.colonia}
                   onChange={(v) => set('colonia', v)}
                   placeholder="Nombre de la colonia"
                 />
-                {errors.colonia && <p className="text-xs text-red-500 mt-1">{errors.colonia}</p>}
-              </div>
+              </Field>
             </div>
           )}
 
@@ -560,7 +615,7 @@ const TramiteBajaDefinitiva = () => {
                 {errors.tipoMotivo && <p className="text-xs text-red-500 mt-1">{errors.tipoMotivo}</p>}
               </div>
 
-              <div>
+              <Field error={errors.descripcionMotivo}>
                 <Label required>Descripción detallada del motivo</Label>
                 <Textarea
                   value={form.descripcionMotivo}
@@ -568,8 +623,7 @@ const TramiteBajaDefinitiva = () => {
                   placeholder="Describe con detalle la causa por la que solicitas la baja definitiva del servicio..."
                   rows={5}
                 />
-                {errors.descripcionMotivo && <p className="text-xs text-red-500 mt-1">{errors.descripcionMotivo}</p>}
-              </div>
+              </Field>
             </div>
           )}
 
@@ -618,32 +672,31 @@ const TramiteBajaDefinitiva = () => {
               {esRepresentante && (
                 <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-4 space-y-4">
                   <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Datos del Representante Legal</p>
-                  <div>
+                  <Field error={errors.nombreRepresentante}>
                     <Label required>Nombre del representante legal</Label>
                     <Input
                       value={form.nombreRepresentante}
                       onChange={(v) => set('nombreRepresentante', v)}
                       placeholder="Nombre completo del representante"
                     />
-                    {errors.nombreRepresentante && <p className="text-xs text-red-500 mt-1">{errors.nombreRepresentante}</p>}
-                  </div>
+                  </Field>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field>
                       <Label>Escritura número (personalidad)</Label>
                       <Input
                         value={form.numeroEscritura}
                         onChange={(v) => set('numeroEscritura', v)}
                         placeholder="Núm. de escritura"
                       />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field>
                       <Label>Núm. acta constitutiva (empresa)</Label>
                       <Input
                         value={form.numeroActaConstitutiva}
                         onChange={(v) => set('numeroActaConstitutiva', v)}
                         placeholder="Solo si es persona moral"
                       />
-                    </div>
+                    </Field>
                   </div>
                 </div>
               )}
@@ -653,25 +706,24 @@ const TramiteBajaDefinitiva = () => {
                 <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
                   {esRepresentante ? 'Datos de contacto del representante' : 'Tus datos de contacto'}
                 </p>
-                <div>
+                <Field error={errors.nombreFirmante}>
                   <Label required>Nombre completo</Label>
                   <Input
                     value={form.nombreFirmante}
                     onChange={(v) => set('nombreFirmante', v)}
                     placeholder="Nombre completo"
                   />
-                  {errors.nombreFirmante && <p className="text-xs text-red-500 mt-1">{errors.nombreFirmante}</p>}
-                </div>
-                <div>
+                </Field>
+                <Field>
                   <Label>Dirección particular</Label>
                   <Input
                     value={form.direccionParticular}
                     onChange={(v) => set('direccionParticular', v)}
                     placeholder="Calle, número, colonia"
                   />
-                </div>
+                </Field>
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
+                  <Field error={errors.telefono}>
                     <Label required>Teléfono (con lada)</Label>
                     <Input
                       value={form.telefono}
@@ -679,9 +731,8 @@ const TramiteBajaDefinitiva = () => {
                       placeholder="(442) 000 0000"
                       type="tel"
                     />
-                    {errors.telefono && <p className="text-xs text-red-500 mt-1">{errors.telefono}</p>}
-                  </div>
-                  <div>
+                  </Field>
+                  <Field error={errors.correoElectronico}>
                     <Label required>Correo electrónico</Label>
                     <Input
                       value={form.correoElectronico}
@@ -689,8 +740,7 @@ const TramiteBajaDefinitiva = () => {
                       placeholder="correo@ejemplo.com"
                       type="email"
                     />
-                    {errors.correoElectronico && <p className="text-xs text-red-500 mt-1">{errors.correoElectronico}</p>}
-                  </div>
+                  </Field>
                 </div>
               </div>
             </div>

@@ -7,15 +7,12 @@ import {
   Body,
   Param,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { QuejasService } from './quejas.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateQuejaDto } from './dto/create-queja.dto';
 import { UpdateQuejaDto } from './dto/update-queja.dto';
 import { CreateSeguimientoDto } from './dto/create-seguimiento.dto';
 
-@UseGuards(JwtAuthGuard)
 @Controller('quejas')
 export class QuejasController {
   constructor(private readonly quejasService: QuejasService) {}
