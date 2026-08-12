@@ -1,0 +1,131 @@
+name: Deploy Hydra
+
+# Build de imágenes en GitHub (GHCR) al hacer push/merge a main, y deploy al VM
+# de producción por SSH. El paso de deploy corre bajo el Environment "production",
+# que exige aprobación manual antes de recrear los contenedores (y por tanto antes
+# de aplicar migraciones Prisma sobre la base de datos de producción).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-hydra
+  cancel-in-progress: false
+
+env:
+  IMAGE_BASE: ghcr.io/human-software-mx/hydra
+
+jobs:
+  build:
+    name: Build & push images (GHCR)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.IMAGE_BASE }}-back:latest
+            ${{ env.IMAGE_BASE }}-back:${{ github.sha }}
+          cache-from: type=gha,scope=hydra-back
+          cache-to: type=gha,mode=max,scope=hydra-back
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          provenance: false
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+          tags: |
+            ${{ env.IMAGE_BASE }}-front:latest
+            ${{ env.IMAGE_BASE }}-front:${{ github.sha }}
+          cache-from: type=gha,scope=hydra-front
+          cache-to: type=gha,mode=max,scope=hydra-front
+
+  deploy:
+    name: Deploy to production VM
+    needs: build
+    runs-on: ubuntu-latest
+    # Requiere aprobación manual (revisor del Environment) antes de correr.
+    environment:
+      name: production
+      url: https://hydra.humansoftware.mx
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Pull images, retag and recreate containers over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_BASE: ${{ env.IMAGE_BASE }}
+          GIT_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          command_timeout: 15m
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_BASE,GIT_SHA
+          script_stop: true
+          script: |
+            set -euo pipefail
+            SERVICE_DIR=/data/coolify/services/yuydyqo6abbaka3bieox45ok
+            PROJECT=yuydyqo6abbaka3bieox45ok
+
+            echo "==> Login GHCR"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            echo "==> Pull imágenes construidas en GitHub ($GIT_SHA)"
+            docker pull "$IMAGE_BASE-back:$GIT_SHA"
+            docker pull "$IMAGE_BASE-front:$GIT_SHA"
+
+            echo "==> Retag a los nombres que espera el compose de Coolify"
+            docker tag "$IMAGE_BASE-back:$GIT_SHA"  hydra-back:coolify
+            docker tag "$IMAGE_BASE-front:$GIT_SHA" hydra-front:coolify
+
+            echo "==> Recrear front + backend (NO se toca la DB: --no-deps)"
+            echo "    El backend aplica 'prisma migrate deploy' al arrancar."
+            sudo bash -c "cd $SERVICE_DIR && docker compose -p $PROJECT up -d --force-recreate --no-deps hydra-backend hydra-front"
+
+            echo "==> Esperando health del backend"
+            ok=0
+            for i in $(seq 1 36); do
+              if curl -fsS -m 5 http://127.0.0.1:3063/api/health >/dev/null 2>&1; then ok=1; break; fi
+              sleep 5
+            done
+            if [ "$ok" != "1" ]; then
+              echo "ERROR: el backend no respondió /api/health"
+              docker logs --tail 80 hydra-backend-yuydyqo6abbaka3bieox45ok || true
+              exit 1
+            fi
+
+            echo "==> Health OK:"
+            curl -fsS -m 5 http://127.0.0.1:3063/api/health; echo
+            curl -fsS -m 5 -o /dev/null http://127.0.0.1:3062/ && echo "frontend OK"
+
+            docker logout ghcr.io || true
+            echo "==> Deploy completado: $GIT_SHA"
