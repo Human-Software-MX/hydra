@@ -9,7 +9,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { CajaService } from './caja.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('caja')
 export class CajaController {
   constructor(private readonly service: CajaService) {}

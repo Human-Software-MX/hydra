@@ -11,11 +11,14 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { TiposContratacionService } from './tipos-contratacion.service';
+import { Roles, ROLES_ADMIN, ROLES_INTERNAL } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('tipos-contratacion')
 export class TiposContratacionController {
   constructor(private readonly service: TiposContratacionService) {}
 
+  @Roles(...ROLES_INTERNAL)
   @Get()
   findAll(
     @Query('activo') activo?: string,
@@ -26,6 +29,7 @@ export class TiposContratacionController {
     return this.service.findAll({ activo, page, limit, administracionId });
   }
 
+  @Roles(...ROLES_INTERNAL)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
@@ -69,6 +73,7 @@ export class TiposContratacionController {
 
   // ─── Configuración ────────────────────────────────────────────────────────
 
+  @Roles(...ROLES_INTERNAL)
   @Get(':id/configuracion')
   getConfiguracion(@Param('id') id: string) {
     return this.service.getConfiguracion(id);

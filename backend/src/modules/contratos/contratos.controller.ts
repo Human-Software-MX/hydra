@@ -19,6 +19,7 @@ import { CreateContratoDto } from './dto/create-contrato.dto';
 import { UpdateContratoDto } from './dto/update-contrato.dto';
 import { TiposContratacionService } from '../tipos-contratacion/tipos-contratacion.service';
 import { BillingEngineService } from './billing-engine.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
 @ApiTags('contratos')
 @ApiBearerAuth()
@@ -116,6 +117,7 @@ export class ContratosController {
   }
 
   @ApiOperation({ summary: 'Actualiza campos de un contrato existente' })
+  @Roles(...ROLES_ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {
     return this.contratosService.update(id, dto);

@@ -10,7 +10,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { ConveniosService } from './convenios.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('convenios')
 export class ConveniosController {
   constructor(private readonly service: ConveniosService) {}

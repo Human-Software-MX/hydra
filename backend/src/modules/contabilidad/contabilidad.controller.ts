@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ContabilidadService } from './contabilidad.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('contabilidad')
 export class ContabilidadController {
   constructor(private readonly service: ContabilidadService) {}

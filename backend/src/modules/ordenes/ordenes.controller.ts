@@ -10,6 +10,7 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { OrdenesService } from './ordenes.service';
+import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
 @Controller('ordenes')
 export class OrdenesController {
@@ -66,6 +67,7 @@ export class OrdenesController {
     return this.service.create(body);
   }
 
+  @Roles(...ROLES_OPERACION)
   @Patch(':id/estado')
   updateEstado(
     @Param('id') id: string,

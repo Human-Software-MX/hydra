@@ -19,6 +19,16 @@ import { PageHeader } from '@/components/PageHeader';
 import { KpiCard } from '@/components/KpiCard';
 import StatusBadge from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/AuthContext';
+
+// Grupos de rol espejo de los @Roles del backend. El dashboard es visible para
+// todos los roles internos, pero cada KPI consulta un módulo con su propia
+// restricción: sin este gating un rol no-admin recibía 403 (y 3 reintentos) en
+// los endpoints fuera de su grupo. Se consulta sólo lo que el rol puede leer.
+const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'];
+const ROLES_SERVICIOS = [...ADMIN_ROLES, 'OPERADOR', 'ATENCION_CLIENTES'];
+const ROLES_CAMPO = [...ADMIN_ROLES, 'OPERADOR', 'LECTURISTA'];
+const ROLES_ATENCION = [...ADMIN_ROLES, 'ATENCION_CLIENTES'];
 
 const QUICK_ACTIONS = [
   { label: 'Nueva factibilidad', icon: Plus, to: '/app/factibilidades?new=1' },
@@ -30,6 +40,11 @@ const QUICK_ACTIONS = [
 const useApi = hasApi();
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const role = user?.role;
+  const canRead = (roles: string[]) => useApi && !!role && roles.includes(role);
+
+  // contratos: el GET queda authenticated-only en el backend → todos los roles internos.
   const { data: contratos = [] } = useQuery({
     queryKey: ['contratos-dashboard'],
     queryFn: fetchContratos,
@@ -40,35 +55,40 @@ const Dashboard = () => {
   const { data: procesos = [] } = useQuery({
     queryKey: ['procesos-dashboard'],
     queryFn: () => fetchProcesos({ limit: 200 }),
-    enabled: useApi,
+    enabled: canRead(ROLES_SERVICIOS),
+    retry: false,
     staleTime: 60_000,
   });
 
   const { data: lecturas = [] } = useQuery({
     queryKey: ['lecturas-dashboard'],
     queryFn: fetchLecturas,
-    enabled: useApi,
+    enabled: canRead(ROLES_CAMPO),
+    retry: false,
     staleTime: 60_000,
   });
 
   const { data: timbrados = [] } = useQuery({
     queryKey: ['timbrados-dashboard'],
     queryFn: fetchTimbrados,
-    enabled: useApi,
+    enabled: canRead(ADMIN_ROLES),
+    retry: false,
     staleTime: 60_000,
   });
 
   const { data: pagos = [] } = useQuery({
     queryKey: ['pagos-dashboard'],
     queryFn: fetchPagos,
-    enabled: useApi,
+    enabled: canRead(ROLES_ATENCION),
+    retry: false,
     staleTime: 60_000,
   });
 
   const { data: preFacturas = [] } = useQuery({
     queryKey: ['prefacturas-dashboard'],
     queryFn: fetchPreFacturas,
-    enabled: useApi,
+    enabled: canRead(ADMIN_ROLES),
+    retry: false,
     staleTime: 60_000,
   });
 

@@ -1,6 +1,8 @@
 import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_OPERACION)
 @Controller('medidores')
 export class MedidoresController {
   constructor(private readonly prisma: PrismaService) {}

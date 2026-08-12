@@ -9,7 +9,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('recibos')
 export class RecibosController {
   constructor(private readonly prisma: PrismaService) {}
@@ -83,6 +85,7 @@ export class RecibosController {
   }
 }
 
+@Roles(...ROLES_ATENCION)
 @Controller('mensajes-recibo')
 export class MensajesReciboController {
   constructor(private readonly prisma: PrismaService) {}

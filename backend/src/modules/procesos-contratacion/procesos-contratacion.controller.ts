@@ -10,7 +10,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { ProcesosContratacionService } from './procesos-contratacion.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('procesos-contratacion')
 export class ProcesosContratacionController {
   constructor(private readonly service: ProcesosContratacionService) {}

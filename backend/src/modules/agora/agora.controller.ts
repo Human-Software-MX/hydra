@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
 import { AgoraService } from './agora.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('agora/tickets')
 export class AgoraController {
   constructor(private readonly service: AgoraService) {}
