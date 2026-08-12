@@ -17,12 +17,10 @@ export default defineConfig(() => ({
       '/ceadevws': {
         target: 'https://appcea.ceaqueretaro.gob.mx',
         changeOrigin: true,
-        secure: false,
       },
       '/aquacis-cea': {
         target: 'https://aquacis-cf-int.ceaqueretaro.gob.mx/Comercial',
         changeOrigin: true,
-        secure: false,
         rewrite: (path: string) => path.replace(/^\/aquacis-cea/, ''),
       },
     },

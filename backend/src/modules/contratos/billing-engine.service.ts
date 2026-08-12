@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const billingLogger = new Logger('BillingEngine');
 
 export interface BillingLineItem {
   conceptoCobroId: string;
@@ -371,14 +373,35 @@ function evaluateSimpleFormula(
   return safeEvalArithmetic(e);
 }
 
-function safeEvalArithmetic(expression: string): number {
+/**
+ * Evalúa una expresión aritmética de tarifa ya con variables sustituidas.
+ *
+ * B3: antes hacía `catch { return 0 }`, lo que facturaba CERO ante cualquier
+ * error de parseo (silenciosamente). Ahora lanza un error descriptivo (incluye
+ * la expresión ofensiva) y lo registra: los llamadores NO deben convertirlo en
+ * un cargo de cero — deben propagar el fallo para que se revise la tarifa.
+ */
+export function safeEvalArithmetic(expression: string): number {
   const sanitized = expression.replace(/[^-+*/().\d\s]/g, '');
-  if (sanitized.trim() === '') return 0;
+  if (sanitized.trim() === '') {
+    const msg = `Expresión de tarifa inválida (vacía tras sanitizar): "${expression}"`;
+    billingLogger.error(msg);
+    throw new Error(msg);
+  }
+  let n: number;
   try {
     const fn = new Function(`"use strict"; return (${sanitized});`) as () => number;
-    const n = fn();
-    return typeof n === 'number' && Number.isFinite(n) ? roundMoney(n) : 0;
-  } catch {
-    return 0;
+    n = fn();
+  } catch (err: unknown) {
+    const detalle = err instanceof Error ? err.message : String(err);
+    const msg = `Expresión de tarifa inválida: "${expression}" (sanitizada: "${sanitized}")`;
+    billingLogger.error(`${msg} — ${detalle}`);
+    throw new Error(msg);
   }
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    const msg = `Expresión de tarifa produjo un resultado no numérico: "${expression}" => ${String(n)}`;
+    billingLogger.error(msg);
+    throw new Error(msg);
+  }
+  return roundMoney(n);
 }

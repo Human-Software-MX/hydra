@@ -4,15 +4,12 @@ import {
   Post,
   Query,
   Body,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MonitoreoService } from './monitoreo.service';
 
 @Controller('monitoreo')
-@UseGuards(JwtAuthGuard)
 export class MonitoreoController {
   constructor(private readonly service: MonitoreoService) {}
 

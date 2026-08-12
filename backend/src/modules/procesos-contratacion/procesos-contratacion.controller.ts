@@ -6,15 +6,12 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProcesosContratacionService } from './procesos-contratacion.service';
 
 @Controller('procesos-contratacion')
-@UseGuards(JwtAuthGuard)
 export class ProcesosContratacionController {
   constructor(private readonly service: ProcesosContratacionService) {}
 

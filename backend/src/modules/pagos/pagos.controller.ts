@@ -4,16 +4,13 @@ import {
   Post,
   Query,
   Body,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PagosService } from './pagos.service';
 
 @Controller('pagos')
-@UseGuards(JwtAuthGuard)
 export class PagosController {
   constructor(
     private readonly prisma: PrismaService,

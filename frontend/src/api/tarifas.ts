@@ -27,6 +27,20 @@ export interface ActualizacionTarifaria {
   createdAt: string;
 }
 
+/** Ajuste manual a la facturación de un contrato/periodo. Los montos llegan como Decimal serializado. */
+export interface AjusteTarifarioDto {
+  id: string;
+  contratoId: string;
+  periodo: string;
+  tipo: string;
+  concepto: string;
+  montoOriginal: string | number;
+  montoAjustado: string | number;
+  motivo: string;
+  aprobadoPor: string | null;
+  createdAt: string;
+}
+
 export interface CalculoMonto {
   consumoM3: number;
   subtotal: number;
@@ -45,6 +59,26 @@ export const fetchTarifasVigentes = (tipoServicio?: string, fecha?: string) => {
 
 export const calcularMonto = (tipoServicio: string, consumoM3: number) =>
   apiRequest<CalculoMonto>(`/tarifas/calcular?tipoServicio=${tipoServicio}&consumoM3=${consumoM3}`);
+
+export const fetchAjustesTarifarios = (contratoId?: string) =>
+  apiRequest<AjusteTarifarioDto[]>(
+    `/tarifas/ajustes/lista${contratoId ? `?contratoId=${encodeURIComponent(contratoId)}` : ''}`
+  );
+
+export const crearAjusteTarifario = (dto: {
+  contratoId: string;
+  periodo: string;
+  tipo: string;
+  concepto: string;
+  montoOriginal: number;
+  montoAjustado: number;
+  motivo: string;
+  aprobadoPor?: string;
+}) =>
+  apiRequest<AjusteTarifarioDto>('/tarifas/ajustes', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
 
 export const fetchActualizaciones = () =>
   apiRequest<ActualizacionTarifaria[]>('/tarifas/actualizaciones/lista');

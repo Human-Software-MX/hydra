@@ -7,6 +7,7 @@ import * as path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { administracionExcluidaDelSelector } from '../src/common/administraciones-selector-excluidas';
+import { resolveDataFile } from './data-dir';
 
 /** IDs estables alineados a expid (1–13) del catálogo SIGE. */
 export function expIdToAdministracionId(expId: number): string {
@@ -43,7 +44,7 @@ export type CatalogosTiposContratacionPayload = {
 };
 
 export function defaultCatalogosJsonPath(): string {
-  return path.join(__dirname, 'data', 'catalogos-tipos-contratacion-sige.json');
+  return resolveDataFile('catalogos-tipos-contratacion-sige.json');
 }
 
 /** Ruta por defecto al Excel legacy (solo desarrollo / regeneración JSON). */

@@ -1,7 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { SigeHydraService } from './sige-hydra.service';
 import { ApiTokenGuard } from '../auth/api-token.guard';
+import { Public } from '../auth/public.decorator';
 
+// Ruta servicio-a-servicio: @Public() exime del JWT global, pero ApiTokenGuard
+// sigue exigiendo SIGE_HYDRA_API_TOKEN. No queda abierta.
+@Public()
 @Controller('sige-hydra')
 @UseGuards(ApiTokenGuard)
 export class SigeHydraController {

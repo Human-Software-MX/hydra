@@ -5,15 +5,12 @@ import {
   Param,
   Query,
   Body,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ConciliacionesService } from './conciliaciones.service';
 
 @Controller('conciliaciones')
-@UseGuards(JwtAuthGuard)
 export class ConciliacionesController {
   constructor(private readonly service: ConciliacionesService) {}
 

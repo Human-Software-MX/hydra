@@ -292,6 +292,23 @@ export interface AjusteFacturaParams {
   observacion?: string;
 }
 
+/** Registro (kardex) de un ajuste aplicado a una prefactura */
+export interface AjusteFacturaRegistro {
+  id: string;
+  preFacturaId: string;
+  tipoAjusteId: TipoAjusteFacturacionId;
+  tipoLabel: string;
+  area: string;
+  consumoAnterior?: number;
+  consumoNuevo?: number;
+  descuentoAplicado?: number;
+  totalAnterior: number;
+  totalNuevo: number;
+  observacion?: string;
+  /** ISO */
+  fecha: string;
+}
+
 /** Área que gestiona el convenio */
 export type ConvenioArea = 'Atención a clientes' | 'Cartera' | 'Jurídico' | 'Facturación';
 export type ConvenioEstado = 'Vigente' | 'Cumplido' | 'Vencido' | 'Cancelado';
@@ -520,8 +537,51 @@ const initialRutas: Ruta[] = [
   { id: 'R002', zonaId: 'Z002', sector: 'El Marqués', libreta: 'LIB-002', lecturista: 'Ana García', contratoIds: ['CT003'] },
 ];
 
+/**
+ * PRNG determinista (mulberry32).
+ *
+ * El dataset demo se genera al evaluar el módulo, así que con `Math.random()`
+ * cada recarga producía importes y consumos distintos para los MISMOS ids
+ * (PF001, CO001, …). Eso rompe cualquier registro que sí persiste —el kardex de
+ * ajustes vive en el servidor— y hace que lo mostrado en pantalla no coincida
+ * con el "antes/después" ya registrado. Con semilla fija el demo es reproducible.
+ */
+function crearRandom(semilla: number): () => number {
+  let a = semilla >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Tarifa aplicable a un consumo. Única fuente de verdad del cálculo: la usan el
+ * seed de prefacturas, `calcularTarifa` del contexto y los ajustes de facturación.
+ *
+ * El rango aplicable es el más alto que el consumo ya alcanzó (`rangoMin <= m3`),
+ * nunca uno de otro tipo de servicio. Exigir además `m3 <= rangoMax` dejaría sin
+ * tarifa a los consumos que caen ENTRE rangos —los rangos están definidos sobre
+ * enteros (0-10, 11-30, 31-999), así que 10.5 m³ no cae en ninguno— y a los que
+ * superan el último; esos consumos terminaban cobrándose al precio del rango más
+ * alto (10.5 m³ domésticos a $22.00/m³ en vez de $8.50/m³).
+ *
+ * Un consumo negativo no puede facturarse: se trata como 0 (solo cargo fijo).
+ */
+function calcularTarifaCon(tarifas: Tarifa[], tipoServicio: string, m3: number) {
+  const tipo = tipoServicio === 'Doméstico' ? 'Doméstico' : tipoServicio === 'Comercial' ? 'Comercial' : 'Industrial';
+  const delTipo = tarifas.filter(t => t.tipo === tipo).sort((a, b) => a.rangoMin - b.rangoMin);
+  const consumo = Math.max(0, m3);
+  const alcanzados = delTipo.filter(t => consumo >= t.rangoMin);
+  const tarifa = alcanzados[alcanzados.length - 1] ?? delTipo[0] ?? tarifas[0];
+  const subtotal = consumo * tarifa.precioPorM3;
+  return { subtotal, cargoFijo: tarifa.cargoFijo, total: subtotal + tarifa.cargoFijo };
+}
+
 // Seed lecturas: muchas lecturas con mix válidas/no válidas y datos de validación (Fase 5)
 function generateSeedLecturas(): Lectura[] {
+  const rnd = crearRandom(0x1ec7);
   const out: Lectura[] = [];
   const contratosRutas: { contratoId: string; rutaId: string }[] = [
     { contratoId: 'CT001', rutaId: 'R001' },
@@ -539,12 +599,12 @@ function generateSeedLecturas(): Lectura[] {
       const fecha = `${year}-${String(month).padStart(2, '0')}-15`;
       for (const { contratoId, rutaId } of contratosRutas) {
         const prev = prevByContrato[contratoId];
-        const consumo = Math.floor(Math.random() * 80) + 5;
+        const consumo = Math.floor(rnd() * 80) + 5;
         const actual = prev + consumo;
         const fueraMin = consumo < 0;
         const fueraMax = consumo > maxZona;
-        const noValida = Math.random() < 0.25 || fueraMin || fueraMax;
-        const estado: LecturaEstado = noValida ? 'No válida' : (Math.random() < 0.1 ? 'Pendiente' : 'Válida');
+        const noValida = rnd() < 0.25 || fueraMin || fueraMax;
+        const estado: LecturaEstado = noValida ? 'No válida' : (rnd() < 0.1 ? 'Pendiente' : 'Válida');
         const motivo = noValida ? (fueraMax ? 'Excede máximo zona' : fueraMin ? 'Bajo mínimo' : 'Fuera de rango') : undefined;
         out.push({
           id: `L${String(id).padStart(3, '0')}`,
@@ -573,14 +633,15 @@ const initialLecturas: Lectura[] = generateSeedLecturas();
 
 // Seed consumos: a partir de lecturas y periodos (Fase 7)
 function generateSeedConsumos(): Consumo[] {
+  const rnd = crearRandom(0xc0f5);
   const out: Consumo[] = [];
   const periodos = ['2024-06', '2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12', '2025-01', '2025-02'];
   const contratos = ['CT001', 'CT002', 'CT003'];
   let id = 1;
   for (const periodo of periodos) {
     for (const contratoId of contratos) {
-      const m3 = Math.floor(Math.random() * 35) + 8;
-      const tipo = Math.random() < 0.7 ? 'Real' : (Math.random() < 0.5 ? 'Promedio histórico' : 'Mixto');
+      const m3 = Math.floor(rnd() * 35) + 8;
+      const tipo = rnd() < 0.7 ? 'Real' : (rnd() < 0.5 ? 'Promedio histórico' : 'Mixto');
       out.push({
         id: `CO${String(id).padStart(3, '0')}`,
         contratoId,
@@ -588,7 +649,7 @@ function generateSeedConsumos(): Consumo[] {
         tipo: tipo as 'Real' | 'Promedio histórico' | 'Mixto' | 'Consumo fijo',
         m3,
         periodo,
-        confirmado: Math.random() < 0.85,
+        confirmado: rnd() < 0.85,
       });
       id++;
     }
@@ -614,6 +675,7 @@ const initialDescuentos: Descuento[] = [
 
 // Seed facturas: PreFacturas + Timbrados + Recibos (Fase 7)
 function generateSeedFacturas(): { preFacturas: PreFactura[]; timbrados: Timbrado[]; recibos: Recibo[] } {
+  const rnd = crearRandom(0xfac7);
   const preFacturas: PreFactura[] = [];
   const timbrados: Timbrado[] = [];
   const recibos: Recibo[] = [];
@@ -624,9 +686,11 @@ function generateSeedFacturas(): { preFacturas: PreFactura[]; timbrados: Timbrad
   let rbId = 1;
   for (const periodo of periodos) {
     for (const contratoId of contratos) {
-      const consumoM3 = Math.floor(Math.random() * 30) + 10;
-      const subtotal = consumoM3 * 14;
-      const total = subtotal + 45;
+      const consumoM3 = Math.floor(rnd() * 30) + 10;
+      // Mismo cálculo que `calcularTarifa`: si el seed usara una fórmula propia,
+      // el primer ajuste "movería" el importe sin que cambie el consumo.
+      const tipoServicio = initialContratos.find(c => c.id === contratoId)?.tipoServicio ?? 'Doméstico';
+      const { subtotal, total } = calcularTarifaCon(initialTarifas, tipoServicio, consumoM3);
       const estado: PreFacturaEstado = pfId % 3 === 0 ? 'Pendiente' : (pfId % 3 === 1 ? 'Validada' : 'Aceptada');
       const pf = {
         id: `PF${String(pfId).padStart(3, '0')}`,
@@ -790,8 +854,14 @@ interface DataContextType {
   addDistrito: (d: Omit<Distrito, 'id'>) => void;
   updateDistrito: (id: string, updates: Partial<Distrito>) => void;
   calcularTarifa: (tipoServicio: string, m3: number) => { subtotal: number; cargoFijo: number; total: number };
-  /** Aplica un ajuste a una prefactura según el tipo de ajuste (algoritmo por tipo). */
-  aplicarAjusteFactura: (params: AjusteFacturaParams) => boolean;
+  /**
+   * Aplica un ajuste a una prefactura según el tipo de ajuste (algoritmo por tipo).
+   * Devuelve el registro de kardex resultante (única fuente de verdad de los
+   * importes antes/después) o `null` si el ajuste no procede.
+   */
+  aplicarAjusteFactura: (params: AjusteFacturaParams) => AjusteFacturaRegistro | null;
+  /** Kardex de ajustes aplicados a prefacturas */
+  ajustesFactura: AjusteFacturaRegistro[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -812,6 +882,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [tarifas] = useState(initialTarifas);
   const [descuentos] = useState(initialDescuentos);
   const [preFacturas, setPreFacturas] = useState(initialPreFacturas);
+  const [ajustesFactura, setAjustesFactura] = useState<AjusteFacturaRegistro[]>([]);
   const [timbrados, setTimbrados] = useState(initialTimbrados);
   const [recibos, setRecibos] = useState(initialRecibos);
   const [pagos, setPagos] = useState(initialPagos);
@@ -944,20 +1015,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     updatePagoExterno(id, { estado: 'conciliado', contratoIdSugerido: contratoId });
   };
 
-  const calcularTarifa = (tipoServicio: string, m3: number) => {
-    const tipo = tipoServicio === 'Doméstico' ? 'Doméstico' : tipoServicio === 'Comercial' ? 'Comercial' : 'Industrial';
-    const aplicables = tarifas.filter(t => t.tipo === tipo && m3 >= t.rangoMin && m3 <= t.rangoMax);
-    const tarifa = aplicables[0] || tarifas[0];
-    const subtotal = m3 * tarifa.precioPorM3;
-    return { subtotal, cargoFijo: tarifa.cargoFijo, total: subtotal + tarifa.cargoFijo };
-  };
+  const calcularTarifa = (tipoServicio: string, m3: number) => calcularTarifaCon(tarifas, tipoServicio, m3);
 
-  const aplicarAjusteFactura = (params: AjusteFacturaParams): boolean => {
+  const aplicarAjusteFactura = (params: AjusteFacturaParams): AjusteFacturaRegistro | null => {
     const pf = preFacturas.find(p => p.id === params.preFacturaId);
-    if (!pf) return false;
+    if (!pf) return null;
     const contrato = contratos.find(c => c.id === pf.contratoId);
-    if (!contrato) return false;
+    if (!contrato) return null;
     const tipo = params.tipoAjusteId;
+    const meta = TIPOS_AJUSTE_FACTURACION.find(t => t.id === tipo);
+    /** Agrega la entrada de kardex del ajuste aplicado y la devuelve */
+    const registrarAjuste = (
+      cambios: Pick<AjusteFacturaRegistro, 'totalAnterior' | 'totalNuevo'> & Partial<AjusteFacturaRegistro>
+    ): AjusteFacturaRegistro => {
+      const registro: AjusteFacturaRegistro = {
+        id: genId('AJF'),
+        preFacturaId: params.preFacturaId,
+        tipoAjusteId: tipo,
+        tipoLabel: meta?.label ?? tipo,
+        area: meta?.area ?? '',
+        observacion: params.observacion,
+        fecha: new Date().toISOString(),
+        ...cambios,
+      };
+      setAjustesFactura(prev => [...prev, registro]);
+      return registro;
+    };
     if (tipo === 'actualizacion_datos' || tipo === 'correccion_lectura') {
       if (params.consumoM3 != null) {
         const { subtotal, cargoFijo, total } = calcularTarifa(contrato.tipoServicio, params.consumoM3);
@@ -969,25 +1052,38 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               : p
           )
         );
-        return true;
+        return registrarAjuste({
+          consumoAnterior: pf.consumoM3,
+          consumoNuevo: params.consumoM3,
+          totalAnterior: pf.total,
+          totalNuevo: nuevoTotal,
+        });
       }
     }
     if (tipo === 'deuda' || tipo === 'juridica' || tipo === 'convenio' || tipo === 'atencion_publico') {
-      const descuentoAdicional = params.descuentoAdicional ?? 0;
-      const nuevoDescuento = pf.descuento + descuentoAdicional;
-      const nuevoTotal = Math.max(0, pf.total - descuentoAdicional);
+      // El descuento no puede exceder el saldo: acumular el solicitado y topar el
+      // total en 0 por separado dejaba `descuento` describiendo una rebaja que
+      // nunca se aplicó, y el siguiente ajuste de consumo la volvía a restar.
+      const solicitado = Math.max(0, params.descuentoAdicional ?? 0);
+      const descuentoAplicado = Math.min(solicitado, pf.total);
+      const nuevoDescuento = pf.descuento + descuentoAplicado;
+      const nuevoTotal = pf.total - descuentoAplicado;
       setPreFacturas(prev =>
         prev.map(p =>
           p.id === params.preFacturaId ? { ...p, descuento: nuevoDescuento, total: nuevoTotal } : p
         )
       );
-      return true;
+      return registrarAjuste({
+        descuentoAplicado,
+        totalAnterior: pf.total,
+        totalNuevo: nuevoTotal,
+      });
     }
     if (tipo === 'corte_reconexion') {
       // Solo registro; no cambia importes por defecto
-      return true;
+      return registrarAjuste({ totalAnterior: pf.total, totalNuevo: pf.total });
     }
-    return false;
+    return null;
   };
 
   return (
@@ -1004,7 +1100,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addContrato, updateContrato, addMedidor, updateMedidor, addRuta, updateRuta, moveContratoToRuta,
       addLectura, updateLectura, addConsumo, updateConsumo, addPreFactura, updatePreFactura,
       addTimbrado, updateTimbrado, addRecibo, updateRecibo, addPago, calcularTarifa,
-      aplicarAjusteFactura,
+      aplicarAjusteFactura, ajustesFactura,
       addAdministracion, updateAdministracion, addZona, updateZona, addDistrito, updateDistrito,
     }}>
       {children}

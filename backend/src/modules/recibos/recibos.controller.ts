@@ -5,15 +5,12 @@ import {
   Param,
   Query,
   Body,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller('recibos')
-@UseGuards(JwtAuthGuard)
 export class RecibosController {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -87,7 +84,6 @@ export class RecibosController {
 }
 
 @Controller('mensajes-recibo')
-@UseGuards(JwtAuthGuard)
 export class MensajesReciboController {
   constructor(private readonly prisma: PrismaService) {}
 

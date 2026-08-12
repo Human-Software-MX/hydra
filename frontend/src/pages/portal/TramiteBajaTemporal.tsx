@@ -4,6 +4,7 @@ import type { PortalContextValue } from '@/components/PortalLayout';
 import {
   StepIndicator,
   StepDots,
+  Field,
   Label,
   FieldError,
   TextInput,
@@ -311,54 +312,50 @@ const TramiteBajaTemporal = () => {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
+                <Field error={errors.numeroContrato}>
                   <Label required>Número de contrato</Label>
                   <TextInput
                     value={form.numeroContrato}
                     readOnly
                     hint="Pre-llenado desde tu sesión activa"
                   />
-                  <FieldError msg={errors.numeroContrato} />
-                </div>
-                <div>
+                </Field>
+                <Field>
                   <Label>Número de medidor</Label>
                   <TextInput
                     value={form.numeroMedidor}
                     onChange={(v) => set('numeroMedidor', v)}
                     placeholder="Ej. M-0012345"
                   />
-                </div>
+                </Field>
               </div>
 
-              <div>
+              <Field error={errors.nombreTitular}>
                 <Label required>Nombre del titular</Label>
                 <TextInput
                   value={form.nombreTitular}
                   onChange={(v) => set('nombreTitular', v)}
                   placeholder="Nombre completo del titular"
                 />
-                <FieldError msg={errors.nombreTitular} />
-              </div>
+              </Field>
 
-              <div>
+              <Field error={errors.direccion}>
                 <Label required>Dirección del predio</Label>
                 <TextInput
                   value={form.direccion}
                   onChange={(v) => set('direccion', v)}
                   placeholder="Calle, número exterior e interior"
                 />
-                <FieldError msg={errors.direccion} />
-              </div>
+              </Field>
 
-              <div>
+              <Field error={errors.colonia}>
                 <Label required>Colonia</Label>
                 <TextInput
                   value={form.colonia}
                   onChange={(v) => set('colonia', v)}
                   placeholder="Nombre de la colonia"
                 />
-                <FieldError msg={errors.colonia} />
-              </div>
+              </Field>
             </div>
           )}
 
@@ -406,15 +403,14 @@ const TramiteBajaTemporal = () => {
 
               {/* Campo "Otro" */}
               {form.tipoInmueble === 'otro' && (
-                <div>
+                <Field error={errors.tipoInmuebleOtro}>
                   <Label required>Especifica el tipo de inmueble</Label>
                   <TextInput
                     value={form.tipoInmuebleOtro}
                     onChange={(v) => set('tipoInmuebleOtro', v)}
                     placeholder="Describe el tipo de inmueble"
                   />
-                  <FieldError msg={errors.tipoInmuebleOtro} />
-                </div>
+                </Field>
               )}
 
               {/* Predio baldío warning */}
@@ -428,7 +424,7 @@ const TramiteBajaTemporal = () => {
               )}
 
               {/* Motivo */}
-              <div>
+              <Field error={errors.motivoDescripcion}>
                 <Label required>Motivo de la baja temporal</Label>
                 <p className="text-xs text-gray-400 mb-1.5">Describe por qué no harás uso temporalmente del servicio de agua potable.</p>
                 <TextArea
@@ -437,8 +433,7 @@ const TramiteBajaTemporal = () => {
                   placeholder="Ej. El inmueble estará sin ocupantes durante los próximos meses por remodelación / viaje prolongado / venta del predio..."
                   rows={5}
                 />
-                <FieldError msg={errors.motivoDescripcion} />
-              </div>
+              </Field>
             </div>
           )}
 
@@ -477,32 +472,31 @@ const TramiteBajaTemporal = () => {
               {esRepresentante && (
                 <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-4 space-y-4">
                   <SectionLabel>Datos del representante legal</SectionLabel>
-                  <div>
+                  <Field error={errors.nombreRepresentante}>
                     <Label required>Nombre del representante legal</Label>
                     <TextInput
                       value={form.nombreRepresentante}
                       onChange={(v) => set('nombreRepresentante', v)}
                       placeholder="Nombre completo del representante"
                     />
-                    <FieldError msg={errors.nombreRepresentante} />
-                  </div>
+                  </Field>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field>
                       <Label>Escritura número (personalidad)</Label>
                       <TextInput
                         value={form.numeroEscritura}
                         onChange={(v) => set('numeroEscritura', v)}
                         placeholder="Núm. de escritura"
                       />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field>
                       <Label>Núm. acta constitutiva (empresa)</Label>
                       <TextInput
                         value={form.numeroActaConstitutiva}
                         onChange={(v) => set('numeroActaConstitutiva', v)}
                         placeholder="Solo si es persona moral"
                       />
-                    </div>
+                    </Field>
                   </div>
                 </div>
               )}
@@ -513,25 +507,24 @@ const TramiteBajaTemporal = () => {
                   <SectionLabel>
                     {esRepresentante ? 'Datos de contacto del representante' : 'Tus datos de contacto'}
                   </SectionLabel>
-                  <div>
+                  <Field error={errors.nombreFirmante}>
                     <Label required>Nombre completo</Label>
                     <TextInput
                       value={form.nombreFirmante}
                       onChange={(v) => set('nombreFirmante', v)}
                       placeholder="Nombre completo"
                     />
-                    <FieldError msg={errors.nombreFirmante} />
-                  </div>
-                  <div>
+                  </Field>
+                  <Field>
                     <Label>Dirección particular</Label>
                     <TextInput
                       value={form.direccionParticular}
                       onChange={(v) => set('direccionParticular', v)}
                       placeholder="Calle, número, colonia"
                     />
-                  </div>
+                  </Field>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field error={errors.telefono}>
                       <Label required>Teléfono (con lada)</Label>
                       <TextInput
                         value={form.telefono}
@@ -539,9 +532,8 @@ const TramiteBajaTemporal = () => {
                         placeholder="(442) 000 0000"
                         type="tel"
                       />
-                      <FieldError msg={errors.telefono} />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field error={errors.correoElectronico}>
                       <Label required>Correo electrónico</Label>
                       <TextInput
                         value={form.correoElectronico}
@@ -549,8 +541,7 @@ const TramiteBajaTemporal = () => {
                         placeholder="correo@ejemplo.com"
                         type="email"
                       />
-                      <FieldError msg={errors.correoElectronico} />
-                    </div>
+                    </Field>
                   </div>
                 </div>
               )}

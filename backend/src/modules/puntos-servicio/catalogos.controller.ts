@@ -5,13 +5,10 @@ import {
   Patch,
   Param,
   Body,
-  UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PuntosServicioService } from './puntos-servicio.service';
 
 @Controller('catalogos')
-@UseGuards(JwtAuthGuard)
 export class CatalogosController {
   constructor(private readonly service: PuntosServicioService) {}
 

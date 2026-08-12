@@ -26,6 +26,11 @@ services:
       target: builder
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ctcf_dev
+    # Seed de DESARROLLO (catálogos + usuarios/contratos de demo con contraseña
+    # demo123). Por eso NODE_ENV no es production aquí: prisma/seed.ts se niega
+    # a correr en ese caso. En producción el servicio `api` sólo siembra
+    # catálogos al arrancar (npm run start:prod) y el primer administrador se
+    # crea con `npm run bootstrap:admin`.
     command: sh -c "npx prisma migrate deploy && npx prisma db seed"
     depends_on:
       postgres:
