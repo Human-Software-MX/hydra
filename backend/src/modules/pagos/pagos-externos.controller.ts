@@ -12,7 +12,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PagosExternosService } from './pagos-externos.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('pagos-externos')
 export class PagosExternosController {
   constructor(private readonly service: PagosExternosService) {}

@@ -1,6 +1,6 @@
 # Propuesta RBAC — segmentación de roles internos (GATE A carryover)
 
-**Estado:** PROPUESTA. No implementado. Requiere aprobación de Fernando antes de cablear `@Roles(...)`.
+**Estado:** ✅ IMPLEMENTADO 2026-08-11 (aprobado). `@Roles(...)` cableado por controlador/método. Ver "Estado de implementación" al final.
 **Fecha:** 2026-08-11
 **Origen:** Hallazgo de GATE A — los roles internos no están segmentados. Ningún controlador declara `@Roles(...)`, así que el `RolesGuard` global es un no-op: cualquier rol interno (incl. `LECTURISTA`) alcanza `/pagos`, `/contabilidad`, `/tarifas`, etc. El `InternalGuard` sólo separa interno-vs-portal, no roles entre sí.
 
@@ -72,8 +72,51 @@ Estos los consumen varias pantallas de distintos roles; deben quedar accesibles 
 5. Verificación: por cada rol, montar un token y recorrer las páginas del menú de ese rol (`routesForRole`) confirmando que todas sus llamadas siguen en 2xx, y que al menos un endpoint fuera de su menú responde 403. Idealmente, un e2e por rol (bloqueado hoy por dependencia de BD; ver `authz-guards.spec.ts` que ya cubre el mecanismo del `RolesGuard`).
 6. Añadir `@Roles` a la superficie Swagger para que la doc refleje la restricción.
 
+## Estado de implementación (2026-08-11)
+
+Constantes de grupos en `backend/src/modules/auth/roles.decorator.ts`
+(`ROLES_ADMIN`, `ROLES_INTERNAL`, `ROLES_OPERACION`, `ROLES_SERVICIOS`, `ROLES_CAMPO`,
+`ROLES_ATENCION`, `ROLES_QUEJAS`). Todas incluyen `SUPER_ADMIN`+`ADMIN` (no hay bypass en
+`RolesGuard`; inclusión explícita mantiene Swagger fiel). Roles reales usados; `CAJERO`/`CONTABILIDAD`
+NO existen → "caja/pagos/contabilidad" mapeados a `ROLES_ATENCION`/`ROLES_ADMIN` (sin inventar enum).
+
+| Grupo / Módulo | @Roles aplicado | Estado |
+|---|---|---|
+| Puntos de servicio | `puntos-servicio` → ROLES_SERVICIOS | ✅ implementado |
+| Solicitudes | `solicitudes` → ROLES_SERVICIOS | ✅ |
+| Contratos | GET* abierto (transversal); `PATCH :id` → ROLES_ADMIN (editFiscal) | ✅ (write split) |
+| Procesos contratación | `procesos-contratacion` → ROLES_SERVICIOS | ✅ |
+| Medidores | `medidores` → ROLES_OPERACION | ✅ |
+| Consumos | `consumos` → ROLES_OPERACION | ✅ |
+| Rutas | `rutas` → ROLES_CAMPO | ✅ |
+| Lecturas | `lecturas` → ROLES_CAMPO | ✅ |
+| Tarifas / Simulador | `tarifas` → ROLES_ADMIN | ✅ (ningún flujo OPERADOR consume /tarifas — verificado) |
+| Pre-facturación | `prefacturas` → ROLES_ADMIN | ✅ |
+| Timbrado | `timbrados` → ROLES_ADMIN | ✅ |
+| Recibos | `recibos` + `mensajes-recibo` → ROLES_ATENCION | ✅ |
+| Pagos / Caja | `pagos`, `pagos-externos`, `caja` → ROLES_ATENCION | ✅ |
+| Convenios | `convenios` → ROLES_SERVICIOS (incl. OPERADOR por usePermissions) | ✅ |
+| Contabilidad / Conciliaciones | `contabilidad`, `conciliaciones` → ROLES_ADMIN | ✅ |
+| Quejas | ctrl → ROLES_QUEJAS; `DELETE :id` → ROLES_ADMIN | ✅ (resolve/borrado = admin) |
+| Trámites | GET abierto; writes (POST/PATCH) → ROLES_ATENCION | ✅ (write split) |
+| Órdenes | GET abierto; `PATCH :id/estado` → ROLES_OPERACION (changeEstado) | ✅ (write split; UI ya oculta el botón a ATENCION/LECTURISTA) |
+| Monitoreo | `monitoreo` → ROLES_ADMIN | ✅ |
+| Config maestros | `agora`, `tipos-contratacion` (GET abierto / writes admin) | ✅ parcial |
+
+**Deferido / dejado authenticated-only a propósito** (transversal — restringir rompería UI; err hacia menos restricción):
+- `catalogos-operativos`, `puntos-servicio/catalogos`, `tipos-contratacion/catalogos-contratacion`,
+  `domicilios`, `personas` → catálogos/lookups consumidos por múltiples roles. Sus **writes** (POST/PATCH de
+  datos maestros) siguen abiertos a cualquier interno → endurecer a `ROLES_ADMIN` en una pasada futura
+  (bajo riesgo, pero pendiente para un humano).
+- `gis` → sin mapeo de menú en el frontend; sin `@Roles` hasta definir dueño (probable OPERADOR/ADMIN).
+- `sige-hydra` (`@Public` + `ApiTokenGuard`) y `portal` (`@AllowPortal`) → NO tocados.
+
 ## Riesgos
 
+- **Dashboard transversal → 403 cosméticos** (ver `tasks/bugs.md`): `Dashboard.tsx` agrega listas de
+  `procesos`, `lecturas`, `pagos`, `prefacturas`, `timbrados` para TODOS los roles sin gating; ahora cada
+  rol recibe 403 en los módulos fuera de su grupo. TanStack Query v5 no lanza por defecto → el KPI cae a 0,
+  no rompe la página. Fix limpio = gatear las queries del dashboard por `routesForRole`/rol (frontend).
 - El enum no tiene cajero/contador: si se quiere ese detalle hay que migrar el enum y re-asignar usuarios (afecta login y `seed`/`bootstrap:admin`).
 - `usePermissions.ts` y `routes.ts` pueden divergir entre sí; antes de cablear, reconciliar ambos como especificación única.
 - Un `@Roles` mal puesto en un endpoint transversal degrada pantallas permitidas a "carga vacía / 403 silencioso"; de ahí el paso 5 obligatorio.

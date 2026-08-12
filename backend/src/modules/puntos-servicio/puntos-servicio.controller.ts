@@ -12,7 +12,9 @@ import {
   ParseFloatPipe,
 } from '@nestjs/common';
 import { PuntosServicioService } from './puntos-servicio.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('puntos-servicio')
 export class PuntosServicioController {
   constructor(private readonly service: PuntosServicioService) {}

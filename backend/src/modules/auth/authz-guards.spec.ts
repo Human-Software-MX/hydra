@@ -8,6 +8,12 @@ import { PortalGuard } from './portal.guard';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { ALLOW_PORTAL_KEY } from './allow-portal.decorator';
 import { ROLES_KEY } from './roles.decorator';
+import { ContabilidadController } from '../contabilidad/contabilidad.controller';
+import { LecturasController } from '../lecturas/lecturas.controller';
+import { RutasController } from '../rutas/rutas.controller';
+import { PagosController } from '../pagos/pagos.controller';
+import { TarifasController } from '../tarifas/tarifas.controller';
+import { SolicitudesController } from '../solicitudes/solicitudes.controller';
 
 /**
  * C2 — cobertura de autorización a nivel de guard (chain de APP_GUARD).
@@ -118,5 +124,71 @@ describe('RolesGuard (@Roles opcional)', () => {
   it('con @Roles y rol NO coincidente → rechaza', () => {
     const guard = new RolesGuard(reflectorReturning({ [ROLES_KEY]: ['ADMIN'] }));
     expect(guard.canActivate(ctxWith({ role: 'LECTURISTA' }))).toBe(false);
+  });
+});
+
+/**
+ * Cobertura end-to-end del cableado `@Roles` real: usa un `Reflector` real que
+ * lee la metadata emitida por los decoradores en los controladores reales, en
+ * lugar de un mapa falso. Prueba que la matriz RBAC (tasks/rbac-proposal.md)
+ * queda efectivamente aplicada por controlador.
+ */
+describe('RolesGuard — @Roles reales por controlador (matriz RBAC)', () => {
+  const guard = new RolesGuard(new Reflector());
+
+  /** ExecutionContext cuya clase es un controlador real (con su @Roles). */
+  function ctxForClass(cls: unknown, role?: string): ExecutionContext {
+    const req = { user: role ? { role } : undefined };
+    return {
+      switchToHttp: () => ({ getRequest: () => req }),
+      getHandler: () => function noop() {},
+      getClass: () => cls,
+    } as unknown as ExecutionContext;
+  }
+
+  it('LECTURISTA es RECHAZADO en /contabilidad (fuera de su grupo)', () => {
+    expect(guard.canActivate(ctxForClass(ContabilidadController, 'LECTURISTA'))).toBe(false);
+  });
+
+  it('LECTURISTA es RECHAZADO en /pagos (fuera de su grupo)', () => {
+    expect(guard.canActivate(ctxForClass(PagosController, 'LECTURISTA'))).toBe(false);
+  });
+
+  it('LECTURISTA es PERMITIDO en /lecturas y /rutas (su grupo de campo)', () => {
+    expect(guard.canActivate(ctxForClass(LecturasController, 'LECTURISTA'))).toBe(true);
+    expect(guard.canActivate(ctxForClass(RutasController, 'LECTURISTA'))).toBe(true);
+  });
+
+  it('OPERADOR es RECHAZADO en /tarifas y /pagos (sólo admin / atención)', () => {
+    expect(guard.canActivate(ctxForClass(TarifasController, 'OPERADOR'))).toBe(false);
+    expect(guard.canActivate(ctxForClass(PagosController, 'OPERADOR'))).toBe(false);
+  });
+
+  it('OPERADOR es PERMITIDO en /solicitudes (grupo servicios)', () => {
+    expect(guard.canActivate(ctxForClass(SolicitudesController, 'OPERADOR'))).toBe(true);
+  });
+
+  it('ATENCION_CLIENTES es PERMITIDO en /pagos, RECHAZADO en /tarifas', () => {
+    expect(guard.canActivate(ctxForClass(PagosController, 'ATENCION_CLIENTES'))).toBe(true);
+    expect(guard.canActivate(ctxForClass(TarifasController, 'ATENCION_CLIENTES'))).toBe(false);
+  });
+
+  it('ATENCION_CLIENTES es RECHAZADO en /lecturas (grupo de campo)', () => {
+    expect(guard.canActivate(ctxForClass(LecturasController, 'ATENCION_CLIENTES'))).toBe(false);
+  });
+
+  it('ADMIN y SUPER_ADMIN son PERMITIDOS en TODOS los controladores', () => {
+    const controllers = [
+      ContabilidadController,
+      PagosController,
+      TarifasController,
+      LecturasController,
+      RutasController,
+      SolicitudesController,
+    ];
+    for (const cls of controllers) {
+      expect(guard.canActivate(ctxForClass(cls, 'ADMIN'))).toBe(true);
+      expect(guard.canActivate(ctxForClass(cls, 'SUPER_ADMIN'))).toBe(true);
+    }
   });
 });

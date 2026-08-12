@@ -8,7 +8,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { MonitoreoService } from './monitoreo.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('monitoreo')
 export class MonitoreoController {
   constructor(private readonly service: MonitoreoService) {}

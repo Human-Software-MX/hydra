@@ -12,7 +12,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { createHash } from 'crypto';
 import { LecturasService } from './lecturas.service';
+import { Roles, ROLES_CAMPO } from '../auth/roles.decorator';
 
+@Roles(...ROLES_CAMPO)
 @Controller('lecturas')
 export class LecturasController {
   constructor(private readonly service: LecturasService) {}

@@ -73,3 +73,22 @@ Bugs spotted outside the task at hand. Self-contained entries; another agent wit
 - **Fix propuesto (Fernando)**: generar una migración de reconciliación (`prisma migrate dev --name reconcile_schema_drift` en un entorno controlado) que alinee los nombres/FKs, revisarla, y una vez limpio el drift, promover el step de CI a hard-fail (quitar `continue-on-error`). Coordinar con el BOM de `add_sige_hydra` (ver entrada arriba) que también bloquea el replay limpio.
 - **Status:** deferred (needs reconciliation migration; CI step is advisory meanwhile)
 - **Date:** 2026-08-11
+
+## Dashboard interno dispara 403 en módulos fuera del grupo del rol (RBAC) [RBAC-1]
+
+- **Where**: `frontend/src/pages/Dashboard.tsx` (visible a SUPER_ADMIN/ADMIN/OPERADOR/LECTURISTA/ATENCION_CLIENTES) vs los `@Roles` cableados el 2026-08-11.
+- **What**: El Dashboard agrega listas de varios dominios sin gating por rol: `fetchProcesos` (`/procesos-contratacion` → ROLES_SERVICIOS), `fetchLecturas` (`/lecturas` → ROLES_CAMPO), `fetchPagos` (`/pagos` → ROLES_ATENCION), `fetchPreFacturas` (`/prefacturas` → ROLES_ADMIN), `fetchTimbrados` (`/timbrados` → ROLES_ADMIN), `fetchContratos` (`/contratos` GET, abierto). Tras la segmentación RBAC, cada rol recibe **403** en los endpoints fuera de su grupo (p.ej. LECTURISTA → 403 en /procesos, /pagos, /prefacturas, /timbrados; ATENCION → 403 en /lecturas; OPERADOR → 403 en /pagos, /prefacturas, /timbrados).
+- **How it fails**: NO rompe la página. Cada llamada está en su propio `useQuery` con fallback `= []`; TanStack Query v5 no lanza por defecto (`throwOnError` false), así que el KPI derivado cae a 0 y la vista renderiza. Efecto: KPIs incompletos + ruido de red/consola (403) para roles no-admin. Es degradación cosmética, no un brick.
+- **Por qué se dejó así**: la alternativa (abrir los GET de pagos/prefacturas/timbrados a todos los internos) anularía el objetivo del RBAC (un LECTURISTA podría `curl` la lista completa de pagos). Se priorizó el bloqueo correcto y se documenta el flanco del dashboard.
+- **Fix propuesto (frontend, fuera del alcance backend de esta pasada)**: gatear cada `useQuery` del Dashboard por rol/permiso (`enabled: useApi && routesForRole(role).includes(...)` o `usePermissions`), o mover los KPIs a un endpoint `/dashboard/resumen` único con `@Roles(...ROLES_INTERNAL)` que el backend arme según el rol del token. Mientras tanto, verificar que ningún widget rompe (confirmado: no rompe).
+- **Status:** deferred (frontend role-gating pendiente)
+- **Date:** 2026-08-11
+
+## Writes de catálogos maestros transversales siguen abiertos a cualquier interno [RBAC-2]
+
+- **Where**: `catalogos-operativos.controller.ts`, `puntos-servicio/catalogos.controller.ts`, `tipos-contratacion/catalogos-contratacion.controller.ts`, `domicilios.controller.ts`, `personas.controller.ts`.
+- **What**: Estos controladores se dejaron **authenticated-only** (sin `@Roles`) porque sus GET son catálogos/lookups transversales que consumen varias pantallas de distintos roles (restringirlos rompería la UI). Pero también exponen `POST/PATCH/DELETE` de datos maestros (marcas/modelos/calibres de medidor, formas de pago, tipos de variable, conceptos de cobro, cláusulas, tipos de corte, domicilios, personas/roles) que, sin `@Roles`, cualquier usuario interno (incl. LECTURISTA) puede invocar.
+- **How it fails**: No es un fallo de runtime; es una superficie de escritura sin segmentar. Un LECTURISTA con token válido podría crear/editar catálogos maestros vía API.
+- **Fix propuesto**: split método-a-método — dejar los GET abiertos y poner `@Roles(...ROLES_ADMIN)` (o el grupo dueño) en cada write. No se hizo en esta pasada por el riesgo de romper flujos que crean catálogos inline (p.ej. alta de medidor que crea una marca) sin verificar cada uno; err hacia menos restricción. Requiere revisar consumidores reales antes de endurecer.
+- **Status:** deferred (endurecimiento de writes pendiente, bajo riesgo)
+- **Date:** 2026-08-11

@@ -11,7 +11,9 @@ import {
   ParseFloatPipe,
 } from '@nestjs/common';
 import { TarifasService } from './tarifas.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('tarifas')
 export class TarifasController {
   constructor(private readonly service: TarifasService) {}

@@ -21,11 +21,13 @@ import { Response } from 'express';
 import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { SolicitudesService } from './solicitudes.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'cotizaciones');
 // Ensure directory exists at module load time
 mkdirSync(UPLOAD_DIR, { recursive: true });
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('solicitudes')
 export class SolicitudesController {
   constructor(private readonly service: SolicitudesService) {}

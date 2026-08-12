@@ -9,7 +9,9 @@ import {
   DefaultValuePipe,
 } from '@nestjs/common';
 import { ConciliacionesService } from './conciliaciones.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('conciliaciones')
 export class ConciliacionesController {
   constructor(private readonly service: ConciliacionesService) {}

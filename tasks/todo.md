@@ -105,3 +105,17 @@ Verified: `backend tsc --noEmit` ✓, `backend npm run build` ✓ (exit 0), `fro
 - [FIXED — LOW] GIS tracking phantom-on-rollback: documentada la limitación (escritura fuera de la transacción interactiva) en `gis-tracking.extension.ts` + entrada en `tasks/bugs.md` para el fix outbox. El error de tracking ya se traga con `logger.warn`.
 - [FIXED — LOW] Dropzone de carga accesible (`Lecturas.tsx`): `role="button"`, `tabIndex=0`, `aria-label`, `onKeyDown` (Enter/Espacio → abre input); `<input type=file>` con `aria-label` + `accept=".txt,.csv,text/plain"`.
 NOTE: migración sigue SIN aplicar a ninguna BD (decisión de deploy + backfill de huérfanos pendiente para Fernando).
+
+### DEFERRED ITEMS — applied 2026-08-11 (per "check risks and run all")
+- [APPLIED] Batch B migration `20260811160000_batch_b_data_integrity` deployed to the LOCAL db (127.0.0.1:5432/hydradb). Risk check first: 0 orphan lecturas, 0 dup lecturas, 0 dup consumos, 0 lecturas / 3 consumos / 2 contratos. FK + 3 indexes verified present. NOTE: this is the LOCAL dev db, NOT the production server (35.188.238.10:5433) — run `prisma migrate deploy` there too; the self-guarding DO-blocks will protect real data.
+- [BLOCKED] CI workflow `.github/workflows/ci.yml` — gh OAuth token lacks `workflow` scope; add via GitHub web UI or a token with workflow scope.
+- [NEEDS SERVER ACCESS] Live credential rotation — fresh secrets generated in scratchpad; must be set on the server (Coolify/Easypanel) + DB, then redeploy. Not safe to do blind from here.
+
+### RBAC — segmentación de roles internos IMPLEMENTADA — 2026-08-11
+Aplicada la matriz de `tasks/rbac-proposal.md`. Antes: ningún controlador interno declaraba `@Roles`, así que cualquier rol interno (incl. LECTURISTA) alcanzaba `/pagos`, `/contabilidad`, `/tarifas`, etc. Ahora cada rol solo llega a su grupo de módulos.
+- Constantes de grupo en `auth/roles.decorator.ts` (ROLES_ADMIN/INTERNAL/OPERACION/SERVICIOS/CAMPO/ATENCION/QUEJAS); todas incluyen SUPER_ADMIN+ADMIN (sin bypass en el guard → Swagger fiel). Roles inexistentes (CAJERO/CONTABILIDAD) mapeados a roles reales; sin migraciones ni enum inventado.
+- 24 controladores con `@Roles` (22 a nivel de controlador + splits método en contratos PATCH, tipos-contratacion GET, ordenes PATCH estado, tramites writes, quejas DELETE).
+- Dejados authenticated-only a propósito (transversal): `catalogos-operativos`, `puntos-servicio/catalogos`, `catalogos-contratacion`, `domicilios`, `personas`, `gis`. `sige-hydra`(@Public+ApiToken) y `portal`(@AllowPortal) intactos.
+- Tests: `authz-guards.spec.ts` extendido con un bloque que usa Reflector REAL contra los controladores reales (LECTURISTA denegado en /contabilidad y /pagos, permitido en /lecturas y /rutas; OPERADOR denegado en /tarifas; ATENCION permitido en /pagos y denegado en /tarifas; ADMIN/SUPER_ADMIN permitidos en todos).
+Verificación: `tsc --noEmit` ✓ · `JWT_SECRET=test-secret-ci jest --ci` 47/47 ✓ · `npm run build` ✓ · `npm run lint` 0 errores (5 warnings preexistentes ajenos).
+Riesgo #1 para el review (logueado en bugs.md): `Dashboard.tsx` agrega listas de módulos restringidos para todos los roles → 403 cosméticos (KPI=0, no rompe; react-query v5 no lanza). Recomendación: gatear las queries del dashboard por rol en el frontend. Writes de catálogos maestros transversales siguen abiertos a cualquier interno → endurecer a ADMIN en pasada futura.
