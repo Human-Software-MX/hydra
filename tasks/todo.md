@@ -375,3 +375,24 @@ Aplicada la matriz de `tasks/rbac-proposal.md`. Antes: ningún controlador inter
 - Tests: `authz-guards.spec.ts` extendido con un bloque que usa Reflector REAL contra los controladores reales (LECTURISTA denegado en /contabilidad y /pagos, permitido en /lecturas y /rutas; OPERADOR denegado en /tarifas; ATENCION permitido en /pagos y denegado en /tarifas; ADMIN/SUPER_ADMIN permitidos en todos).
 Verificación: `tsc --noEmit` ✓ · `JWT_SECRET=test-secret-ci jest --ci` 47/47 ✓ · `npm run build` ✓ · `npm run lint` 0 errores (5 warnings preexistentes ajenos).
 Riesgo #1 para el review (logueado en bugs.md): `Dashboard.tsx` agrega listas de módulos restringidos para todos los roles → 403 cosméticos (KPI=0, no rompe; react-query v5 no lanza). Recomendación: gatear las queries del dashboard por rol en el frontend. Writes de catálogos maestros transversales siguen abiertos a cualquier interno → endurecer a ADMIN en pasada futura.
+
+---
+
+# Redesign sidebar (estilo Hermes) — 2026-08-31
+
+- [x] Sidebar claro (blanco) con border-r, logo CEA adaptado
+- [x] Ítems del grupo General sueltos arriba (estilo INICIO/INTELIGENCIA)
+- [x] Grupos colapsables (header uppercase + chevron; azul al expandir)
+- [x] Ítem activo: píldora azul suave redondeada, texto/icono azul + chevron
+- [x] Estado de grupos persistido en localStorage + auto-abrir grupo de ruta activa
+- [x] Bloque inferior: nombre + rol, Soporte, Configuración, Cerrar sesión
+- [x] tsc --noEmit OK
+- [x] Verificación con agente verificador vs referencia: ronda 1 APROBADO con 6 menores; fixes aplicados (tooltips en truncados, matching por segmento, jerarquía header/ítem, aria-controls, icono Simulador → FlaskConical); ronda 2 APROBADO sin regresiones
+
+## Review
+
+- Rediseño en `frontend/src/components/AppLayout.tsx` (solo el `<aside>`; topbar y main sin cambios).
+- `routes.ts`: único cambio propio = icono de Simulador (FileSearch → FlaskConical) para no duplicar con Pre-Facturación.
+- Grupos dinámicos desde `groupRoutesBySection`; "General" se renderiza como ítems sueltos (STANDALONE_GROUPS).
+- Estado abierto/cerrado en localStorage clave `hydra.sidebar.openGroups`.
+- Pendiente decidido: botones Soporte/Configuración del bloque inferior sin acción (igual que antes; no hay destino definido).
