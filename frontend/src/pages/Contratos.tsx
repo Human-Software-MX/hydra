@@ -1360,8 +1360,8 @@ function ProcesosTab({ contratoId, useApi }: { contratoId: string; useApi: boole
 
       {/* Cancel dialog */}
       {cancelId && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200/70 shadow-lg shadow-slate-900/10 p-6 w-full max-w-sm space-y-4">
             <h3 className="font-semibold">Cancelar proceso</h3>
             <Input
               placeholder="Motivo de cancelación"

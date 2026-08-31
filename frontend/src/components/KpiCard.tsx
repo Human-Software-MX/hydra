@@ -32,11 +32,11 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        'bg-white rounded-xl border border-border/50 shadow-sm p-5 flex flex-col gap-2',
+        'bg-white rounded-xl border border-slate-200/70 shadow-sm p-5 flex flex-col gap-2',
         className,
       )}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
         {label}
       </p>
 
@@ -45,8 +45,8 @@ export function KpiCard({
           {value}
         </p>
         {Icon && (
-          <div className="p-2 bg-muted/60 rounded-lg">
-            <Icon className="w-5 h-5 text-muted-foreground" />
+          <div className="p-2 bg-slate-100/80 rounded-lg">
+            <Icon className="w-[18px] h-[18px] text-slate-500" strokeWidth={1.6} />
           </div>
         )}
       </div>

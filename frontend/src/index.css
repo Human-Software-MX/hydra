@@ -16,7 +16,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 28% 17%;
 
-    --primary: 211 100% 20%;            /* #003366 – Primary Stitch */
+    --primary: 211 100% 50%;            /* #007BFF – azul de marca (acento Hermes) */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 207 24% 38%;           /* #4A6278 – Secondary Stitch */
@@ -25,8 +25,8 @@
     --muted: 210 20% 94%;
     --muted-foreground: 215 16% 47%;    /* #64748b */
 
-    --accent: 211 100% 50%;             /* #007BFF – Tertiary/CTA Stitch */
-    --accent-foreground: 0 0% 100%;
+    --accent: 211 100% 96%;             /* tinte suave de #007BFF – hovers/seleccionados */
+    --accent-foreground: 211 100% 42%;  /* texto azul sobre el tinte */
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -35,7 +35,7 @@
     --input: 214 32% 91%;
     --ring: 211 100% 50%;               /* foco en CTA azul */
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     --success: 142 60% 40%;
     --success-foreground: 0 0% 100%;
@@ -126,7 +126,7 @@
   }
   /* ── Design System components ── */
   .widget-card {
-    @apply bg-white rounded-xl border border-border/50 shadow-sm p-5 transition-shadow hover:shadow-md;
+    @apply bg-white rounded-xl border border-slate-200/70 shadow-sm p-5;
   }
 
   /* Table system */
@@ -134,13 +134,13 @@
     @apply w-full text-sm;
   }
   .data-table th {
-    @apply text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-4 py-3 bg-muted/40;
+    @apply text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 px-4 py-3 bg-slate-50/80;
   }
   .data-table td {
-    @apply px-4 py-3.5 border-t border-border/50;
+    @apply px-4 py-3.5 border-t border-slate-200/60;
   }
   .data-table tr:hover td {
-    @apply bg-muted/30;
+    @apply bg-slate-50/70;
   }
   .data-table-interactive tr {
     transition: background-color 0.15s ease;
@@ -150,7 +150,7 @@
   }
   /* Table container — wrap any .data-table with this */
   .table-container {
-    @apply bg-white rounded-xl border border-border/50 overflow-hidden shadow-sm;
+    @apply bg-white rounded-xl border border-slate-200/70 overflow-hidden shadow-sm;
   }
 
   /* Page layout */
@@ -161,7 +161,7 @@
     @apply text-[28px] font-bold font-display text-foreground leading-tight;
   }
   .section-title {
-    @apply text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3;
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-3;
   }
   .section-subtitle {
     @apply text-sm font-medium text-muted-foreground mt-3 mb-1;
@@ -170,10 +170,10 @@
     @apply mt-0;
   }
 
-  /* Scrollbar del menú lateral: fino y acorde al tema del sidebar */
+  /* Scrollbar del menú lateral: fino y acorde al sidebar claro */
   .sidebar-nav {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--sidebar-border)) transparent;
+    scrollbar-color: theme('colors.slate.200') transparent;
   }
   .sidebar-nav::-webkit-scrollbar {
     width: 6px;
@@ -182,10 +182,10 @@
     background: transparent;
   }
   .sidebar-nav::-webkit-scrollbar-thumb {
-    background: hsl(var(--sidebar-border));
+    background: theme('colors.slate.200');
     border-radius: 3px;
   }
   .sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--sidebar-muted));
+    background: theme('colors.slate.300');
   }
 }

@@ -1657,7 +1657,7 @@ export default function Solicitudes() {
       {/* ── Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Solicitudes de Servicio</h1>
+          <h1 className="page-title">Solicitudes de Servicio</h1>
           <p className="text-sm text-muted-foreground">CEA-FUS01 — Registro de solicitudes de contratación en ventanilla</p>
         </div>
         <Button
@@ -1696,8 +1696,8 @@ export default function Solicitudes() {
         ].map((kpi) => (
           <Card key={kpi.label}>
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs text-muted-foreground">{kpi.label}</p>
-              <p className={cn('text-3xl font-bold tabular-nums', kpi.className)}>{kpi.value}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">{kpi.label}</p>
+              <p className={cn('text-3xl font-bold font-display tabular-nums mt-1', kpi.className)}>{kpi.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -1762,7 +1762,7 @@ export default function Solicitudes() {
                 className={cn(
                   'px-3 py-1.5 text-xs font-medium transition-colors border-r',
                   estadoFiltro === opt.value
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-[#007BFF]/[0.08] text-[#007BFF]'
                     : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
