@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { conMonitoreo } from '../../common/monitoreo.helper';
 
 interface ParsedLectura {
@@ -28,7 +29,10 @@ export class LecturasService {
   /** Banda de plausibilidad (m³) para aceptar un consumo reconstruido por vuelta de contador. */
   private readonly CONSUMO_MAX_PLAUSIBLE = 10000;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhooks: WebhooksService,
+  ) {}
 
   parseArchivoPlano(contenido: string): ParsedLectura[] {
     const lineas = contenido.split('\n').filter((l) => l.trim().length > 0);
@@ -188,6 +192,7 @@ export class LecturasService {
             },
           };
 
+          let lectura: { id: string };
           try {
             if (params.reemplazar) {
               // Corrección explícita: elimina la lectura previa del (contrato, periodo)
@@ -196,12 +201,13 @@ export class LecturasService {
                 const { count } = await tx.lectura.deleteMany({
                   where: { contratoId: contrato.id, periodo: params.periodo },
                 });
-                await tx.lectura.create({ data: lecturaData });
-                return count;
+                const creada = await tx.lectura.create({ data: lecturaData });
+                return { count, creada };
               });
-              if (replaced > 0) totalReemplazadas += replaced;
+              if (replaced.count > 0) totalReemplazadas += replaced.count;
+              lectura = replaced.creada;
             } else {
-              await this.prisma.lectura.create({ data: lecturaData });
+              lectura = await this.prisma.lectura.create({ data: lecturaData });
             }
           } catch (err: unknown) {
             // Choca contra @@unique([contratoId, periodo]): ya existe lectura del periodo.
@@ -219,8 +225,16 @@ export class LecturasService {
             continue;
           }
 
-          if (estado === 'Valida' || estado === 'Estimada') totalValidos++;
-          else {
+          if (estado === 'Valida' || estado === 'Estimada') {
+            totalValidos++;
+            void this.webhooks.emitir('lectura.capturada', {
+              lecturaId: lectura.id,
+              contratoId: contrato.id,
+              periodo: params.periodo,
+              lecturaActual: p.lecturaActual,
+              esEstimada,
+            });
+          } else {
             totalConError++;
             errores.push({ contrato: p.contrato, motivo: motivoInvalidacion ?? 'Sin lectura válida' });
           }

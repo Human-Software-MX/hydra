@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, getBaseUrl, normalizeApiBase } from './client';
 
 export interface PortalContrato {
   id: string;
@@ -121,15 +121,18 @@ export interface PortalContacto {
   persona: { id: string; nombre: string; rfc?: string | null; email?: string | null; telefono?: string | null; tipo: string };
 }
 
-export interface PortalTimbradoDescarga {
-  timbradoId: string;
-  uuid: string;
-  periodo: string;
-  total: number;
-  fechaEmision: string;
-  _stub: boolean;
-  message: string;
-  xmlUrl?: string | null;
+export interface PortalReporteFuga {
+  id: string;
+  contratoId: string;
+  fecha: string;
+  tipo: string;
+  descripcion: string;
+  estado: string;
+  categoria?: string | null;
+  prioridad: string;
+  canal: string;
+  areaAsignada: string;
+  createdAt: string;
 }
 
 export const getPortalEstadoOperativo = (contratoId: string) =>
@@ -162,5 +165,45 @@ export const addPortalContacto = (
     body: JSON.stringify(data),
   });
 
-export const getTimbradoDescarga = (timbradoId: string) =>
-  apiRequest<PortalTimbradoDescarga>(`/portal/timbrados/${timbradoId}/descargar`);
+/**
+ * Descarga el XML del CFDI del portal vía fetch con JWT → blob → <a download>.
+ * No usar window.open directo: la navegación sin header Authorization da 401.
+ */
+export async function descargarPortalCfdiXml(timbradoId: string): Promise<void> {
+  const base = getBaseUrl() ?? normalizeApiBase('http://localhost:3001');
+  const token = localStorage.getItem('ctcf_access_token');
+  const res = await fetch(`${base}/portal/timbrados/${timbradoId}/descargar`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let message = `No se pudo descargar el XML (HTTP ${res.status})`;
+    try {
+      const j = JSON.parse(await res.text());
+      if (j.message) message = j.message;
+    } catch {
+      // use default message
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cfdi-${timbradoId}.xml`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const crearPortalReporteFuga = (
+  contratoId: string,
+  data: { descripcion: string; ubicacion?: string },
+) =>
+  apiRequest<PortalReporteFuga>(`/portal/reportes-fuga?contratoId=${contratoId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getPortalReportesFuga = (contratoId: string) =>
+  apiRequest<PortalReporteFuga[]>(`/portal/reportes-fuga?contratoId=${contratoId}`);

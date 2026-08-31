@@ -42,6 +42,21 @@ import { CatalogosOperativosModule } from './modules/catalogos-operativos/catalo
 import { RutasModule } from './modules/rutas/rutas.module';
 import { MedidoresModule } from './modules/medidores/medidores.module';
 import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
+import { FacturacionModule } from './modules/facturacion/facturacion.module';
+import { BatchModule } from './modules/batch/batch.module';
+import { RestriccionesModule } from './modules/restricciones/restricciones.module';
+import { IndicadoresModule } from './modules/indicadores/indicadores.module';
+import { VeeModule } from './modules/vee/vee.module';
+import { BalanceModule } from './modules/balance/balance.module';
+import { CarteraModule } from './modules/cartera/cartera.module';
+import { MdmModule } from './modules/mdm/mdm.module';
+import { MigracionModule } from './modules/migracion/migracion.module';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { GemeloModule } from './modules/gemelo/gemelo.module';
+import { ClimaModule } from './modules/clima/clima.module';
+import { TenancyModule } from './modules/tenancy/tenancy.module';
+import { SupraModule } from './modules/supra/supra.module';
 
 @Module({
   imports: [
@@ -84,6 +99,21 @@ import { SolicitudesModule } from './modules/solicitudes/solicitudes.module';
     RutasModule,
     MedidoresModule,
     SolicitudesModule,
+    FacturacionModule,
+    BatchModule,
+    RestriccionesModule,
+    IndicadoresModule,
+    VeeModule,
+    BalanceModule,
+    CarteraModule,
+    MdmModule,
+    MigracionModule,
+    AuditoriaModule,
+    WebhooksModule,
+    GemeloModule,
+    ClimaModule,
+    TenancyModule,
+    SupraModule,
   ],
   controllers: [AppController],
   providers: [

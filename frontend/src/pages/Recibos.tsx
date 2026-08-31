@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Search, X, Eye, Printer, CreditCard, Plus, RefreshCw, CheckCircle2, Clock,
+  Search, X, Eye, Printer, CreditCard, Plus, RefreshCw, CheckCircle2, Clock, Download, Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,8 @@ import {
   type ReciboDto, type ReciboPreviewDto, type MensajeReciboDto,
 } from '@/api/recibos';
 import { getCajaActiva, abrirCaja, cerrarCaja, type SesionCajaDto } from '@/api/caja';
+import { abrirReciboImprimible, notificarRecibo } from '@/api/notificaciones';
+import { useToast } from '@/components/ui/use-toast';
 import { apiRequest } from '@/api/client';
 
 const TIPOS_PAGO = ['Efectivo', 'Tarjeta', 'Transferencia', 'SPEI', 'OXXO'] as const;
@@ -146,6 +148,33 @@ function PreviewDialog({
   const [payForm, setPayForm] = useState({ monto: '', tipo: 'Efectivo', concepto: '' });
   const [paying, setPaying] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const [notificando, setNotificando] = useState(false);
+  const { toast } = useToast();
+
+  async function handleDescargar() {
+    if (!preview) return;
+    setDescargando(true);
+    try {
+      await abrirReciboImprimible(preview.recibo.id);
+    } catch (err) {
+      toast({ title: 'Error al generar recibo', description: (err as Error).message, variant: 'destructive' });
+    } finally { setDescargando(false); }
+  }
+
+  async function handleNotificar() {
+    if (!preview) return;
+    setNotificando(true);
+    try {
+      const res = await notificarRecibo(preview.recibo.id);
+      toast({
+        title: 'Notificación enviada',
+        description: `Email: ${res.email ? 'sí' : 'no'} · WhatsApp: ${res.whatsapp ? 'sí' : 'no'}`,
+      });
+    } catch (err) {
+      toast({ title: 'Error al notificar', description: (err as Error).message, variant: 'destructive' });
+    } finally { setNotificando(false); }
+  }
 
   useEffect(() => {
     if (!reciboId || !open) return;
@@ -340,6 +369,18 @@ function PreviewDialog({
           {!showPayForm ? (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
+              {r && (
+                <>
+                  <Button variant="outline" onClick={handleDescargar} disabled={descargando} className="gap-1.5">
+                    <Download className="h-4 w-4" />
+                    {descargando ? 'Generando...' : 'Descargar / Imprimir'}
+                  </Button>
+                  <Button variant="outline" onClick={handleNotificar} disabled={notificando} className="gap-1.5">
+                    <Bell className="h-4 w-4" />
+                    {notificando ? 'Enviando...' : 'Notificar'}
+                  </Button>
+                </>
+              )}
               {r && !r.impreso && (
                 <>
                   <Button variant="outline" onClick={() => setShowPayForm(true)} className="gap-1.5">

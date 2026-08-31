@@ -1,13 +1,34 @@
 import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ReemplazoService } from './reemplazo.service';
+import { PrioridadReemplazo } from './reemplazo-scorer';
 import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
 @Roles(...ROLES_OPERACION)
 @Controller('medidores')
 export class MedidoresController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reemplazo: ReemplazoService,
+  ) {}
+
+  /**
+   * Ranking de reemplazo del parque de medidores: prioriza por excepciones
+   * VEE (submedición/medidor parado), % lecturas estimadas, edad y consumo.
+   */
+  @Get('ranking-reemplazo')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
+  async rankingReemplazo(
+    @Query('zonaId') zonaId?: string,
+    @Query('administracionId') administracionId?: string,
+    @Query('prioridad') prioridad?: PrioridadReemplazo,
+    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit = 100,
+  ) {
+    return this.reemplazo.ranking({ zonaId, administracionId, prioridad, limit });
+  }
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findAll(
     @Query('contratoId') contratoId?: string,
     @Query('zonaId') zonaId?: string,
@@ -45,6 +66,7 @@ export class MedidoresController {
   }
 
   @Get('bodega')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async findBodega(
     @Query('zonaId') zonaId?: string,
     @Query('estado') estado?: string,

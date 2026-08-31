@@ -21,10 +21,21 @@ export class CajaService {
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
     if (sesion.estado === 'Cerrada') throw new BadRequestException('La sesión ya está cerrada');
 
+    // Corte por SESIÓN: pagos ligados explícitamente a esta sesión, más los
+    // del mismo cajero dentro del turno que aún no traían vínculo (transición).
+    // Nunca pagos de otros usuarios ni posteriores al cierre.
+    const ahora = new Date();
     const pagos = await this.prisma.pago.findMany({
       where: {
-        createdAt: { gte: sesion.apertura },
         origen: 'nativo',
+        OR: [
+          { sesionCajaId: sesionId },
+          {
+            sesionCajaId: null,
+            usuarioId: sesion.usuarioId,
+            createdAt: { gte: sesion.apertura, lte: ahora },
+          },
+        ],
       },
       select: { monto: true, tipo: true },
     });

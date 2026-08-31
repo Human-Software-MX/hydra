@@ -22,7 +22,8 @@ function makeService(rows: TarifaRow[]) {
   const prisma = {
     tarifa: { findMany: jest.fn().mockResolvedValue(rows) },
   };
-  return new TarifasService(prisma as never);
+  // calcularMonto no usa FacturacionService (solo simularImpacto lo requiere).
+  return new TarifasService(prisma as never, {} as never);
 }
 
 // Escala de 3 tramos usada en varios casos:

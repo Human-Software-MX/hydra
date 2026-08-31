@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
 import type { TipoPago } from '@/context/DataContext';
-import { fetchPagos, fetchPagosExternos, hasApi } from '@/api/pagos';
+import { fetchPagos, fetchPagosExternos, registrarPago, conciliarPagoExterno as apiConciliarPagoExterno, hasApi } from '@/api/pagos';
+import { fetchContratos } from '@/api/contratos';
 import { fetchRecibos } from '@/api/recibos';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -17,10 +20,11 @@ const TIPOS_PAGO: TipoPago[] = [
 
 const Pagos = () => {
   const useApi = hasApi();
+  const queryClient = useQueryClient();
   const {
     pagos: contextPagos,
     addPago,
-    contratos,
+    contratos: contextContratos,
     recibos: contextRecibos,
     allowedZonaIds,
     pagosExternos: contextPagosExternos,
@@ -29,9 +33,34 @@ const Pagos = () => {
   const { data: apiPagos = [] } = useQuery({ queryKey: ['pagos'], queryFn: fetchPagos, enabled: useApi });
   const { data: apiPagosExternos = [] } = useQuery({ queryKey: ['pagos-externos'], queryFn: fetchPagosExternos, enabled: useApi });
   const { data: apiRecibos = [] } = useQuery({ queryKey: ['recibos'], queryFn: fetchRecibos, enabled: useApi });
+  const { data: apiContratos = [] } = useQuery({ queryKey: ['contratos'], queryFn: fetchContratos, enabled: useApi });
   const pagos = useApi ? apiPagos : contextPagos;
   const pagosExternos = useApi ? apiPagosExternos : contextPagosExternos;
   const recibos = useApi ? apiRecibos : contextRecibos;
+  const contratos = useApi ? apiContratos : contextContratos;
+
+  const registrarPagoMut = useMutation({
+    mutationFn: registrarPago,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pagos'] });
+      queryClient.invalidateQueries({ queryKey: ['recibos'] });
+      toast.success('Pago registrado');
+      setForm({ contratoId: '', monto: '', tipo: '', concepto: '' });
+    },
+    onError: (e: Error) => toast.error(e.message || 'No se pudo registrar el pago'),
+  });
+
+  const conciliarMut = useMutation({
+    mutationFn: ({ id, contratoId }: { id: string; contratoId: string }) => apiConciliarPagoExterno(id, contratoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pagos-externos'] });
+      queryClient.invalidateQueries({ queryKey: ['pagos'] });
+      toast.success('Pago externo conciliado');
+      setConciliarExternoId(null);
+      setConciliarContratoId('');
+    },
+    onError: (e: Error) => toast.error(e.message || 'No se pudo conciliar el pago'),
+  });
   const [form, setForm] = useState({ contratoId: '', monto: '', tipo: '' as TipoPago | '', concepto: '' });
   const [conciliarExternoId, setConciliarExternoId] = useState<string | null>(null);
   const [conciliarContratoId, setConciliarContratoId] = useState('');
@@ -53,7 +82,15 @@ const Pagos = () => {
   );
 
   const handlePago = () => {
-    if (useApi) return;
+    if (useApi) {
+      registrarPagoMut.mutate({
+        contratoId: form.contratoId,
+        monto: Number(form.monto),
+        tipo: form.tipo as string,
+        concepto: form.concepto || undefined,
+      });
+      return;
+    }
     addPago({
       contratoId: form.contratoId,
       monto: Number(form.monto),
@@ -65,18 +102,21 @@ const Pagos = () => {
   };
 
   const handleConciliar = () => {
-    if (useApi) return;
-    if (conciliarExternoId && conciliarContratoId) {
-      conciliarPagoExterno(conciliarExternoId, conciliarContratoId);
-      setConciliarExternoId(null);
-      setConciliarContratoId('');
+    if (!conciliarExternoId || !conciliarContratoId) return;
+    if (useApi) {
+      conciliarMut.mutate({ id: conciliarExternoId, contratoId: conciliarContratoId });
+      return;
     }
+    conciliarPagoExterno(conciliarExternoId, conciliarContratoId);
+    setConciliarExternoId(null);
+    setConciliarContratoId('');
   };
 
   const adeudos = activos.map(c => {
     const recibosContrato = recibos.filter(r => r.contratoId === c.id);
     const pagosContrato = pagosVisibles.filter(p => p.contratoId === c.id);
-    const totalRecibos = recibosContrato.reduce((s, r) => s + Number(r.saldoVigente) + Number(r.saldoVencido), 0);
+    // saldoVencido es arrastre de recibos anteriores: sumarlo por recibo duplicaría la deuda
+    const totalRecibos = recibosContrato.reduce((s, r) => s + Number(r.saldoVigente), 0);
     const totalPagos = pagosContrato.reduce((s, p) => s + Number(p.monto), 0);
     return { contrato: c, saldo: totalRecibos - totalPagos };
   }).filter(a => a.saldo > 0);
@@ -101,10 +141,12 @@ const Pagos = () => {
             <div className="widget-card">
               <h3 className="section-title">Registrar pago</h3>
               <div className="space-y-3">
-                <Select value={form.contratoId} onValueChange={v => setForm({ ...form, contratoId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Contrato" /></SelectTrigger>
-                  <SelectContent>{activos.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={activos.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+                  value={form.contratoId}
+                  onValueChange={v => setForm({ ...form, contratoId: v })}
+                  placeholder="Contrato"
+                />
                 <Input type="number" placeholder="Monto" value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })} />
                 <Select value={form.tipo} onValueChange={v => setForm({ ...form, tipo: v as TipoPago })}>
                   <SelectTrigger><SelectValue placeholder="Tipo de pago" /></SelectTrigger>
@@ -113,7 +155,9 @@ const Pagos = () => {
                   </SelectContent>
                 </Select>
                 <Input placeholder="Concepto" value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} />
-                <Button onClick={handlePago} disabled={useApi || !form.contratoId || !form.monto || !form.tipo} className="w-full">Registrar pago</Button>
+                <Button onClick={handlePago} disabled={registrarPagoMut.isPending || !form.contratoId || !form.monto || !form.tipo} className="w-full">
+                  {registrarPagoMut.isPending ? 'Registrando…' : 'Registrar pago'}
+                </Button>
               </div>
             </div>
             <div>
@@ -218,13 +262,15 @@ const Pagos = () => {
           {peConciliar && (
             <div className="space-y-3">
               <p className="text-sm"><strong>Referencia:</strong> {peConciliar.referencia} · <strong>Monto:</strong> ${Number(peConciliar.monto).toFixed(2)}</p>
-              <Select value={conciliarContratoId} onValueChange={setConciliarContratoId}>
-                <SelectTrigger><SelectValue placeholder="Contrato / adeudo a conciliar" /></SelectTrigger>
-                <SelectContent>
-                  {activos.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleConciliar} disabled={useApi || !conciliarContratoId}>Confirmar conciliación</Button>
+              <SearchableSelect
+                options={activos.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+                value={conciliarContratoId}
+                onValueChange={setConciliarContratoId}
+                placeholder="Contrato / adeudo a conciliar"
+              />
+              <Button onClick={handleConciliar} disabled={conciliarMut.isPending || !conciliarContratoId}>
+                {conciliarMut.isPending ? 'Conciliando…' : 'Confirmar conciliación'}
+              </Button>
             </div>
           )}
         </DialogContent>

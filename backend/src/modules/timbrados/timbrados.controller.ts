@@ -1,11 +1,36 @@
-import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Query,
+  Body,
+  Res,
+  DefaultValuePipe,
+  ParseIntPipe,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TimbradoService } from './timbrado.service';
 import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
+import { IsOptional, IsString, Matches } from 'class-validator';
+
+class TimbrarPeriodoDto {
+  @Matches(/^\d{4}-\d{2}$/, { message: 'periodo debe tener formato YYYY-MM' })
+  periodo!: string;
+
+  @IsOptional()
+  @IsString()
+  contratoId?: string;
+}
 
 @Roles(...ROLES_ADMIN)
 @Controller('timbrados')
 export class TimbradosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly timbrado: TimbradoService,
+  ) {}
 
   @Get()
   async findAll(
@@ -37,11 +62,37 @@ export class TimbradosController {
       estado: t.estado,
       error: t.error ?? undefined,
       fecha: t.fechaEmision,
+      fechaTimbrado: t.fechaTimbrado ?? undefined,
       periodo: t.periodo,
       subtotal: Number(t.subtotal),
       iva: Number(t.iva),
       total: Number(t.total),
+      serie: t.serie ?? undefined,
+      folio: t.folio ?? undefined,
       contrato: t.contrato,
     }));
+  }
+
+  /** Timbra un comprobante individual (Pendiente/Error → Timbrada OK). */
+  @Post(':id/timbrar')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  timbrar(@Param('id') id: string) {
+    return this.timbrado.timbrar(id);
+  }
+
+  /** Timbrado masivo de un periodo. */
+  @Post('timbrar-periodo')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  timbrarPeriodo(@Body() dto: TimbrarPeriodoDto) {
+    return this.timbrado.timbrarPeriodo(dto);
+  }
+
+  /** Descarga del XML timbrado (CFDI). */
+  @Get(':id/xml')
+  async descargarXml(@Param('id') id: string, @Res() res: Response) {
+    const xml = await this.timbrado.obtenerXml(id);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="cfdi-${id}.xml"`);
+    res.send(xml);
   }
 }

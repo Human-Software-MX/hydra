@@ -355,7 +355,8 @@ const AtencionClientes = () => {
   const deudaTotal = useMemo(() => {
     if (!contratoId) return { importeServicios: 0, iva: 0, recargos: 0, saldoFavor: 0, total: 0 };
     const recs = recibos.filter((r) => r.contratoId === contratoId);
-    const totalRecibos = recs.reduce((s, r) => s + r.saldoVigente + r.saldoVencido, 0);
+    // saldoVencido es arrastre de recibos anteriores: sumarlo por recibo duplicaría la deuda
+    const totalRecibos = recs.reduce((s, r) => s + r.saldoVigente, 0);
     const totalPagos = pagos.filter((p) => p.contratoId === contratoId).reduce((s, p) => s + p.monto, 0);
     const saldo = totalRecibos - totalPagos;
     const importeServicios = totalRecibos;

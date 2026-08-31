@@ -27,6 +27,8 @@ import {
   Landmark,
   NotebookTabs,
   Braces,
+  Wallet,
+  Globe2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -67,6 +69,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
     path: 'puntos-servicio',
     label: 'Puntos de servicio',
     icon: MapPin,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
+    group: 'Infraestructura',
+  },
+  {
+    path: 'mapa',
+    label: 'Mapa operativo',
+    icon: Globe2,
     allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
     group: 'Infraestructura',
   },
@@ -172,6 +181,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
     group: 'Finanzas',
   },
   {
+    path: 'cartera',
+    label: 'Cartera y cobranza',
+    icon: Wallet,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES'],
+    group: 'Finanzas',
+  },
+  {
     path: 'contabilidad',
     label: 'Contabilidad',
     icon: PieChart,
@@ -194,6 +210,13 @@ export const APP_ROUTES: AppRouteConfig[] = [
     group: 'Atención al Cliente',
   },
   // Operaciones
+  {
+    path: 'indicadores',
+    label: 'Indicadores PIGOO',
+    icon: PieChart,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN'],
+    group: 'Operaciones',
+  },
   {
     path: 'monitoreo',
     label: 'Monitoreo',

@@ -1,0 +1,13 @@
+services:
+  demo:
+    build: .
+    container_name: hydra-demo-agua
+    ports:
+      - "127.0.0.1:8090:8090"   # solo localhost — el demo no se expone fuera de la máquina
+    volumes:
+      # Muestras reales AQUACIS (lotes + Observac.dat) — viven en este repo
+      - "../../Requerimientos/Documentos/Interfaces-20260224T185812Z-1-001/Interfaces/Interfase con Sistema de Lecturas:/data/lecturas:ro"
+      # Artefactos canónicos generados por Callosum (YAML/TTL) — viven en este repo
+      - "../canonico:/canonico:ro"
+      # Salida generada (index.html, data.json) visible en el host
+      - "./out:/srv"

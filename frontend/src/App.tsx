@@ -22,6 +22,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Factibilidades = lazy(() => import('@/pages/Factibilidades'));
 const Construcciones = lazy(() => import('@/pages/Construcciones'));
 const PuntosServicio = lazy(() => import('@/pages/PuntosServicio'));
+const Mapa = lazy(() => import('@/pages/Mapa'));
 const Contratos = lazy(() => import('@/pages/Contratos'));
 const Medidores = lazy(() => import('@/pages/Medidores'));
 const Rutas = lazy(() => import('@/pages/Rutas'));
@@ -34,10 +35,12 @@ const AjustesFacturacion = lazy(() => import('@/pages/AjustesFacturacion'));
 const TimbradoPage = lazy(() => import('@/pages/TimbradoPage'));
 const Recibos = lazy(() => import('@/pages/Recibos'));
 const Convenios = lazy(() => import('@/pages/Convenios'));
+const Cartera = lazy(() => import('@/pages/Cartera'));
 const Pagos = lazy(() => import('@/pages/Pagos'));
 const Contabilidad = lazy(() => import('@/pages/Contabilidad'));
 const AtencionClientes = lazy(() => import('@/pages/AtencionClientes'));
 const Monitoreo = lazy(() => import('@/pages/Monitoreo'));
+const Indicadores = lazy(() => import('@/pages/Indicadores'));
 const Catalogos = lazy(() => import('@/pages/Catalogos'));
 const CatalogosContrato = lazy(() => import('@/pages/CatalogosContrato'));
 const Administraciones = lazy(() => import('@/pages/Administraciones'));
@@ -97,6 +100,7 @@ const App = () => (
                     <Route path="/app/factibilidades" element={<Factibilidades />} />
                     <Route path="/app/construcciones" element={<Construcciones />} />
 <Route path="/app/puntos-servicio" element={<PuntosServicio />} />
+                    <Route path="/app/mapa" element={<Mapa />} />
                     <Route path="/app/solicitudes" element={<Solicitudes />} />
                     <Route path="/app/solicitudes/nueva" element={<SolicitudServicio />} />
                     <Route path="/app/solicitudes/:id/editar" element={<SolicitudServicio />} />
@@ -112,10 +116,12 @@ const App = () => (
                     <Route path="/app/timbrado" element={<TimbradoPage />} />
                     <Route path="/app/recibos" element={<Recibos />} />
                     <Route path="/app/convenios" element={<Convenios />} />
+                    <Route path="/app/cartera" element={<Cartera />} />
                     <Route path="/app/pagos" element={<Pagos />} />
                     <Route path="/app/contabilidad" element={<Contabilidad />} />
                     <Route path="/app/atencion-clientes" element={<AtencionClientes />} />
                     <Route path="/app/monitoreo" element={<Monitoreo />} />
+                    <Route path="/app/indicadores" element={<Indicadores />} />
                     <Route path="/app/administraciones" element={<Administraciones />} />
                     <Route path="/app/catalogos" element={<Catalogos />} />
                     <Route path="/app/catalogos-contrato" element={<CatalogosContrato />} />

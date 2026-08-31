@@ -32,4 +32,28 @@ export async function fetchPagosExternos(): Promise<PagoExternoDto[]> {
   return Array.isArray(res) ? res : ((res as { data: PagoExternoDto[] }).data ?? []);
 }
 
+export interface RegistrarPagoInput {
+  contratoId: string;
+  reciboId?: string;
+  monto: number;
+  tipo: string;
+  concepto?: string;
+  fecha?: string;
+}
+
+export async function registrarPago(input: RegistrarPagoInput): Promise<PagoDto> {
+  return apiRequest<PagoDto>('/pagos', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function conciliarPagoExterno(
+  id: string,
+  contratoId: string,
+  reciboId?: string,
+): Promise<PagoExternoDto> {
+  return apiRequest<PagoExternoDto>(`/pagos-externos/${id}/conciliar`, {
+    method: 'POST',
+    body: JSON.stringify({ contratoId, reciboId }),
+  });
+}
+
 export { hasApi };

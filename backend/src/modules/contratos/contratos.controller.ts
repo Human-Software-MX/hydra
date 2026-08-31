@@ -34,6 +34,7 @@ export class ContratosController {
   // IMPORTANT: static routes declared BEFORE /:id
   @ApiOperation({ summary: 'Busca contratos por número, titular o RFC' })
   @Get('search')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   search(
     @Query('q') q: string,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit = 10,
@@ -43,36 +44,56 @@ export class ContratosController {
 
   @ApiOperation({ summary: 'Lista todos los contratos' })
   @Get()
-  findAll() {
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('updatedSince') updatedSince?: string,
+  ) {
+    // Con `page` presente → envelope paginado (contrato para el conector de
+    // SUPRA); sin `page` → array legacy completo (UI de Hydra intacta).
+    if (page !== undefined) {
+      return this.contratosService.findAllPaginado({
+        page: Math.max(1, Number(page) || 1),
+        limit: Math.min(500, Math.max(1, Number(limit) || 100)),
+        updatedSince,
+      });
+    }
     return this.contratosService.findAll();
   }
 
   @Get(':id/flujo-completo')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getFlujoCompleto(@Param('id') id: string) {
     return this.contratosService.getFlujoCompleto(id);
   }
 
   @Get(':id/historial')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getHistorial(@Param('id') id: string) {
     return this.contratosService.getHistorial(id);
   }
 
   @Get(':id/contexto-atencion')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getContextoAtencion(@Param('id') id: string) {
     return this.contratosService.getContextoAtencion(id);
   }
 
   @Get(':id/estado-operativo')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getEstadoOperativo(@Param('id') id: string) {
     return this.contratosService.getEstadoOperativo(id);
   }
 
   @Get(':id/texto-contrato')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   getTextoContratoPreview(@Param('id') id: string) {
     return this.contratosService.getTextoContratoPreview(id);
   }
 
   @Get(':id/contrato-pdf')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   async getContratoPdf(@Param('id') id: string, @Res() res: Response) {
     const html = await this.contratosService.getContratoPdf(id);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -80,6 +101,7 @@ export class ContratosController {
   }
 
   @Post(':id/factura-contratacion')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   crearFacturaContratacion(@Param('id') id: string) {
     return this.contratosService.crearFacturaContratacion(id);
   }
@@ -89,6 +111,7 @@ export class ContratosController {
     description: 'Calcula conceptos y montos sin persistir. Una tarifa inválida devuelve 422 con el detalle.',
   })
   @Post('preview-facturacion')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   async previewFacturacion(
     @Body() body: { tipoContratacionId: string; variables: Record<string, string | number | boolean> },
   ) {
@@ -106,12 +129,14 @@ export class ContratosController {
 
   @ApiOperation({ summary: 'Obtiene un contrato por id' })
   @Get(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findOne(@Param('id') id: string) {
     return this.contratosService.findOne(id);
   }
 
   @ApiOperation({ summary: 'Crea un contrato definitivo (cierre del wizard de alta)' })
   @Post()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   create(@Body() dto: CreateContratoDto) {
     return this.contratosService.create(dto);
   }
@@ -119,11 +144,13 @@ export class ContratosController {
   @ApiOperation({ summary: 'Actualiza campos de un contrato existente' })
   @Roles(...ROLES_ADMIN)
   @Patch(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {
     return this.contratosService.update(id, dto);
   }
 
   @Post(':id/cambiar-tipo')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   cambiarTipo(
     @Param('id') id: string,
     @Body() body: { nuevoTipoId: string; motivo: string; usuario?: string },

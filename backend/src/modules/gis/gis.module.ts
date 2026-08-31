@@ -8,6 +8,6 @@ import { PrismaModule } from '../../prisma/prisma.module';
   imports: [PrismaModule],
   controllers: [GisController],
   providers: [GisService, GisTrackerService],
-  exports: [GisTrackerService],
+  exports: [GisTrackerService, GisService],
 })
 export class GisModule {}

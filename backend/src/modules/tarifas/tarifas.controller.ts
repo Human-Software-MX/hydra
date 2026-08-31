@@ -11,6 +11,7 @@ import {
   ParseFloatPipe,
 } from '@nestjs/common';
 import { TarifasService } from './tarifas.service';
+import { SimularImpactoDto } from './dto/simular-impacto.dto';
 import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
 @Roles(...ROLES_ADMIN)
@@ -46,6 +47,13 @@ export class TarifasController {
     @Query('fecha') fecha?: string,
   ) {
     return this.service.calcularMonto({ tipoServicio, consumoM3, fecha });
+  }
+
+  /** Simula el impacto de un cambio tarifario sobre los consumos de un periodo (no escribe nada). */
+  @Post('simular-impacto')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  simularImpacto(@Body() dto: SimularImpactoDto) {
+    return this.service.simularImpacto(dto);
   }
 
   @Get(':id')

@@ -1,10 +1,15 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import {
   getPortalConsumos,
   getPortalTimbrados,
   getPortalPagos,
   getPortalSaldos,
+  descargarPortalCfdiXml,
+  crearPortalReporteFuga,
+  getPortalReportesFuga,
   type PortalConsumo,
   type PortalTimbrado,
   type PortalPago,
@@ -12,6 +17,7 @@ import {
 } from '@/api/portal';
 import { getCeaDeuda, getCeaConsumos, type CeaConsumo } from '@/api/cea';
 import type { PortalContextValue } from '@/components/PortalLayout';
+import PagarEnLinea from '@/components/portal/PagarEnLinea';
 import {
   FileText,
   BarChart3,
@@ -34,6 +40,8 @@ import {
   AlertCircle,
   Plus,
   HelpCircle,
+  Droplets,
+  CheckCircle2,
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -76,11 +84,27 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function FugaEstadoPill({ estado }: { estado: string }) {
+  const map: Record<string, string> = {
+    Registrada: 'bg-blue-100 text-blue-700',
+    'En proceso': 'bg-yellow-100 text-yellow-700',
+    'En atención': 'bg-yellow-100 text-yellow-700',
+    Resuelta: 'bg-green-100 text-green-700',
+    Cerrada: 'bg-green-100 text-green-700',
+    Cancelada: 'bg-gray-100 text-gray-500',
+  };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${map[estado] ?? 'bg-gray-100 text-gray-600'}`}>
+      {estado}
+    </span>
+  );
+}
+
 // ─── Tab values ─────────────────────────────────────────────────────────────
 
 const FACTURAS_POR_PAGINA = 10;
 
-const TAB_VALUES = ['inicio', 'consumo', 'facturas', 'recibos', 'metodos-pago', 'tramites-digitales'] as const;
+const TAB_VALUES = ['inicio', 'consumo', 'facturas', 'recibos', 'pagar', 'metodos-pago', 'tramites-digitales'] as const;
 type TabValue = (typeof TAB_VALUES)[number];
 
 function isTab(s: string | null): s is TabValue {
@@ -130,6 +154,16 @@ const PortalCliente = () => {
   const [recibosSubtab, setRecibosSubtab] = useState<'recientes' | 'historico' | 'pendientes' | 'facturas'>('recientes');
   const [facturasPagina, setFacturasPagina] = useState(1);
   const [consumosPagina, setConsumosPagina] = useState(1);
+
+  // Descarga CFDI (XML) desde el portal
+  const [descargandoXmlId, setDescargandoXmlId] = useState<string | null>(null);
+  const [xmlError, setXmlError] = useState<string | null>(null);
+
+  // Reporte de fugas
+  const [fugaDescripcion, setFugaDescripcion] = useState('');
+  const [fugaUbicacion, setFugaUbicacion] = useState('');
+  const [fugaFolio, setFugaFolio] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const contrato = useMemo(
     () => (contratoId ? contratos.find((c) => c.id === contratoId) ?? null : null),
@@ -200,6 +234,8 @@ const PortalCliente = () => {
     setCeaNombreCliente(null);
     setCeaExplotacion(null);
     setConsumoAnioFiltro('todos');
+    setFugaFolio(null);
+    setXmlError(null);
   }, [contratoId]);
 
   const loading = loadingContratos || loadingData || ceaSaldosLoading;
@@ -329,6 +365,75 @@ const PortalCliente = () => {
     return consumosRows.slice(start, start + FACTURAS_POR_PAGINA);
   }, [consumosRows, consumosPagina]);
 
+  // Descarga del XML CFDI vía fetch con JWT → blob (window.open directo da 401)
+  const handleDescargarXml = useCallback(async (timbradoId: string) => {
+    setXmlError(null);
+    setDescargandoXmlId(timbradoId);
+    try {
+      await descargarPortalCfdiXml(timbradoId);
+    } catch (e) {
+      setXmlError(e instanceof Error ? e.message : 'No se pudo descargar el XML');
+    } finally {
+      setDescargandoXmlId(null);
+    }
+  }, []);
+
+  // Gráfica: últimos 12 periodos de consumo (m³), CEA cuando está vinculado
+  const consumoChartData = useMemo(() => {
+    const parseCeaKey = (c: CeaConsumo): number => {
+      const f = c.fechaInicio ?? '';
+      const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(f);
+      if (dmy) return new Date(+dmy[3], +dmy[2] - 1, +dmy[1]).getTime();
+      const iso = /^\d{4}-\d{2}-\d{2}/.test(f) ? new Date(f).getTime() : NaN;
+      if (!Number.isNaN(iso)) return iso;
+      const ano = parseInt(c.ano || '0', 10);
+      const per = parseInt((c.periodo || '').replace(/\D/g, '') || '0', 10);
+      return ano * 100 + per;
+    };
+    const rows =
+      ceaConsumos.length > 0
+        ? [...ceaConsumos]
+            .sort((a, b) => parseCeaKey(a) - parseCeaKey(b))
+            .map((c) => ({ periodo: c.periodo || '—', m3: c.metrosCubicos, estimado: false }))
+        : [...consumos]
+            .sort((a, b) => (a.periodo ?? '').localeCompare(b.periodo ?? ''))
+            .map((c) => ({
+              periodo: c.periodo ? c.periodo.replace(/-(\d{2})$/, '/$1') : '—',
+              m3: Number(c.m3),
+              estimado: /estimad/i.test(c.tipo ?? ''),
+            }));
+    return rows.slice(-12);
+  }, [ceaConsumos, consumos]);
+
+  const hayEstimados = consumoChartData.some((d) => d.estimado);
+
+  // Reportes de fuga del contrato
+  const reportesFugaQ = useQuery({
+    queryKey: ['portal-reportes-fuga', contratoId],
+    queryFn: () => getPortalReportesFuga(contratoId!),
+    enabled: !!contratoId,
+  });
+
+  const crearFugaMutation = useMutation({
+    mutationFn: (data: { descripcion: string; ubicacion?: string }) =>
+      crearPortalReporteFuga(contratoId!, data),
+    onSuccess: (reporte) => {
+      setFugaFolio(reporte.id);
+      setFugaDescripcion('');
+      setFugaUbicacion('');
+      queryClient.invalidateQueries({ queryKey: ['portal-reportes-fuga', contratoId] });
+    },
+  });
+
+  const handleEnviarReporteFuga = () => {
+    if (!fugaDescripcion.trim() || !contratoId) return;
+    setFugaFolio(null);
+    crearFugaMutation.mutate({
+      descripcion: fugaDescripcion.trim(),
+      ...(fugaUbicacion.trim() ? { ubicacion: fugaUbicacion.trim() } : {}),
+    });
+  };
+
   // ─── Render ──────────────────────────────────────────────────────────────
 
   if (loading && !contrato) {
@@ -403,6 +508,7 @@ const PortalCliente = () => {
           {/* Quick actions */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
+              { label: 'Pagar en línea', tab: 'pagar' as TabValue, icon: CreditCard, desc: 'Paga tu saldo por SPEI, OXXO o tarjeta' },
               { label: 'Ver mis facturas', tab: 'facturas' as TabValue, icon: FileText, desc: 'Historial y estado de tus facturas' },
               { label: 'Mis recibos', tab: 'recibos' as TabValue, icon: Receipt, desc: 'Pagos realizados y comprobantes' },
               { label: 'Trámites digitales', tab: 'tramites-digitales' as TabValue, icon: BarChart3, desc: 'Solicitudes y gestión de servicio' },
@@ -482,6 +588,62 @@ const PortalCliente = () => {
                 ))}
               </div>
             </>
+          )}
+
+          {/* Gráfica de consumo histórico (últimos 12 periodos) */}
+          {!ceaConsumosLoading && consumoChartData.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Consumo Histórico (últimos {consumoChartData.length} periodos)
+                </h2>
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm bg-blue-500 inline-block" />
+                    Lectura real
+                  </span>
+                  {hayEstimados && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-sm bg-amber-400 inline-block" />
+                      Consumo estimado
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={consumoChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="periodo"
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    interval={0}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={40}
+                    label={{ value: 'm³', position: 'insideTopLeft', offset: 0, fontSize: 11, fill: '#94a3b8' }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(59,130,246,0.06)' }}
+                    formatter={(value, _name, entry) => [
+                      `${value} m³${(entry?.payload as { estimado?: boolean } | undefined)?.estimado ? ' (estimado)' : ''}`,
+                      'Consumo',
+                    ]}
+                    labelFormatter={(label) => `Periodo ${label}`}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                  />
+                  <Bar dataKey="m3" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                    {consumoChartData.map((d, i) => (
+                      <Cell key={i} fill={d.estimado ? '#fbbf24' : '#3b82f6'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
 
           {/* Tabla de consumos */}
@@ -647,8 +809,8 @@ const PortalCliente = () => {
                   </div>
                   <div className="flex gap-3 mt-5 flex-wrap">
                     <button
-                      disabled
-                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold opacity-50 cursor-not-allowed"
+                      onClick={() => setTab('pagar')}
+                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
                     >
                       <CreditCard className="h-4 w-4" aria-hidden />
                       Pagar Ahora
@@ -719,6 +881,14 @@ const PortalCliente = () => {
               </div>
             )}
 
+            {/* Error de descarga de CFDI */}
+            {xmlError && (
+              <div className="mx-5 mt-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
+                <p className="text-xs text-red-700">{xmlError}</p>
+              </div>
+            )}
+
             {!ceaConsumosLoading && facturasFromCea.length > 0 && (
               <table className="w-full text-sm">
                 <thead>
@@ -786,9 +956,30 @@ const PortalCliente = () => {
                         <td className="px-5 py-4"><StatusPill status={f.estado} /></td>
                         <td className="px-5 py-4">
                           <div className="flex items-center justify-end gap-2">
-                            <button disabled title="Descargar PDF" className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 opacity-40 cursor-not-allowed">
-                              <FileText className="h-4 w-4" aria-hidden />
-                            </button>
+                            {f.uuid ? (
+                              <button
+                                onClick={() => handleDescargarXml(f.id)}
+                                disabled={descargandoXmlId === f.id}
+                                title="Descargar CFDI (XML)"
+                                className="flex items-center gap-1.5 text-blue-600 text-xs font-semibold px-2 py-1.5 rounded-md hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                              >
+                                {descargandoXmlId === f.id ? (
+                                  <span className="h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" aria-hidden />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" aria-hidden />
+                                )}
+                                CFDI (XML)
+                              </button>
+                            ) : (
+                              <button
+                                disabled
+                                title="El comprobante aún no está timbrado"
+                                className="flex items-center gap-1.5 text-gray-400 text-xs font-semibold px-2 py-1.5 rounded-md opacity-40 cursor-not-allowed"
+                              >
+                                <Download className="h-3.5 w-3.5" aria-hidden />
+                                CFDI (XML)
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -950,6 +1141,20 @@ const PortalCliente = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── PAGAR EN LÍNEA ─────────────────────────────────────────────────── */}
+      {activeTab === 'pagar' && contratoId && (
+        <div className="space-y-6">
+          <Breadcrumb items={[{ label: 'Portal', onClick: () => setTab('inicio') }, { label: 'Pagar en línea' }]} />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Pagar en Línea</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Genera una referencia de pago por SPEI, OXXO o tarjeta y liquida tu saldo sin salir de casa.
+            </p>
+          </div>
+          <PagarEnLinea contratoId={contratoId} />
         </div>
       )}
 
@@ -1169,6 +1374,125 @@ const PortalCliente = () => {
                 <button disabled className="flex items-center gap-1 text-sm font-semibold text-blue-600 opacity-50 cursor-not-allowed">
                   Solicitar <ChevronRight className="h-3.5 w-3.5" aria-hidden />
                 </button>
+              </div>
+            </div>
+          </section>
+
+          {/* REPORTE DE FUGAS */}
+          <section>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-6 w-6 bg-blue-50 rounded flex items-center justify-center shrink-0">
+                <Droplets className="h-3.5 w-3.5 text-blue-600" aria-hidden />
+              </div>
+              <h2 className="text-sm font-bold uppercase tracking-widest text-gray-700">Reporte de Fugas</h2>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <div className="grid lg:grid-cols-2 gap-5">
+              {/* Formulario */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Reportar una fuga de agua</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Describe la fuga y, si es posible, una referencia de ubicación. Nuestro equipo de operación la atenderá a la brevedad.
+                  </p>
+                </div>
+
+                {fugaFolio && (
+                  <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" aria-hidden />
+                    <p className="text-xs text-green-700">
+                      Reporte recibido. Tu folio de seguimiento es{' '}
+                      <span className="font-mono font-bold">{fugaFolio}</span>.
+                    </p>
+                  </div>
+                )}
+
+                {crearFugaMutation.isError && (
+                  <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
+                    <p className="text-xs text-red-700">
+                      {crearFugaMutation.error instanceof Error
+                        ? crearFugaMutation.error.message
+                        : 'No se pudo enviar el reporte. Intenta de nuevo.'}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="fuga-descripcion" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Descripción de la fuga <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    id="fuga-descripcion"
+                    value={fugaDescripcion}
+                    onChange={(e) => setFugaDescripcion(e.target.value)}
+                    rows={4}
+                    maxLength={2000}
+                    placeholder="Ej. Fuga de agua en la banqueta frente a mi domicilio, brota constantemente…"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="fuga-ubicacion" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Referencia de ubicación <span className="text-gray-400 normal-case font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    id="fuga-ubicacion"
+                    type="text"
+                    value={fugaUbicacion}
+                    onChange={(e) => setFugaUbicacion(e.target.value)}
+                    maxLength={500}
+                    placeholder="Ej. Esquina de Av. Universidad y calle Hidalgo, junto al poste de luz"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <button
+                  onClick={handleEnviarReporteFuga}
+                  disabled={!fugaDescripcion.trim() || crearFugaMutation.isPending}
+                  className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {crearFugaMutation.isPending ? (
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden />
+                  ) : (
+                    <Droplets className="h-4 w-4" aria-hidden />
+                  )}
+                  Enviar reporte
+                </button>
+              </div>
+
+              {/* Historial de reportes */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Mis reportes{reportesFugaQ.data && reportesFugaQ.data.length > 0 ? ` (${reportesFugaQ.data.length})` : ''}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Seguimiento del estado de tus reportes de fuga.</p>
+                </div>
+                <div className="flex-1 overflow-y-auto max-h-96 divide-y divide-gray-50">
+                  {reportesFugaQ.isLoading && (
+                    <div className="px-5 py-10 text-center">
+                      <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">Cargando reportes…</p>
+                    </div>
+                  )}
+                  {!reportesFugaQ.isLoading && (reportesFugaQ.data?.length ?? 0) === 0 && (
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">
+                      No has registrado reportes de fuga para este contrato.
+                    </div>
+                  )}
+                  {(reportesFugaQ.data ?? []).map((r) => (
+                    <div key={r.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <span className="text-xs font-mono text-blue-600 font-medium">{r.id}</span>
+                        <FugaEstadoPill estado={r.estado} />
+                      </div>
+                      <p className="text-sm text-gray-700 mt-1.5 whitespace-pre-line line-clamp-3">{r.descripcion}</p>
+                      <p className="text-xs text-gray-400 mt-1.5 tabular-nums">
+                        {r.fecha ? new Date(r.fecha).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </section>

@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
 import { fetchPreFacturas, hasApi } from '@/api/prefacturacion';
 import { fetchConsumos } from '@/api/consumos';
 import { fetchTimbrados } from '@/api/recibos';
+import { previewPeriodo, ejecutarPeriodo, type PreviewPeriodo } from '@/api/facturacion';
+import { useToast } from '@/components/ui/use-toast';
 import StatusBadge from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,6 +38,39 @@ const PreFacturacion = () => {
   const [editingPf, setEditingPf] = useState<PreFacturaItem | null>(null);
   const [editM3, setEditM3] = useState('');
   const [editDescuento, setEditDescuento] = useState('');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const defaultPeriodo = new Date().toISOString().slice(0, 7);
+  const [periodoFactura, setPeriodoFactura] = useState(defaultPeriodo);
+  const [preview, setPreview] = useState<PreviewPeriodo | null>(null);
+
+  const zonaParam = zonaId !== 'all' ? zonaId : undefined;
+
+  const previewMut = useMutation({
+    mutationFn: () => previewPeriodo({ periodo: periodoFactura, zonaId: zonaParam }),
+    onSuccess: (data) => {
+      setPreview(data);
+      toast({
+        title: 'Previsualización lista',
+        description: `${data.facturables} facturables · $${data.importeTotal.toFixed(2)} total${data.conError ? ` · ${data.conError} con error` : ''}`,
+      });
+    },
+    onError: (e: Error) => toast({ title: 'Error al previsualizar', description: e.message, variant: 'destructive' }),
+  });
+
+  const ejecutarMut = useMutation({
+    mutationFn: () => ejecutarPeriodo({ periodo: periodoFactura, zonaId: zonaParam }),
+    onSuccess: (data) => {
+      setPreview(null);
+      queryClient.invalidateQueries({ queryKey: ['prefacturas'] });
+      queryClient.invalidateQueries({ queryKey: ['timbrados'] });
+      toast({
+        title: 'Facturación ejecutada',
+        description: `${data.generados} recibos generados · $${data.importeTotal.toFixed(2)}${data.conError ? ` · ${data.conError} con error` : ''}`,
+      });
+    },
+    onError: (e: Error) => toast({ title: 'Error al facturar', description: e.message, variant: 'destructive' }),
+  });
 
   const preFacturaIdsTimbradas = useMemo(
     () => new Set(timbrados.map(t => t.preFacturaId)),
@@ -195,7 +230,72 @@ const PreFacturacion = () => {
         </Select>
       </div>
 
-      {consumosConfirmados.length > 0 && (
+      {useApi && (
+        <div className="mb-6 widget-card">
+          <h3 className="section-title">Facturación del periodo</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Genera recibos reales (Timbrado + Recibo con importes de tarifa vigente) para los consumos
+            confirmados aún no facturados{zonaParam ? ' de la zona seleccionada' : ''}. Previsualiza antes de ejecutar.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-1">
+              <Label htmlFor="periodo-factura">Periodo (YYYY-MM)</Label>
+              <Input
+                id="periodo-factura"
+                type="month"
+                value={periodoFactura}
+                onChange={(e) => { setPeriodoFactura(e.target.value); setPreview(null); }}
+                className="w-[180px]"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => previewMut.mutate()}
+              disabled={previewMut.isPending || !periodoFactura}
+            >
+              {previewMut.isPending ? 'Calculando…' : 'Previsualizar'}
+            </Button>
+            <Button
+              onClick={() => ejecutarMut.mutate()}
+              disabled={ejecutarMut.isPending || !preview || preview.facturables === 0}
+            >
+              {ejecutarMut.isPending ? 'Facturando…' : `Ejecutar facturación${preview ? ` (${preview.facturables})` : ''}`}
+            </Button>
+          </div>
+          {preview && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Facturables</p>
+                <p className="text-lg font-semibold">{preview.facturables}</p>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Subtotal</p>
+                <p className="text-lg font-semibold">${preview.importeSubtotal.toFixed(2)}</p>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">IVA</p>
+                <p className="text-lg font-semibold">${preview.importeIva.toFixed(2)}</p>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-lg font-semibold">${preview.importeTotal.toFixed(2)}</p>
+              </div>
+              {preview.conError > 0 && (
+                <div className="col-span-2 md:col-span-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                  <p className="font-medium text-destructive">{preview.conError} consumo(s) sin poder facturar</p>
+                  <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                    {preview.errores.slice(0, 5).map((e) => (
+                      <li key={e.consumoId}>{e.contratoId}: {e.error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!useApi && consumosConfirmados.length > 0 && (
         <div className="mb-6 widget-card">
           <h3 className="section-title">Facturación masiva</h3>
           <p className="text-sm text-muted-foreground mb-3">

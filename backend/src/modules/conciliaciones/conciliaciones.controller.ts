@@ -17,6 +17,7 @@ export class ConciliacionesController {
   constructor(private readonly service: ConciliacionesService) {}
 
   @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   listar(
     @Query('tipo') tipo?: string,
     @Query('periodo') periodo?: string,
@@ -27,6 +28,7 @@ export class ConciliacionesController {
   }
 
   @Post('ejecutar')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   ejecutar(@Body() body: { tipo: string; periodo: string }) {
     return this.service.ejecutar(
       body.tipo as
@@ -38,6 +40,7 @@ export class ConciliacionesController {
   }
 
   @Post(':id/estado')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   marcarEstado(@Param('id') id: string, @Body() body: { estado: string }) {
     return this.service.marcarEstado(id, body.estado);
   }

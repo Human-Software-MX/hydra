@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
-import { fetchMedidores, fetchMedidoresBodega, hasApi } from '@/api/medidores';
+import { fetchMedidores, fetchMedidoresBodega, hasApi, type MedidorDto } from '@/api/medidores';
 import StatusBadge from '@/components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { KpiCard } from '@/components/KpiCard';
@@ -67,16 +67,21 @@ const Medidores = () => {
   const pendientes = contratosVisibles.filter(c => c.estado === 'Pendiente de alta');
   const disponiblesBodega = medidoresBodega.filter(m => m.estado === 'Disponible');
 
+  // Zona del medidor: preferir el contrato embebido que trae la API; caer al contrato demo del contexto.
+  const zonaIdDeMedidor = (m: typeof medidores[number]): string | null =>
+    (m as MedidorDto).contrato?.zonaId ?? contratosVisibles.find(c => c.id === m.contratoId)?.zonaId ?? null;
+
   const medidoresFiltrados = useMemo(() => {
     return medidores.filter(m => {
-      const contrato = contratosVisibles.find(c => c.id === m.contratoId);
-      if (!contrato) return false;
-      if (filtroZona !== 'all' && contrato.zonaId !== filtroZona) return false;
+      const zonaId = zonaIdDeMedidor(m);
+      // Multi-tenancy: si el usuario tiene zonas restringidas, la del medidor debe estar permitida.
+      if (allowedZonaIds && (!zonaId || !allowedZonaIds.includes(zonaId))) return false;
+      if (filtroZona !== 'all' && zonaId !== filtroZona) return false;
       if (filtroEstado !== 'all' && m.estado !== filtroEstado) return false;
       if (filtroSerie && !m.serie.toLowerCase().includes(filtroSerie.toLowerCase())) return false;
       return true;
     });
-  }, [medidores, contratosVisibles, filtroZona, filtroEstado, filtroSerie]);
+  }, [medidores, contratosVisibles, allowedZonaIds, filtroZona, filtroEstado, filtroSerie]);
 
   const bodegaFiltrados = useMemo(() => {
     return medidoresBodega.filter(m => {
@@ -206,14 +211,14 @@ const Medidores = () => {
               </thead>
               <tbody>
                 {medidoresFiltrados.map(m => {
-                  const contrato = contratosVisibles.find(c => c.id === m.contratoId);
-                  const zona = contrato?.zonaId ? zonas.find(z => z.id === contrato.zonaId) : null;
+                  const zonaId = zonaIdDeMedidor(m);
+                  const zona = zonaId ? zonas.find(z => z.id === zonaId) : null;
                   return (
                     <tr key={m.id} className="border-t border-border/50 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3.5 font-mono text-xs text-[#007BFF] font-medium">{m.id}</td>
                       <td className="px-4 py-3.5">{m.serie}</td>
                       <td className="px-4 py-3.5 font-mono text-xs text-[#007BFF] font-medium">{m.contratoId}</td>
-                      <td className="px-4 py-3.5 text-sm">{zona?.nombre ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-sm">{zona?.nombre ?? zonaId ?? '—'}</td>
                       <td className="px-4 py-3.5"><StatusBadge status={m.estado} /></td>
                       <td className="px-4 py-3.5">{m.cobroDiferido ? 'Sí' : 'No'}</td>
                       <td className="px-4 py-3.5">{m.lecturaInicial}</td>

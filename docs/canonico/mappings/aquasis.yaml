@@ -1,0 +1,179 @@
+callosum: 1
+kind: mapping
+domain: agua
+source: aquasis
+canonical_version: 0.1.0
+entity_maps:
+  # The AQUACIS lot record (1480 chars, latin1) is denormalized: one record
+  # carries the reading plus a padrón snapshot (contract, service point,
+  # meter, address). It therefore fans out into several canonical entities.
+  # Only meter_reading is bidirectional — that is the /Salida → /Entrada
+  # round trip; the padrón snapshots are ingest-only enrichment.
+
+  - source_entity: registro_lectura
+    canonical_entity: meter_reading
+    direction: bidirectional
+    field_maps:
+      - source: lec_cntt_num
+        canonical: id
+        transform:
+          type: template
+          template: "{lec_cntt_num}-{lotplec_anno}{lotplec_pernum}"
+        notes: The file has no record id — synthesized as contract+period (one reading per contract per lot); ingest-only
+      - source: lot_numero
+        canonical: batch_id
+        transform:
+          type: template
+          template: "{lotplec_expid}{lotplec_zonid}{lot_tipo}{lot_numero}"
+        notes: Batch id = lot filename (Administración 4 + Zona 3 + Tipo 1 + Lote 2, e.g. 0001M08L20); ingest-only
+      - source: lec_cntt_num
+        canonical: agreement_id
+        notes: AQUACIS contract number — resolve to Hydra contract via legacy_references (ceaNumContrato) at conciliation
+      - source: lotplec_anno
+        canonical: period
+        transform:
+          type: template
+          template: "{lotplec_anno}-{lotplec_pernum}"
+        notes: "YYYY-P from LOTPLECANNO+PERNUM (period = cycle month, 2 digits); ingest-only"
+      - {source: lectura, canonical: reading_value, transform: to_int}
+      - {source: lec_anterio, canonical: previous_reading, transform: to_int}
+      - source: lec_esp_inf
+        canonical: expected_range
+        transform:
+          type: template
+          template: '{{"min": {lec_esp_inf}, "max": {lec_esp_sup}}}'
+        notes: Plausibility band LECESPINF/LECESPSUP; ingest-only
+      - source: read_at
+        canonical: read_at
+        transform: parse_datetime
+        notes: "Connector field spanning FECHALEC+HORALEC @417+14 (AAAAMMDD + HHMMSS, zeros = not read) — ISO datetime or null"
+      - {source: observac, canonical: incidence_code, notes: 2-char Observac.dat key returned by the terminal}
+      - {source: lector, canonical: reader_code}
+      - {source: contratista, canonical: crew_code}
+      - {source: foto, canonical: photo_url, notes: "Return field: https://lectura.ceaqueretaro.gob.mx/imagen.php?..."}
+      - canonical: is_estimated
+        notes: Not in the file — AQUACIS generates estimations at lot load when the incidence is an avería; the connector flags readings it estimates
+      - source: _raw
+        canonical: raw_record
+        notes: The connector exposes the full 1480-char record (latin1→utf8) as _raw — kept for lineage
+
+  - source_entity: registro_lectura
+    canonical_entity: reading_batch
+    direction: in
+    field_maps:
+      - source: lot_numero
+        canonical: id
+        transform:
+          type: template
+          template: "{lotplec_expid}{lotplec_zonid}{lot_tipo}{lot_numero}"
+      - source: lotplec_anno
+        canonical: period
+        transform:
+          type: template
+          template: "{lotplec_anno}-{lotplec_pernum}"
+      - source: lot_tipo
+        canonical: batch_type
+        transform:
+          type: enum_map
+          values:
+            L: reading
+            I: inspection
+            R: reread
+      - source: lotplec_expid
+        canonical: zone_path
+        transform:
+          type: template
+          template: '{{"administration": "{lotplec_expid}", "zone": "{lotplec_zonid}", "lot": "{lot_numero}"}}'
+      - source: lot_numero
+        canonical: file_name
+        transform:
+          type: template
+          template: "{lotplec_expid}{lotplec_zonid}{lot_tipo}{lot_numero}"
+        notes: Same name in /Salida and /Entrada — direction distinguished by folder
+
+  - source_entity: registro_lectura
+    canonical_entity: service_agreement
+    direction: in
+    field_maps:
+      - {source: lec_cntt_num, canonical: id, notes: Padrón snapshot keyed by AQUACIS contract number — reconciled against Hydra contracts by the pipeline}
+      - {source: lec_cntt_num, canonical: contract_number}
+      - {source: cntt_activid, canonical: activity_code}
+      - source: uso
+        canonical: use_category
+        transform:
+          type: enum_map
+          values:
+            "1": domestic
+            "0": non_domestic
+        notes: Drives IVA exemption and the LGA-2025 restriction-only rule
+      - {source: cntt_estado, canonical: status, notes: 1-char AQUACIS status key — catalog pending from CEA, passes through for T15 to profile}
+      - source: lotplec_expid
+        canonical: zone_path
+        transform:
+          type: template
+          template: '{{"administration": "{lotplec_expid}", "zone": "{lotplec_zonid}", "route": "{lec_pto_codr}"}}'
+      - {source: ptos_id, canonical: service_point_id}
+
+  - source_entity: registro_lectura
+    canonical_entity: service_point
+    direction: in
+    field_maps:
+      - {source: ptos_id, canonical: id}
+      - {source: ptos_id, canonical: code, notes: PTOSID is the AQUACIS business key}
+      - {source: ptos_refcat, canonical: cadastral_key}
+      - {source: lec_pto_codr, canonical: route_code, notes: LECPTOCODR walk-order}
+      - source: poliza_padre
+        canonical: parent_service_point_id
+        notes: POLIZAPADRE macro-meter contract — resolve to the parent's service point (condominio individualization)
+
+  - source_entity: registro_lectura
+    canonical_entity: meter
+    direction: in
+    field_maps:
+      - {source: cont_numero, canonical: id, notes: No meter id in the file — serial number used as key}
+      - {source: cont_numero, canonical: serial_number}
+      - {source: lec_cntt_num, canonical: agreement_id}
+      - {source: marca, canonical: brand, notes: Zero-padded brand key (MARCA catalog)}
+      - {source: cont_calmm, canonical: caliber, notes: "CONTCALMM in mm (CALIEQPUL carries inches)"}
+      - source: empl_int_ext
+        canonical: placement
+        transform:
+          type: enum_map
+          values:
+            I: interior
+            E: exterior
+
+  - source_entity: registro_lectura
+    canonical_entity: address
+    direction: in
+    field_maps:
+      - source: ptos_id
+        canonical: id
+        transform:
+          type: template
+          template: "dir-{ptos_id}"
+        notes: Synthetic address id per service point
+      - {source: ncal_nombre, canonical: street, notes: NCALNOMBRE label; DIRCALID carries the street-catalog key}
+      - {source: dir_finca, canonical: exterior_number}
+      - source: barrio
+        canonical: locality_key
+        notes: "CAUTION (verified vs samples): the field labelled BARRIO actually carries the Localidad — resolve name → aquasisPobid"
+      - source: municipio
+        canonical: municipality_key
+        notes: "Field labelled MUNICIPIO carries Población/municipio name — resolve to INEGI key"
+      - source: contrato_sige_colonia
+        canonical: neighborhood_key
+        notes: "Real colonia travels in LIBRE @1185 as 'contrato SIGE + 3 spaces + colonia' — connector splits and resolves name → aquasisBarrId"
+      - canonical: state_key
+        transform: {type: const, value: "22"}
+
+  - source_entity: incidencia
+    canonical_entity: reading_incidence
+    direction: bidirectional
+    field_maps:
+      - {source: clave, canonical: code}
+      - {source: descripcion, canonical: description}
+      - canonical: is_fault
+        notes: The avería flag is AQUACIS configuration, not in Observac.dat — seed from CEA's avería list (triggers estimation at lot load)
+      - canonical: active
+        transform: {type: const, value: true}

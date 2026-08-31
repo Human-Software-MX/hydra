@@ -18,7 +18,9 @@ function parseOriginList(value: string | undefined): string[] {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  // rawBody: necesario para verificar la firma HMAC de los webhooks de SUPRA
+  // sobre el cuerpo crudo (POST /api/integraciones/supra/webhook).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // La API vive detrás de un reverse proxy (Easypanel/Traefik): sin esto
   // `req.ip` sería la del proxy y el rate limiting metería a todos los
