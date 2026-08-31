@@ -11,6 +11,7 @@ import {
   BarChart3,
   Calculator,
   FileSearch,
+  FlaskConical,
   SlidersHorizontal,
   Stamp,
   Printer,
@@ -133,7 +134,7 @@ export const APP_ROUTES: AppRouteConfig[] = [
   {
     path: 'simulador',
     label: 'Simulador',
-    icon: FileSearch,
+    icon: FlaskConical,
     allowedRoles: ['SUPER_ADMIN', 'ADMIN'],
     group: 'Facturación',
   },
