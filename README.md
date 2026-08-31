@@ -81,10 +81,19 @@ This repo is a monorepo with `frontend/` and `backend/`. Create **three** App Se
 - `CORS_ORIGIN` — Allowed browser origin(s) for the SPA. Use comma-separated values for several domains (e.g. `https://hydra.humansoftware.mx` or staging + production).
 - Optional: `CORS_INTERNAL_ORIGIN` / `CORS_PORTAL_ORIGIN` — same comma-separated format; merged with `CORS_ORIGIN`. If **no** CORS env vars are set, the API defaults to `http://localhost:8080` only.
 
-After first deploy, run migrations and seed from the api container (or a one-off):
+- Optional: `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NOMBRE` — only read by `npm run bootstrap:admin` (see below).
 
-- `npx prisma migrate deploy`
-- `npx prisma db seed`
+Migrations and reference data run **automatically on every start** (`npm run start:prod` = `prisma migrate deploy` → catalog seed → API). The catalog seed (`prisma/seed-catalogos.ts`) is idempotent and contains only reference data: administraciones, zonas, distritos, catálogos SAT/SIGE, tarifas, tipos de contratación y cláusulas.
+
+After the first deploy, create the first administrator from the api container (one-off):
+
+```bash
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='<contraseña larga>' npm run bootstrap:admin
+```
+
+It refuses to run without `ADMIN_PASSWORD` (or with a placeholder/short one) and does nothing if the email already exists, so it is safe to re-run.
+
+> `npx prisma db seed` is the **development** seed: it also creates demo accounts with the password `demo123` and sample contracts. It throws if `NODE_ENV=production`. Never run it against a production database.
 
 **ctcf-frontend** — Build argument (at build time):
 

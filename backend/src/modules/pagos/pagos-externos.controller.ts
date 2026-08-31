@@ -7,18 +7,15 @@ import {
   Query,
   UploadedFile,
   UseInterceptors,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { PagosExternosService } from './pagos-externos.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('pagos-externos')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class PagosExternosController {
   constructor(private readonly service: PagosExternosService) {}
 

@@ -1,12 +1,10 @@
-import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReemplazoService } from './reemplazo.service';
 import { PrioridadReemplazo } from './reemplazo-scorer';
+import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...ROLES_OPERACION)
 @Controller('medidores')
 export class MedidoresController {
   constructor(

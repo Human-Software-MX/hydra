@@ -1,4 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+import {
+  AppThrottlerGuard,
+  LOGIN_THROTTLER_OPTIONS,
+} from './modules/auth/app-throttler.guard';
+import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { InternalGuard } from './modules/auth/internal.guard';
+import { RolesGuard } from './modules/auth/roles.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -51,6 +60,13 @@ import { SupraModule } from './modules/supra/supra.module';
 
 @Module({
   imports: [
+    // Cubo general: AppThrottlerGuard lo llavea por usuario autenticado y, si
+    // la petición es anónima, por IP real (main.ts fija `trust proxy = 1`).
+    // 300/min porque una oficina completa puede salir por una sola IP NAT.
+    // El override estricto de credenciales vive en LOGIN_THROTTLER_OPTIONS.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 300 }, LOGIN_THROTTLER_OPTIONS],
+    }),
     PrismaModule,
     NotificacionesModule,
     ContratosModule,
@@ -100,6 +116,18 @@ import { SupraModule } from './modules/supra/supra.module';
     SupraModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Cadena de guards globales. El orden del array es el orden de ejecución:
+    //   1. AppThrottlerGuard — limita por usuario/IP antes de tocar la base de datos.
+    //   2. JwtAuthGuard    — exige JWT válido salvo en rutas @Public().
+    //   3. InternalGuard   — separa audiencias: CLIENTE sólo llega a @AllowPortal().
+    //   4. RolesGuard      — aplica @Roles(...) donde esté declarado.
+    // Toda la API queda cerrada por defecto: un controlador nuevo nace protegido.
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: InternalGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule {}

@@ -32,6 +32,11 @@ services:
     volumes:
       # Lotes AQUACIS reales del repo — seed de datos demo a través del esquema real
       - "./Requerimientos/Documentos/Interfaces-20260224T185812Z-1-001/Interfaces/Interfase con Sistema de Lecturas:/data/lecturas:ro"
+    # Seed de DESARROLLO (catálogos + usuarios/contratos de demo con contraseña
+    # demo123). Por eso NODE_ENV no es production aquí: prisma/seed.ts se niega
+    # a correr en ese caso. En producción el servicio `api` sólo siembra
+    # catálogos al arrancar (npm run start:prod) y el primer administrador se
+    # crea con `npm run bootstrap:admin`.
     command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run seed:demo-aquacis"
     depends_on:
       postgres:

@@ -154,6 +154,7 @@ model Contrato {
   medidor                 Medidor?
   costosContrato          CostoContrato[]
   consumos                Consumo[]
+  lecturas                Lectura[]
   timbrados               Timbrado[]
   recibos                 Recibo[]
   pagos                   Pago[]
@@ -348,6 +349,7 @@ model Consumo {
   contrato   Contrato  @relation(fields: [contratoId], references: [id], onDelete: Cascade)
   timbrado   Timbrado?
 
+  @@unique([contratoId, periodo])
   @@index([contratoId])
   @@map("consumos")
 }
@@ -537,6 +539,7 @@ model LoteLecturas {
   @@index([zonaId])
   @@index([rutaId])
   @@index([periodo])
+  @@index([periodo, archivoHash])
   @@map("lotes_lecturas")
 }
 
@@ -563,7 +566,9 @@ model Lectura {
   lote               LoteLecturas        @relation(fields: [loteId], references: [id], onDelete: Cascade)
   lecturista         Lecturista?         @relation(fields: [lecturistaId], references: [id], onDelete: SetNull)
   incidencia         CatalogoIncidencia? @relation(fields: [incidenciaId], references: [id], onDelete: SetNull)
+  contrato           Contrato            @relation(fields: [contratoId], references: [id], onDelete: Cascade)
 
+  @@unique([contratoId, periodo])
   @@index([loteId])
   @@index([contratoId])
   @@index([periodo])

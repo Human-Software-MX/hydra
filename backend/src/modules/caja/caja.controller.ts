@@ -5,17 +5,14 @@ import {
   Body,
   Query,
   Request,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { CajaService } from './caja.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('caja')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class CajaController {
   constructor(private readonly service: CajaService) {}
 

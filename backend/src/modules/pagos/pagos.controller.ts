@@ -6,20 +6,17 @@ import {
   Query,
   Body,
   Req,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PagosService } from './pagos.service';
 import { SupraClientService } from '../supra/supra-client.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('pagos')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class PagosController {
   constructor(
     private readonly prisma: PrismaService,

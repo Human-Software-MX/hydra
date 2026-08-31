@@ -1,8 +1,8 @@
-import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@Roles(...ROLES_OPERACION)
 @Controller('consumos')
 export class ConsumosController {
   constructor(private readonly prisma: PrismaService) {}

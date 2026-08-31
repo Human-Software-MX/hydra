@@ -6,18 +6,16 @@ import {
   Body,
   UploadedFile,
   UseInterceptors,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { createHash } from 'crypto';
 import { LecturasService } from './lecturas.service';
+import { Roles, ROLES_CAMPO } from '../auth/roles.decorator';
 
+@Roles(...ROLES_CAMPO)
 @Controller('lecturas')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class LecturasController {
   constructor(private readonly service: LecturasService) {}
 
@@ -37,9 +35,20 @@ export class LecturasController {
   @UseInterceptors(FileInterceptor('archivo'))
   async uploadLote(
     @UploadedFile() archivo: Express.Multer.File,
-    @Body() body: { zonaId?: string; rutaId?: string; periodo: string; tipoLote?: string },
+    @Body()
+    body: {
+      zonaId?: string;
+      rutaId?: string;
+      periodo: string;
+      tipoLote?: string;
+      reemplazar?: string | boolean;
+    },
   ) {
     const contenido = archivo.buffer.toString('latin1');
+    // B1 — huella del archivo original para rechazar re-cargas idénticas (periodo + hash).
+    const archivoHash = createHash('sha256').update(archivo.buffer).digest('hex');
+    // multipart llega como string ("true"/"false"); normaliza a boolean.
+    const reemplazar = body.reemplazar === true || body.reemplazar === 'true';
     return this.service.cargarLote({
       zonaId: body.zonaId,
       rutaId: body.rutaId,
@@ -47,6 +56,8 @@ export class LecturasController {
       tipoLote: body.tipoLote ?? 'Lectura',
       archivoNombre: archivo.originalname,
       contenido,
+      archivoHash,
+      reemplazar,
     });
   }
 

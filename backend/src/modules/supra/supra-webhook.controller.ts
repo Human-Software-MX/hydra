@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Headers, Post, RawBodyRequest, Req } from '@nestjs/common';
 import { Request } from 'express';
+import { Public } from '../auth/public.decorator';
 import { SupraEventosService } from './supra-eventos.service';
 
 /**
@@ -10,6 +11,9 @@ import { SupraEventosService } from './supra-eventos.service';
  * anti-replay. Responde rápido (verificar + encolar en inbox); el
  * procesamiento es asíncrono.
  */
+// @Public(): el relay de SUPRA no trae JWT; la autenticación real es la firma
+// HMAC verificada abajo (ver public.decorator.ts, caso 2 — guard propio).
+@Public()
 @Controller('integraciones/supra')
 export class SupraWebhookController {
   constructor(private readonly eventos: SupraEventosService) {}

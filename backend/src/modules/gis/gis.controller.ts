@@ -6,15 +6,12 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GisService } from './gis.service';
 
 @Controller('gis')
-@UseGuards(JwtAuthGuard)
 export class GisController {
   constructor(private readonly service: GisService) {}
 

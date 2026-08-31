@@ -7,7 +7,6 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
   UploadedFile,
@@ -21,17 +20,15 @@ import { diskStorage } from 'multer';
 import { Response } from 'express';
 import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { SolicitudesService } from './solicitudes.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'cotizaciones');
 // Ensure directory exists at module load time
 mkdirSync(UPLOAD_DIR, { recursive: true });
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('solicitudes')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class SolicitudesController {
   constructor(private readonly service: SolicitudesService) {}
 

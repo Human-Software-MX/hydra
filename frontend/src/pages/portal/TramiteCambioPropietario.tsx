@@ -4,6 +4,7 @@ import type { PortalContextValue } from '@/components/PortalLayout';
 import {
   StepIndicator,
   StepDots,
+  Field,
   Label,
   FieldError,
   TextInput,
@@ -362,28 +363,25 @@ const TramiteCambioPropietario = () => {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
+                <Field error={errors.numeroContrato}>
                   <Label required>Número de contrato</Label>
                   <TextInput value={form.numeroContrato} readOnly hint="Pre-llenado desde tu sesión" />
-                  <FieldError msg={errors.numeroContrato} />
-                </div>
-                <div>
+                </Field>
+                <Field error={errors.nombreTitularActual}>
                   <Label required>Nombre del titular actual</Label>
                   <TextInput value={form.nombreTitularActual} onChange={(v) => set('nombreTitularActual', v)} placeholder="Titular registrado en el contrato" />
-                  <FieldError msg={errors.nombreTitularActual} />
-                </div>
+                </Field>
               </div>
 
-              <div>
+              <Field error={errors.direccionPredio}>
                 <Label required>Dirección del predio</Label>
                 <TextInput value={form.direccionPredio} onChange={(v) => set('direccionPredio', v)} placeholder="Calle, número exterior e interior" />
-                <FieldError msg={errors.direccionPredio} />
-              </div>
+              </Field>
 
-              <div>
+              <Field>
                 <Label>Colonia</Label>
                 <TextInput value={form.colonia} onChange={(v) => set('colonia', v)} placeholder="Nombre de la colonia" />
-              </div>
+              </Field>
 
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 flex items-start gap-2">
                 <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" aria-hidden />
@@ -426,7 +424,7 @@ const TramiteCambioPropietario = () => {
               </div>
 
               {form.causaCambio === 'otro' && (
-                <div>
+                <Field error={errors.causaOtroDesc}>
                   <Label required>Describe el motivo</Label>
                   <TextArea
                     value={form.causaOtroDesc}
@@ -434,8 +432,7 @@ const TramiteCambioPropietario = () => {
                     placeholder="Describe el acto jurídico que origina el cambio de propietario..."
                     rows={3}
                   />
-                  <FieldError msg={errors.causaOtroDesc} />
-                </div>
+                </Field>
               )}
             </div>
           )}
@@ -476,39 +473,36 @@ const TramiteCambioPropietario = () => {
                 <div className="space-y-4">
                   <SectionLabel>Datos del nuevo propietario (persona física)</SectionLabel>
 
-                  <div>
+                  <Field error={errors.nombreNuevoPropietario}>
                     <Label required>Nombre completo</Label>
                     <TextInput value={form.nombreNuevoPropietario} onChange={(v) => set('nombreNuevoPropietario', v)} placeholder="Nombre(s) y apellidos" />
-                    <FieldError msg={errors.nombreNuevoPropietario} />
-                  </div>
+                  </Field>
 
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field>
                       <Label>CURP</Label>
                       <TextInput value={form.curpNuevoPropietario} onChange={(v) => set('curpNuevoPropietario', v.toUpperCase())} placeholder="XXXX000000XXXXXXXX" />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field>
                       <Label>RFC</Label>
                       <TextInput value={form.rfcNuevoPropietario} onChange={(v) => set('rfcNuevoPropietario', v.toUpperCase())} placeholder="XXXX000000XXX" />
-                    </div>
+                    </Field>
                   </div>
 
-                  <div>
+                  <Field>
                     <Label>Dirección particular</Label>
                     <TextInput value={form.direccionParticularNuevo} onChange={(v) => set('direccionParticularNuevo', v)} placeholder="Calle, número, colonia, ciudad" />
-                  </div>
+                  </Field>
 
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field error={errors.telefonoNuevo}>
                       <Label required>Teléfono</Label>
                       <TextInput value={form.telefonoNuevo} onChange={(v) => set('telefonoNuevo', v)} placeholder="(442) 000 0000" type="tel" />
-                      <FieldError msg={errors.telefonoNuevo} />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field error={errors.correoNuevo}>
                       <Label required>Correo electrónico</Label>
                       <TextInput value={form.correoNuevo} onChange={(v) => set('correoNuevo', v)} placeholder="correo@ejemplo.com" type="email" />
-                      <FieldError msg={errors.correoNuevo} />
-                    </div>
+                    </Field>
                   </div>
                 </div>
               )}
@@ -519,35 +513,31 @@ const TramiteCambioPropietario = () => {
                   <SectionLabel>Datos de la empresa (persona moral)</SectionLabel>
 
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
+                    <Field error={errors.razonSocial}>
                       <Label required>Razón social</Label>
                       <TextInput value={form.razonSocial} onChange={(v) => set('razonSocial', v)} placeholder="Nombre legal de la empresa" />
-                      <FieldError msg={errors.razonSocial} />
-                    </div>
-                    <div>
+                    </Field>
+                    <Field error={errors.rfcEmpresa}>
                       <Label required>RFC de la empresa</Label>
                       <TextInput value={form.rfcEmpresa} onChange={(v) => set('rfcEmpresa', v.toUpperCase())} placeholder="XXXX000000XXX" />
-                      <FieldError msg={errors.rfcEmpresa} />
-                    </div>
+                    </Field>
                   </div>
 
                   <div className="border border-gray-100 rounded-xl p-4 space-y-4 bg-gray-50">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Representante Legal</p>
-                    <div>
+                    <Field error={errors.nombreRepLegal}>
                       <Label required>Nombre del representante legal</Label>
                       <TextInput value={form.nombreRepLegal} onChange={(v) => set('nombreRepLegal', v)} placeholder="Nombre completo del representante" />
-                      <FieldError msg={errors.nombreRepLegal} />
-                    </div>
+                    </Field>
                     <div className="grid sm:grid-cols-2 gap-4">
-                      <div>
+                      <Field error={errors.telefonoRepLegal}>
                         <Label required>Teléfono</Label>
                         <TextInput value={form.telefonoRepLegal} onChange={(v) => set('telefonoRepLegal', v)} placeholder="(442) 000 0000" type="tel" />
-                        <FieldError msg={errors.telefonoRepLegal} />
-                      </div>
-                      <div>
+                      </Field>
+                      <Field>
                         <Label>Correo electrónico</Label>
                         <TextInput value={form.correoRepLegal} onChange={(v) => set('correoRepLegal', v)} placeholder="correo@empresa.com" type="email" />
-                      </div>
+                      </Field>
                     </div>
                   </div>
                 </div>
@@ -589,14 +579,14 @@ const TramiteCambioPropietario = () => {
 
               {esTercero && (
                 <div className="grid sm:grid-cols-2 gap-4 border border-blue-100 bg-blue-50/50 rounded-xl p-4">
-                  <div>
+                  <Field>
                     <Label>Nombre del tercero</Label>
                     <TextInput value={form.nombreTercero} onChange={(v) => set('nombreTercero', v)} placeholder="Nombre completo" />
-                  </div>
-                  <div>
+                  </Field>
+                  <Field>
                     <Label>Teléfono del tercero</Label>
                     <TextInput value={form.telefonoTercero} onChange={(v) => set('telefonoTercero', v)} placeholder="(442) 000 0000" type="tel" />
-                  </div>
+                  </Field>
                 </div>
               )}
 

@@ -1,9 +1,9 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
 import { AgoraService } from './agora.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('agora/tickets')
-@UseGuards(JwtAuthGuard)
 export class AgoraController {
   constructor(private readonly service: AgoraService) {}
 

@@ -6,19 +6,16 @@ import {
   Query,
   Body,
   Res,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { construirReciboHtml } from './recibo-html';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ATENCION)
 @Controller('recibos')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class RecibosController {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -163,8 +160,8 @@ export class RecibosController {
   }
 }
 
+@Roles(...ROLES_ATENCION)
 @Controller('mensajes-recibo')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class MensajesReciboController {
   constructor(private readonly prisma: PrismaService) {}
 

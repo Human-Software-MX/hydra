@@ -6,15 +6,13 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TramitesService } from './tramites.service';
+import { Roles, ROLES_ATENCION } from '../auth/roles.decorator';
 
 @Controller('tramites')
-@UseGuards(JwtAuthGuard)
 export class TramitesController {
   constructor(private readonly service: TramitesService) {}
 
@@ -45,11 +43,13 @@ export class TramitesController {
     return this.service.getSeguimientos(id);
   }
 
+  @Roles(...ROLES_ATENCION)
   @Post()
   create(@Body() body: object) {
     return this.service.create(body as any);
   }
 
+  @Roles(...ROLES_ATENCION)
   @Patch(':id/estado')
   updateEstado(
     @Param('id') id: string,
@@ -58,6 +58,7 @@ export class TramitesController {
     return this.service.updateEstado(id, body.estado, body.aprobadoPor);
   }
 
+  @Roles(...ROLES_ATENCION)
   @Post(':id/documentos')
   addDocumento(
     @Param('id') tramiteId: string,
@@ -66,6 +67,7 @@ export class TramitesController {
     return this.service.addDocumento(tramiteId, body);
   }
 
+  @Roles(...ROLES_ATENCION)
   @Patch('documentos/:documentoId/verificar')
   verificarDocumento(
     @Param('documentoId') documentoId: string,
@@ -74,6 +76,7 @@ export class TramitesController {
     return this.service.verificarDocumento(documentoId, body.verificado);
   }
 
+  @Roles(...ROLES_ATENCION)
   @Post(':id/seguimientos')
   addSeguimiento(
     @Param('id') tramiteId: string,

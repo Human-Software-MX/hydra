@@ -1,7 +1,8 @@
 import { Controller, Get, Post, Patch, Query, Param, Body, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PortalGuard } from '../auth/portal.guard';
+import { AllowPortal } from '../auth/allow-portal.decorator';
 import { PortalService } from './portal.service';
 import { CrearIntentoPortalDto } from './dto/crear-intento-portal.dto';
 
@@ -26,7 +27,11 @@ export class CrearReporteFugaDto {
   ubicacion?: string;
 }
 
-@UseGuards(JwtAuthGuard)
+// Superficie del portal de clientes. El JWT lo valida el guard global;
+// @AllowPortal() levanta el filtro de audiencia interna y PortalGuard cierra
+// el otro lado: aquí sólo entran tokens con rol CLIENTE.
+@AllowPortal()
+@UseGuards(PortalGuard)
 @Controller('portal')
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}

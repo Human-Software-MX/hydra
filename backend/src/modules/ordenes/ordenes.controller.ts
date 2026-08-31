@@ -6,17 +6,13 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { OrdenesService } from './ordenes.service';
+import { Roles, ROLES_OPERACION } from '../auth/roles.decorator';
 
 @Controller('ordenes')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class OrdenesController {
   constructor(private readonly service: OrdenesService) {}
 
@@ -76,6 +72,7 @@ export class OrdenesController {
     return this.service.create(body);
   }
 
+  @Roles(...ROLES_OPERACION)
   @Patch(':id/estado')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   updateEstado(

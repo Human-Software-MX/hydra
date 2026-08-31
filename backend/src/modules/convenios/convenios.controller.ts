@@ -6,17 +6,14 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { ConveniosService } from './convenios.service';
+import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
+@Roles(...ROLES_SERVICIOS)
 @Controller('convenios')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class ConveniosController {
   constructor(private readonly service: ConveniosService) {}
 

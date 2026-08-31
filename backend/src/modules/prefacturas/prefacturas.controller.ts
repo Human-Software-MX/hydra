@@ -1,11 +1,9 @@
-import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FacturacionService } from '../facturacion/facturacion.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...ROLES_ADMIN)
 @Controller('prefacturas')
 export class PrefacturasController {
   constructor(

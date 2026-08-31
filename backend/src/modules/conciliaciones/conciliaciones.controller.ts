@@ -5,17 +5,14 @@ import {
   Param,
   Query,
   Body,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { ConciliacionesService } from './conciliaciones.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('conciliaciones')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class ConciliacionesController {
   constructor(private readonly service: ConciliacionesService) {}
 

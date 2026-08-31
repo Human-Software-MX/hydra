@@ -9,13 +9,17 @@ import { LdapStrategy } from './ldap.strategy';
 import { InternalGuard } from './internal.guard';
 import { PortalGuard } from './portal.guard';
 import { ApiTokenGuard } from './api-token.guard';
+import { getJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'change-me-in-production',
-      signOptions: { expiresIn: '7d' },
+    // getJwtSecret() lanza si JWT_SECRET falta: la API no arranca sin secreto.
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   controllers: [AuthController],

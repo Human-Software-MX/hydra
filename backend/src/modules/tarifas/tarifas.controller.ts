@@ -6,19 +6,16 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
   ParseFloatPipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { TarifasService } from './tarifas.service';
 import { SimularImpactoDto } from './dto/simular-impacto.dto';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@Roles(...ROLES_ADMIN)
 @Controller('tarifas')
-@UseGuards(JwtAuthGuard)
 export class TarifasController {
   constructor(private readonly service: TarifasService) {}
 
@@ -54,7 +51,6 @@ export class TarifasController {
 
   /** Simula el impacto de un cambio tarifario sobre los consumos de un periodo (no escribe nada). */
   @Post('simular-impacto')
-  @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   simularImpacto(@Body() dto: SimularImpactoDto) {
     return this.service.simularImpacto(dto);

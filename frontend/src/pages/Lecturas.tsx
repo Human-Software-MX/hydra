@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useData } from '@/context/DataContext';
-import { fetchLecturas, hasApi } from '@/api/lecturas';
+import { fetchLecturas, hasApi, uploadLote, UploadLoteError, type UploadLoteResult } from '@/api/lecturas';
+import { toast } from '@/components/ui/sonner';
 import { fetchRutas, type RutaDto } from '@/api/rutas';
 import StatusBadge from '@/components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
@@ -9,6 +10,7 @@ import { KpiCard } from '@/components/KpiCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Pagination,
@@ -19,7 +21,7 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { SlidersHorizontal, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { SlidersHorizontal, CheckCircle2, XCircle, Clock, Upload, FileText, AlertTriangle } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 const RANGO_MIN = 0;
@@ -61,6 +63,67 @@ const Lecturas = () => {
   const [captureContratoId, setCaptureContratoId] = useState('');
   const [lecturaActual, setLecturaActual] = useState('');
   const [incidencia, setIncidencia] = useState('');
+
+  // B6 — Carga masiva de lote de lecturas (archivo plano)
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPeriodo, setUploadPeriodo] = useState(() => new Date().toISOString().slice(0, 7));
+  const [uploadZona, setUploadZona] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [reemplazar, setReemplazar] = useState(false);
+  const [uploadReport, setUploadReport] = useState<UploadLoteResult | null>(null);
+
+  const zonasVisibles = useMemo(
+    () => (!allowedZonaIds ? zonas : zonas.filter(z => allowedZonaIds.includes(z.id))),
+    [zonas, allowedZonaIds],
+  );
+
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      if (!uploadFile) throw new Error('Selecciona un archivo');
+      if (!uploadPeriodo.trim()) throw new Error('Indica el periodo (YYYY-MM)');
+      return uploadLote({
+        archivo: uploadFile,
+        periodo: uploadPeriodo.trim(),
+        zonaId: uploadZona || undefined,
+        reemplazar,
+      });
+    },
+    onSuccess: (report) => {
+      setUploadReport(report);
+      const reemplazadas = report.totalReemplazadas ?? 0;
+      if (report.totalConError === 0) {
+        toast.success('Lote cargado', {
+          description:
+            `${report.totalValidos} de ${report.totalRegistros} lecturas válidas.` +
+            (reemplazadas > 0 ? ` ${reemplazadas} reemplazadas.` : ''),
+        });
+      } else {
+        toast.warning('Lote cargado con incidencias', {
+          description: `${report.totalValidos} válidas, ${report.totalConError} con error.`,
+        });
+      }
+      setUploadFile(null);
+      setReemplazar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      queryClient.invalidateQueries({ queryKey: ['lecturas'] });
+    },
+    onError: (err: unknown) => {
+      if (err instanceof UploadLoteError && err.duplicado) {
+        toast.error('Archivo duplicado', { description: err.message });
+      } else {
+        toast.error('No se pudo cargar el lote', {
+          description: err instanceof Error ? err.message : 'Error desconocido',
+        });
+      }
+    },
+  });
+
+  const handleFileSelected = (file: File | null) => {
+    setUploadFile(file);
+    setUploadReport(null);
+  };
 
   // Filtros historial
   const [filtroRuta, setFiltroRuta] = useState('all');
@@ -242,7 +305,124 @@ const Lecturas = () => {
                 )}
               </div>
             </div>
-            <div />
+
+            <div className="bg-white rounded-xl border border-border/50 shadow-sm p-5">
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <Upload className="h-4 w-4" /> Carga masiva de lecturas
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Sube el archivo plano del lecturista. Se valida renglón por renglón y se rechaza si el mismo archivo ya se cargó para el periodo.
+              </p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Periodo (YYYY-MM)"
+                    value={uploadPeriodo}
+                    onChange={e => setUploadPeriodo(e.target.value)}
+                  />
+                  <Select value={uploadZona} onValueChange={setUploadZona}>
+                    <SelectTrigger><SelectValue placeholder="Zona (opcional)" /></SelectTrigger>
+                    <SelectContent>
+                      {zonasVisibles.map(z => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Seleccionar archivo de lecturas: arrastra el archivo aquí o presiona Enter para elegirlo"
+                  onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+                  onDragLeave={e => { e.preventDefault(); setDragActive(false); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) handleFileSelected(f);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    dragActive ? 'border-primary bg-primary/5' : 'border-border/60 hover:border-primary/50'
+                  }`}
+                >
+                  <FileText className="h-6 w-6 text-muted-foreground" />
+                  {uploadFile ? (
+                    <p className="text-sm font-medium">{uploadFile.name}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Arrastra el archivo aquí o haz clic para seleccionar</p>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    aria-label="Archivo plano de lecturas"
+                    accept=".txt,.csv,text/plain"
+                    className="hidden"
+                    onChange={e => handleFileSelected(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <Checkbox
+                    checked={reemplazar}
+                    onCheckedChange={v => setReemplazar(v === true)}
+                    aria-label="Reemplazar lecturas existentes del periodo"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Reemplazar lecturas existentes del periodo (corrección). Sustituye las lecturas ya cargadas
+                    de cada contrato en este periodo por las del archivo. Úsalo solo para corregir un lote previo.
+                  </span>
+                </label>
+
+                <Button
+                  onClick={() => uploadMutation.mutate()}
+                  disabled={!uploadFile || !uploadPeriodo.trim() || uploadMutation.isPending}
+                  className="w-full"
+                >
+                  {uploadMutation.isPending ? 'Cargando…' : 'Cargar lote'}
+                </Button>
+
+                {uploadReport && (
+                  <div className="rounded-lg border border-border/50 p-3 space-y-2 text-sm">
+                    <div className="flex flex-wrap gap-3">
+                      <span className="text-muted-foreground">Total: <strong className="text-foreground">{uploadReport.totalRegistros}</strong></span>
+                      <span className="text-green-600">Válidas: <strong>{uploadReport.totalValidos}</strong></span>
+                      <span className={uploadReport.totalConError > 0 ? 'text-red-600' : 'text-muted-foreground'}>
+                        Con error: <strong>{uploadReport.totalConError}</strong>
+                      </span>
+                    </div>
+                    {uploadReport.errores.length > 0 && (
+                      <div className="max-h-40 overflow-auto rounded border border-border/40">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr>
+                              <th className="text-left px-2 py-1 bg-muted/40 font-semibold">Contrato</th>
+                              <th className="text-left px-2 py-1 bg-muted/40 font-semibold">Motivo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uploadReport.errores.map((er, i) => (
+                              <tr key={`${er.contrato}-${i}`} className="border-t border-border/40">
+                                <td className="px-2 py-1 font-mono">{er.contrato}</td>
+                                <td className="px-2 py-1 flex items-center gap-1 text-red-600">
+                                  <AlertTriangle className="h-3 w-3 shrink-0" /> {er.motivo}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </TabsContent>
 

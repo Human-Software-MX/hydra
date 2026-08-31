@@ -7,22 +7,23 @@ import {
   Param,
   Query,
   Res,
-  UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
+  HttpException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
 import { ContratosService } from './contratos.service';
 import { CreateContratoDto } from './dto/create-contrato.dto';
 import { UpdateContratoDto } from './dto/update-contrato.dto';
 import { TiposContratacionService } from '../tipos-contratacion/tipos-contratacion.service';
 import { BillingEngineService } from './billing-engine.service';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
+@ApiTags('contratos')
+@ApiBearerAuth()
 @Controller('contratos')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class ContratosController {
   constructor(
     private readonly contratosService: ContratosService,
@@ -31,6 +32,7 @@ export class ContratosController {
   ) {}
 
   // IMPORTANT: static routes declared BEFORE /:id
+  @ApiOperation({ summary: 'Busca contratos por número, titular o RFC' })
   @Get('search')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   search(
@@ -40,6 +42,7 @@ export class ContratosController {
     return this.contratosService.search(q ?? '', limit);
   }
 
+  @ApiOperation({ summary: 'Lista todos los contratos' })
   @Get()
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findAll(
@@ -103,26 +106,43 @@ export class ContratosController {
     return this.contratosService.crearFacturaContratacion(id);
   }
 
+  @ApiOperation({
+    summary: 'Previsualiza la facturación de un tipo de contratación',
+    description: 'Calcula conceptos y montos sin persistir. Una tarifa inválida devuelve 422 con el detalle.',
+  })
   @Post('preview-facturacion')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
-  previewFacturacion(
+  async previewFacturacion(
     @Body() body: { tipoContratacionId: string; variables: Record<string, string | number | boolean> },
   ) {
-    return this.billingEngine.calcular(body.tipoContratacionId, body.variables ?? {});
+    try {
+      return await this.billingEngine.calcular(body.tipoContratacionId, body.variables ?? {});
+    } catch (err: unknown) {
+      // B3: safeEvalArithmetic lanza Error con la expresión ofensiva. El preview
+      // debe devolver ese mensaje descriptivo al wizard, NO un 500 enmascarado.
+      if (err instanceof HttpException) throw err;
+      throw new UnprocessableEntityException(
+        err instanceof Error ? err.message : 'No se pudo calcular la facturación (tarifa inválida).',
+      );
+    }
   }
 
+  @ApiOperation({ summary: 'Obtiene un contrato por id' })
   @Get(':id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR', 'ATENCION_CLIENTES')
   findOne(@Param('id') id: string) {
     return this.contratosService.findOne(id);
   }
 
+  @ApiOperation({ summary: 'Crea un contrato definitivo (cierre del wizard de alta)' })
   @Post()
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   create(@Body() dto: CreateContratoDto) {
     return this.contratosService.create(dto);
   }
 
+  @ApiOperation({ summary: 'Actualiza campos de un contrato existente' })
+  @Roles(...ROLES_ADMIN)
   @Patch(':id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {

@@ -6,6 +6,7 @@ import { CarteraService } from '../cartera/cartera.service';
 import { SupraApiError, SupraClientService } from '../supra/supra-client.service';
 import { SupraMapService } from '../supra/supra-map.service';
 import { pesosToMinor, supraRef } from '../supra/supra.config';
+import { conMonitoreo } from '../../common/monitoreo.helper';
 
 @Injectable()
 export class PagosExternosService {
@@ -98,6 +99,29 @@ export class PagosExternosService {
     const registros = this.etl.parseArchivo(params.recaudador, params.contenido);
     if (registros.length === 0) throw new BadRequestException('Archivo sin registros');
 
+    return conMonitoreo(
+      this.prisma,
+      'ETL_PAGOS',
+      async (ctx) => {
+        const resultado = await this.procesarRegistros(params, registros);
+        ctx.registros = resultado.total;
+        ctx.errores = resultado.rechazados;
+        ctx.detalle = {
+          recaudador: params.recaudador,
+          archivoNombre: params.archivoNombre,
+          procesados: resultado.procesados,
+          rechazados: resultado.rechazados,
+        };
+        return resultado;
+      },
+      { subTipo: params.recaudador },
+    );
+  }
+
+  private async procesarRegistros(
+    params: { recaudador: string; archivoNombre: string; contenido: string },
+    registros: ReturnType<EtlPagosService['parseArchivo']>,
+  ) {
     let procesados = 0;
     let rechazados = 0;
     const errores: string[] = [];

@@ -6,16 +6,13 @@ import {
   Query,
   Body,
   Res,
-  UseGuards,
   DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TimbradoService } from './timbrado.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 import { IsOptional, IsString, Matches } from 'class-validator';
 
 class TimbrarPeriodoDto {
@@ -27,6 +24,7 @@ class TimbrarPeriodoDto {
   contratoId?: string;
 }
 
+@Roles(...ROLES_ADMIN)
 @Controller('timbrados')
 export class TimbradosController {
   constructor(
@@ -77,7 +75,6 @@ export class TimbradosController {
 
   /** Timbra un comprobante individual (Pendiente/Error → Timbrada OK). */
   @Post(':id/timbrar')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   timbrar(@Param('id') id: string) {
     return this.timbrado.timbrar(id);
@@ -85,7 +82,6 @@ export class TimbradosController {
 
   /** Timbrado masivo de un periodo. */
   @Post('timbrar-periodo')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   timbrarPeriodo(@Body() dto: TimbrarPeriodoDto) {
     return this.timbrado.timbrarPeriodo(dto);
@@ -93,7 +89,6 @@ export class TimbradosController {
 
   /** Descarga del XML timbrado (CFDI). */
   @Get(':id/xml')
-  @UseGuards(JwtAuthGuard)
   async descargarXml(@Param('id') id: string, @Res() res: Response) {
     const xml = await this.timbrado.obtenerXml(id);
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
