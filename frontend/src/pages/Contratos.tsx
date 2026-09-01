@@ -43,6 +43,7 @@ import {
   Pencil,
   PlayCircle,
   Trash2,
+  LifeBuoy,
 } from 'lucide-react';
 import { fetchAdministraciones } from '@/api/catalogos';
 import { fetchTiposContratacion, type TipoContratacion } from '@/api/tipos-contratacion';
@@ -64,6 +65,7 @@ import { Badge } from '@/components/ui/badge';
 import { useSearchParams } from 'react-router-dom';
 import { WizardContratacion } from '@/components/contratacion/WizardContratacion';
 import { ContratoEditDialog } from '@/components/contratos/ContratoEditDialog';
+import { AgoraTicketsDialog } from '@/components/contratos/AgoraTicketsDialog';
 
 /** Inline editable field for linking/updating the CEA contract number */
 function CeaNumInput({ contratoId, initial, onSaved }: { contratoId: string; initial: string; onSaved: (v: string) => void }) {
@@ -186,6 +188,7 @@ const Contratos = () => {
   const [detail, setDetail] = useState<string | null>(null);
   /** Edición vía PATCH (distinto del modal de solo lectura / ficha). */
   const [editContratoId, setEditContratoId] = useState<string | null>(null);
+  const [agoraContratoId, setAgoraContratoId] = useState<string | null>(null);
   const [resumingContratoId, setResumingContratoId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
@@ -595,6 +598,14 @@ const Contratos = () => {
                       >
                         <Pencil className="h-4 w-4 text-muted-foreground" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAgoraContratoId(c.id)}
+                        title="Tickets Agora"
+                      >
+                        <LifeBuoy className="h-4 w-4 text-muted-foreground" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => setDeletingId(c.id)} title="Cancelar contrato">
                         <Trash2 className="h-4 w-4 text-destructive/70 hover:text-destructive" />
                       </Button>
@@ -697,6 +708,14 @@ const Contratos = () => {
         contratoId={editContratoId}
         onOpenChange={(o) => {
           if (!o) setEditContratoId(null);
+        }}
+      />
+
+      <AgoraTicketsDialog
+        open={!!agoraContratoId}
+        contratoId={agoraContratoId}
+        onOpenChange={(o) => {
+          if (!o) setAgoraContratoId(null);
         }}
       />
 

@@ -31,9 +31,16 @@ export class AgoraController {
       descripcion: string;
       prioridad?: string;
       creadoPor: string;
+      /** Nº de contrato CEA: sólo se envía a Agora si viene explícito (lo valida por SOAP). */
+      ceaContractNumber?: string;
     },
   ) {
     return this.service.createTicket(body);
+  }
+
+  @Post(':id/sync')
+  sync(@Param('id') id: string) {
+    return this.service.syncFromAgora(id);
   }
 
   @Patch(':id/estado')

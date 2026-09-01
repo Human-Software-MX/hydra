@@ -34,11 +34,17 @@ export const createAgoraTicket = (data: {
   descripcion: string;
   prioridad?: string;
   creadoPor: string;
+  /** Nº de contrato CEA: Agora lo valida contra el SOAP de la CEA, sólo enviarlo si es real. */
+  ceaContractNumber?: string;
 }) =>
   apiRequest<AgoraTicketDto>('/agora/tickets', {
     method: 'POST',
     body: JSON.stringify(data),
   });
+
+/** Relee el ticket en Agora y actualiza el estado local. */
+export const syncAgoraTicket = (id: string) =>
+  apiRequest<AgoraTicketDto>(`/agora/tickets/${id}/sync`, { method: 'POST' });
 
 export const updateAgoraTicketEstado = (id: string, estado: string) =>
   apiRequest<AgoraTicketDto>(`/agora/tickets/${id}/estado`, {
