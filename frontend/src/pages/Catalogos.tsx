@@ -519,12 +519,12 @@ const Catalogos = () => {
 
       <Tabs value={catalogTab} onValueChange={setCatalogTab}>
         {!isSatEntry && (
-          <TabsList className="mb-4 bg-white border rounded-lg p-1 gap-1 h-auto flex flex-wrap justify-start">
+          <TabsList className="mb-4 bg-white border border-slate-200/70 rounded-xl p-1 gap-1 h-auto flex flex-wrap justify-start">
             {tabDefs.map((t) => (
               <TabsTrigger
                 key={t.value}
                 value={t.value}
-                className="rounded-md data-[state=active]:bg-[#003366] data-[state=active]:text-white text-xs sm:text-sm px-3 py-2"
+                className="rounded-lg data-[state=active]:bg-[#007BFF]/[0.08] data-[state=active]:text-[#007BFF] data-[state=active]:shadow-none text-xs sm:text-sm px-3 py-2"
               >
                 {t.label}
               </TabsTrigger>

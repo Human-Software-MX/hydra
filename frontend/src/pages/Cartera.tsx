@@ -1691,7 +1691,7 @@ const Cartera = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Cartera y cobranza</h1>
+        <h1 className="page-title">Cartera y cobranza</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Aging de cartera vencida, padrón de morosidad, reglas de dunning y lotes de facturación.
         </p>

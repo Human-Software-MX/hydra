@@ -153,7 +153,7 @@ const Construcciones = () => {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Construcción</h1>
+        <h1 className="page-title">Construcción</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Órdenes de instalación de toma y medidor generadas automáticamente.
         </p>

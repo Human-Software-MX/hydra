@@ -59,7 +59,7 @@ const Contabilidad = () => {
           <p className="text-sm text-muted-foreground">Total cobrado</p>
         </Link>
         <Link to="/app/timbrado" className="widget-card text-center hover:shadow-md transition-shadow">
-          <Send className="h-8 w-8 mx-auto mb-2 text-accent" aria-hidden />
+          <Send className="h-8 w-8 mx-auto mb-2 text-[#007BFF]" aria-hidden />
           <p className="text-2xl font-bold tabular-nums">{totalTimbrado}</p>
           <p className="text-sm text-muted-foreground">CFDIs timbrados</p>
         </Link>

@@ -217,38 +217,41 @@ const AppLayout = () => {
       {/* ── Main ────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="h-14 bg-white border-b border-border/60 flex items-center gap-4 px-6 shrink-0">
+        <header className="h-14 bg-white border-b border-slate-200/70 flex items-center gap-4 px-6 shrink-0">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"
+              strokeWidth={1.6}
+            />
             <input
-              className="w-full pl-9 pr-4 py-2 text-sm bg-muted/50 rounded-lg border border-transparent focus:bg-white focus:border-[#007BFF]/40 focus:ring-2 focus:ring-[#007BFF]/20 outline-none placeholder:text-muted-foreground transition-all"
+              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-100/70 rounded-xl border border-transparent focus:bg-white focus:border-[#007BFF]/40 focus:ring-2 focus:ring-[#007BFF]/20 outline-none placeholder:text-slate-400 transition-all"
               placeholder="Buscar expedientes o predios..."
             />
           </div>
 
           {/* Right actions */}
           <div className="flex items-center gap-0.5 ml-auto">
-            <button className="relative p-2 rounded-lg hover:bg-muted transition-colors">
-              <Bell className="w-5 h-5 text-muted-foreground" />
+            <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 transition-colors">
+              <Bell className="w-[18px] h-[18px]" strokeWidth={1.6} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
-            <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-              <HelpCircle className="w-5 h-5 text-muted-foreground" />
+            <button className="p-2 rounded-lg text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 transition-colors">
+              <HelpCircle className="w-[18px] h-[18px]" strokeWidth={1.6} />
             </button>
-            <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-              <Grid3X3 className="w-5 h-5 text-muted-foreground" />
+            <button className="p-2 rounded-lg text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 transition-colors">
+              <Grid3X3 className="w-[18px] h-[18px]" strokeWidth={1.6} />
             </button>
 
             {/* User chip */}
-            <div className="ml-3 flex items-center gap-2.5 pl-3 border-l border-border">
+            <div className="ml-3 flex items-center gap-2.5 pl-3 border-l border-slate-200/70">
               <div className="text-right leading-tight">
-                <p className="text-[13px] font-semibold text-foreground">{user?.name ?? '—'}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                <p className="text-[13px] font-semibold text-slate-900">{user?.name ?? '—'}</p>
+                <p className="text-[10px] text-slate-400 uppercase tracking-[0.08em]">
                   {roleLabel}
                 </p>
               </div>
-              <div className="w-8 h-8 rounded-full bg-[#4A6278] flex items-center justify-center text-white text-[12px] font-bold shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[#007BFF]/10 flex items-center justify-center text-[#007BFF] text-[12px] font-bold shrink-0">
                 {userInitials}
               </div>
             </div>
