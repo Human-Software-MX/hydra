@@ -1077,61 +1077,24 @@ function StepContratacion({
       {/* Documentos Presentados */}
       <div className="space-y-3">
         <p className="text-sm font-medium">Documentos Presentados:</p>
-        <div className="rounded-md border bg-background p-4">
-          {configLoading ? (
-            <p className="text-xs text-muted-foreground">Cargando documentos…</p>
-          ) : documentos.length > 0 ? (
-            <div className="space-y-2">
-              {documentos.map((doc) => {
-                const checked = form.documentosRecibidos.includes(doc.id);
-                return (
-                  <label key={doc.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input accent-primary"
-                      checked={checked}
-                      onChange={(e) =>
-                        set({
-                          documentosRecibidos: e.target.checked
-                            ? [...form.documentosRecibidos, doc.id]
-                            : form.documentosRecibidos.filter((id) => id !== doc.id),
-                        })
-                      }
-                    />
-                    <span className={doc.obligatorio ? 'font-medium' : ''}>
-                      {(doc.documento?.nombre ?? doc.nombreDocumento ?? doc.id).toUpperCase()}
-                      {doc.obligatorio && <span className="ml-1 text-destructive">*</span>}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <textarea
-              className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-              placeholder="Lista los documentos presentados…"
-              value={form.documentosTexto}
-              onChange={(e) => set({ documentosTexto: e.target.value })}
-            />
-          )}
-        </div>
-
-        <EntregaDocumentos
-          solicitudId={solicitudId}
-          documentosDelTipo={documentos}
-          archivosPendientes={archivosPendientes}
-          onPendientesChange={onPendientesChange}
-          onDocumentoEntregado={(nombre) => {
-            // al subir un archivo, el tipo de documento queda marcado como recibido
-            const doc = documentos.find(
-              (d) => (d.documento?.nombre ?? d.nombreDocumento) === nombre,
-            );
-            const key = doc?.id ?? nombre;
-            if (!form.documentosRecibidos.includes(key)) {
-              set({ documentosRecibidos: [...form.documentosRecibidos, key] });
+        {configLoading ? (
+          <p className="text-xs text-muted-foreground">Cargando documentos…</p>
+        ) : (
+          <EntregaDocumentos
+            solicitudId={solicitudId}
+            documentosDelTipo={documentos}
+            esRecibido={(d) => form.documentosRecibidos.includes(d.id)}
+            onToggleRecibido={(d, recibido) =>
+              set({
+                documentosRecibidos: recibido
+                  ? [...form.documentosRecibidos, d.id]
+                  : form.documentosRecibidos.filter((x) => x !== d.id),
+              })
             }
-          }}
-        />
+            archivosPendientes={archivosPendientes}
+            onPendientesChange={onPendientesChange}
+          />
+        )}
       </div>
     </div>
   );
