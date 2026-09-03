@@ -1,0 +1,4 @@
+
+## 2026-09-03 — Verificación de type-check incompleta rompió CI
+**Qué pasó:** Al volver nullable `nombreDocumento` (PR #56), `contratos.service.ts` (archivo NO tocado) quedó con error TS18047. Mi verificación corría `tsc --noEmit` pero filtraba la salida con `grep` a los archivos que yo había tocado, porque el entorno local tiene ~400 errores preexistentes de specs (faltan @types/jest). El CI, con `npm ci` limpio, solo tenía 1 error: el mío. Main quedó roto ~40 min y el auto-deploy sirvió un commit viejo.
+**Regla:** Cuando un cambio altera un TIPO compartido (schema Prisma, interface exportada), buscar TODOS los consumidores (`grep` del campo en todo src/) antes de dar por buena la verificación. Nunca filtrar la salida de tsc por "mis archivos": comparar contra los errores de main (baseline) — `tsc en main | sort > a; tsc en rama | sort > b; comm -13 a b` — o correr el mismo comando que usa el CI (`npm run build` en Docker/`npm ci`).
