@@ -92,3 +92,11 @@ Bugs spotted outside the task at hand. Self-contained entries; another agent wit
 - **Fix propuesto**: split método-a-método — dejar los GET abiertos y poner `@Roles(...ROLES_ADMIN)` (o el grupo dueño) en cada write. No se hizo en esta pasada por el riesgo de romper flujos que crean catálogos inline (p.ej. alta de medidor que crea una marca) sin verificar cada uno; err hacia menos restricción. Requiere revisar consumidores reales antes de endurecer.
 - **Status:** deferred (endurecimiento de writes pendiente, bajo riesgo)
 - **Date:** 2026-08-11
+
+## PuntosServicio: coordenadas (y otros campos) se envían con nombres que el backend ignora
+
+- **Where**: `frontend/src/api/puntos-servicio.ts:66-93` (`CreatePuntoServicioDto`) y `frontend/src/pages/PuntosServicio.tsx:404-405` vs `backend/src/modules/puntos-servicio/puntos-servicio.controller.ts:39-59`
+- **What**: El formulario de Puntos de Servicio envía `coordenadaLat`/`coordenadaLon` (además de `administracion`, `libreta`, `claveCatastral`, `folioExpediente`, `sectorHidraulicoId`, `calibreId`, etc.), pero el backend solo reconoce `gpsLat`/`gpsLng` y el subconjunto de campos del modelo `PuntoServicio`. No hay validación que rechace los desconocidos.
+- **How it fails**: El usuario captura latitud/longitud en el alta/edición de un punto de servicio → la petición responde 201/200 pero `puntos_servicio.gps_lat/gps_lng` quedan en NULL; el punto nunca aparece en `/gis/padron.geojson`. Fix probable: renombrar en el DTO frontend a `gpsLat`/`gpsLng` (y revisar el resto de campos huérfanos contra el schema Prisma).
+- **Status:** pending
+- **Date:** 2026-09-02

@@ -29,6 +29,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { DomicilioFormValue, SolicitudEstado, SolicitudRecord, SolicitudState } from '@/types/solicitudes';
 import { SOLICITUD_STATE_EMPTY } from '@/types/solicitudes';
 import { deriveName, derivePredioResumen, useSolicitudesStore } from '@/hooks/useSolicitudesStore';
+import { formatearCoordenadas } from '@/lib/geo-picker';
 import {
   usoCfdiMatchesRegimenSeleccionado,
   REGIMEN_FISCAL_OFFLINE,
@@ -421,7 +422,7 @@ function StepPredio({ form, set }: { form: SolicitudState; set: (p: Partial<Soli
           Domicilio del predio <span className="text-destructive">*</span>
           <span className="ml-2 text-xs font-normal text-muted-foreground">Este dato persiste a través de todo el flujo y se usará para crear el punto de servicio.</span>
         </p>
-        <DomicilioPickerForm value={form.predioDir} onChange={(v) => set({ predioDir: v })} />
+        <DomicilioPickerForm value={form.predioDir} onChange={(v) => set({ predioDir: v })} conMapa />
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1377,6 +1378,7 @@ function StepResumen({ form }: { form: SolicitudState }) {
             <ResumenRow label="Calle" value={form.predioDir.calle || '—'} />
             <ResumenRow label="Núm. exterior" value={form.predioDir.numExterior} />
             <ResumenRow label="Código postal" value={form.predioDir.codigoPostal} />
+            <ResumenRow label="Ubicación GPS" value={formatearCoordenadas(form.predioDir.gpsLat, form.predioDir.gpsLng) || 'Sin ubicar en mapa'} />
             {form.predioManzana && <ResumenRow label="Manzana" value={form.predioManzana} />}
             {form.predioLote && <ResumenRow label="Lote" value={form.predioLote} />}
           </CardContent>

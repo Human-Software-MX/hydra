@@ -61,6 +61,8 @@ export interface CreateDomicilioDto {
   entreCalle1?: string;
   entreCalle2?: string;
   referencia?: string;
+  gpsLat?: number;
+  gpsLng?: number;
 }
 
 export interface DomicilioCreado {

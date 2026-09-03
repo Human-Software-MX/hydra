@@ -80,6 +80,8 @@ export default function PasoServicioPoint({ data, updateData }: StepProps) {
         municipioINEGIId: domicilioForm.municipioINEGIId || undefined,
         estadoINEGIId: domicilioForm.estadoINEGIId || undefined,
         referencia: domicilioForm.referencia || undefined,
+        gpsLat: domicilioForm.gpsLat ?? undefined,
+        gpsLng: domicilioForm.gpsLng ?? undefined,
       });
       // 2. Crear punto de servicio con el domicilio
       return createPuntoServicio({ codigo: codigoPS.trim(), domicilioId: dom.id });
@@ -142,7 +144,7 @@ export default function PasoServicioPoint({ data, updateData }: StepProps) {
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Domicilio del punto de servicio
             </p>
-            <DomicilioPickerForm value={domicilioForm} onChange={setDomicilioForm} />
+            <DomicilioPickerForm value={domicilioForm} onChange={setDomicilioForm} conMapa />
           </div>
 
           {createMut.isError && (

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DomiciliosService, type CreateDomicilioDto } from '../domicilios/domicilios.service';
 import { PuntosServicioService } from '../puntos-servicio/puntos-servicio.service';
+import { coordenadasPredio } from './predio-geo';
 
 function optionalInegiFk(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined;
@@ -58,6 +59,8 @@ export class SolicitudesService {
       municipioINEGIId: optionalInegiFk(o.municipioINEGIId),
       estadoINEGIId: optionalInegiFk(o.estadoINEGIId),
       referencia: optionalInegiFk(o.referencia),
+      // Ubicación seleccionada en el mapa del predio (opcional).
+      ...coordenadasPredio(o),
     };
   }
 

@@ -8,6 +8,7 @@ import {
   fetchInegiLocalidadesCatalogo,
   fetchInegiColoniasCatalogo,
 } from '@/api/domicilios-inegi';
+import { formatearCoordenadas } from '@/lib/geo-picker';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatMxn, useBillingPreview } from '../hooks/useBillingPreview';
@@ -249,6 +250,11 @@ export default function PasoResumen({ data, config }: StepProps) {
                 {predioGeoLinea && (
                   <span className="block text-sm text-muted-foreground font-normal">
                     {predioGeoLinea}
+                  </span>
+                )}
+                {formatearCoordenadas(predioDir?.gpsLat, predioDir?.gpsLng) && (
+                  <span className="block text-sm text-muted-foreground font-normal">
+                    GPS: {formatearCoordenadas(predioDir?.gpsLat, predioDir?.gpsLng)}
                   </span>
                 )}
               </dd>
