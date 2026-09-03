@@ -25,8 +25,9 @@ export class TiposContratacionController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
     @Query('administracionId') administracionId?: string,
+    @Query('uso') uso?: string,
   ) {
-    return this.service.findAll({ activo, page, limit, administracionId });
+    return this.service.findAll({ activo, page, limit, administracionId, uso });
   }
 
   @Roles(...ROLES_INTERNAL)

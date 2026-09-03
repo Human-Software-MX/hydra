@@ -7,9 +7,25 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class CatalogosOperativosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAdministraciones() {
+  async findAdministraciones(params?: { uso?: string }) {
+    const uso = params?.uso?.trim().toLowerCase();
+    // Con filtro de uso solo se ofrecen administraciones que tengan al menos un tipo de
+    // contratación activo de esa rama (doméstico = categoría tarifaria DOMESTICA).
+    const usoFilter =
+      uso === 'domestico' || uso === 'doméstico'
+        ? { codigo: 'DOMESTICA' }
+        : uso === 'no_domestico' || uso === 'no-domestico'
+          ? { codigo: { not: 'DOMESTICA' } }
+          : null;
     const rows = await this.prisma.administracion.findMany({
       select: { id: true, nombre: true },
+      where: usoFilter
+        ? {
+            tiposContratacion: {
+              some: { activo: true, claseTarifa: { categoria: usoFilter } },
+            },
+          }
+        : undefined,
       orderBy: { nombre: 'asc' },
     });
     return rows.filter((r) => !administracionExcluidaDelSelector(r.nombre));
