@@ -115,3 +115,9 @@ Bugs spotted outside the task at hand. Self-contained entries; another agent wit
 - **How it fails**: `npm run seed:catalogos` termina en error inmediato en Git Bash. Workaround: `npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed-catalogos.ts`. Fix sugerido: mover la opción a un `tsconfig.seed.json` (`ts-node -P`) o usar `TS_NODE_COMPILER_OPTIONS` como ya hace `seed:demo-aquacis`.
 - **Status:** pending
 - **Date:** 2026-09-03
+
+## Desajuste de claves de material de calle entre catálogos
+- **Where**: `frontend/src/components/solicitudes/CuantificacionModal.tsx:73` vs `frontend/src/components/contratacion/steps/PasoVariables.tsx:20`
+- **What**: La misma etiqueta "Concreto hidráulico" tiene clave `concreto_hidraulico` en CuantificacionModal y `concreto` en el catálogo de variables (PasoVariables). Son dos catálogos paralelos para el mismo dominio.
+- **How it fails**: Si una inspección captura `MATERIAL_CALLE = 'concreto'` (clave de PasoVariables) y ese valor llega a CuantificacionModal vía `vc.MATERIAL_CALLE`, el select cae al placeholder y el input read-only muestra la clave cruda en vez de la etiqueta. Preexistente al cambio a SearchableSelect (el Select original se comportaba igual).
+- Status: pending, 2026-09-03
