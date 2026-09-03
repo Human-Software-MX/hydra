@@ -1542,6 +1542,7 @@ model CatalogoDocumento {
   createdAt     DateTime                             @default(now()) @map("created_at")
   updatedAt     DateTime                             @updatedAt @map("updated_at")
   requeridos    DocumentoRequeridoTipoContratacion[]
+  entregas      SolicitudDocumento[]
 
   @@index([clasificacion])
   @@map("catalogo_documentos")
@@ -1949,9 +1950,31 @@ model Solicitud {
   updatedAt           DateTime              @updatedAt @map("updated_at")
   inspeccion          SolicitudInspeccion?
 
+  documentosEntregados SolicitudDocumento[]
   @@index([estado])
   @@index([contratoId])
   @@map("solicitudes")
+}
+
+/// Archivo entregado por el ciudadano para una solicitud, clasificado contra el
+/// catálogo maestro de documentos. Se permiten varios archivos por tipo de documento.
+model SolicitudDocumento {
+  id              String             @id @default(cuid())
+  solicitudId     String             @map("solicitud_id")
+  documentoId     String?            @map("documento_id")
+  /// Texto libre cuando el documento no está en el catálogo.
+  nombreDocumento String?            @map("nombre_documento")
+  archivoNombre   String             @map("archivo_nombre")
+  archivoPath     String             @map("archivo_path")
+  mimeType        String             @map("mime_type")
+  tamanoBytes     Int                @map("tamano_bytes")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  solicitud       Solicitud          @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  documento       CatalogoDocumento? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
+
+  @@index([solicitudId])
+  @@index([documentoId])
+  @@map("solicitud_documentos")
 }
 
 model SolicitudInspeccion {

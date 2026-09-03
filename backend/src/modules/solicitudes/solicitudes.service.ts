@@ -471,4 +471,62 @@ export class SolicitudesService {
     await this.findOne(id);
     await this.prisma.solicitud.delete({ where: { id } });
   }
+
+  // ─── Documentos entregados ─────────────────────────────────────────────────
+
+  async listDocumentos(solicitudId: string) {
+    await this.findOne(solicitudId);
+    return this.prisma.solicitudDocumento.findMany({
+      where: { solicitudId },
+      include: { documento: { select: { id: true, nombre: true, presentacion: true, clasificacion: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addDocumento(
+    solicitudId: string,
+    dto: {
+      documentoId?: string;
+      nombreDocumento?: string;
+      archivoNombre: string;
+      archivoPath: string;
+      mimeType: string;
+      tamanoBytes: number;
+    },
+  ) {
+    await this.findOne(solicitudId);
+    if (!dto.documentoId && !dto.nombreDocumento?.trim()) {
+      throw new BadRequestException('Se requiere documentoId (catálogo) o nombreDocumento');
+    }
+    if (dto.documentoId) {
+      const doc = await this.prisma.catalogoDocumento.findUnique({ where: { id: dto.documentoId } });
+      if (!doc) throw new NotFoundException(`CatalogoDocumento '${dto.documentoId}' no encontrado`);
+    }
+    return this.prisma.solicitudDocumento.create({
+      data: {
+        solicitudId,
+        documentoId: dto.documentoId ?? null,
+        nombreDocumento: dto.nombreDocumento?.trim() || null,
+        archivoNombre: dto.archivoNombre,
+        archivoPath: dto.archivoPath,
+        mimeType: dto.mimeType,
+        tamanoBytes: dto.tamanoBytes,
+      },
+      include: { documento: { select: { id: true, nombre: true, presentacion: true, clasificacion: true } } },
+    });
+  }
+
+  async getDocumento(solicitudId: string, docId: string) {
+    const doc = await this.prisma.solicitudDocumento.findUnique({ where: { id: docId } });
+    if (!doc || doc.solicitudId !== solicitudId) {
+      throw new NotFoundException('Documento no encontrado en esta solicitud');
+    }
+    return doc;
+  }
+
+  async removeDocumento(solicitudId: string, docId: string) {
+    const doc = await this.getDocumento(solicitudId, docId);
+    await this.prisma.solicitudDocumento.delete({ where: { id: docId } });
+    return doc; // el controller borra el archivo físico
+  }
 }
