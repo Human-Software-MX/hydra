@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -414,12 +415,12 @@ function AplicarParcialidadDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Tipo de pago</Label>
-            <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {TIPOS_PAGO.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={tipo}
+              onValueChange={setTipo}
+              searchPlaceholder="Buscar tipo de pago…"
+              options={TIPOS_PAGO.map((t) => ({ value: t, label: t }))}
+            />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

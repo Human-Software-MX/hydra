@@ -66,7 +66,6 @@ const PortalLayout = () => {
 
   const setContratoId = useCallback((id: string) => {
     setContratoIdState(id);
-    setContractDropdownOpen(false);
   }, []);
 
   const navigateToTab = (tab: string) => {
@@ -85,7 +84,6 @@ const PortalLayout = () => {
     logout();
     navigate('/portal/login', { replace: true });
   };
-
 
   const contextValue: PortalContextValue = {
     contratos,

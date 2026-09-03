@@ -537,14 +537,13 @@ export function CuantificacionModal({
 
             <Field label="Material de la calle" hint="Inspección">
               {editandoInspeccion ? (
-                <Select value={matCalle} onValueChange={setMatCalle}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                  <SelectContent>
-                    {MATERIALES_CALLE.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={matCalle}
+                  onValueChange={setMatCalle}
+                  placeholder="Seleccionar…"
+                  searchPlaceholder="Buscar material…"
+                  options={MATERIALES_CALLE}
+                />
               ) : (
                 <Input
                   value={MATERIALES_CALLE.find((m) => m.value === matCalle)?.label ?? matCalle}

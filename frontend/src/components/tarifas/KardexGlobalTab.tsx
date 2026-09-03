@@ -3,13 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 import { fetchMovimientosTarifa } from '@/api/tarifas';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TipoMovimientoBadge } from './badges';
 import { TIPOS_MOVIMIENTO, etiquetaMovimiento, fmtFechaHora, fmtMXN, fmtPct, valorReferenciaDe } from './format';
@@ -43,25 +37,20 @@ export function KardexGlobalTab({ useApi, onVerKardex }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select
+        <SearchableSelect
           value={tipo}
           onValueChange={(v) => {
             setTipo(v);
             setPage(1);
           }}
-        >
-          <SelectTrigger className="h-9 w-[220px] text-sm">
-            <SelectValue placeholder="Tipo de movimiento" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todos los movimientos</SelectItem>
-            {TIPOS_MOVIMIENTO.map((t) => (
-              <SelectItem key={t} value={t}>
-                {etiquetaMovimiento(t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder="Tipo de movimiento"
+          searchPlaceholder="Buscar movimiento…"
+          options={[
+            { value: TODOS, label: 'Todos los movimientos' },
+            ...TIPOS_MOVIMIENTO.map((t) => ({ value: t, label: etiquetaMovimiento(t) })),
+          ]}
+          className="h-9 w-[220px] text-sm"
+        />
         <span className="ml-auto text-xs text-muted-foreground">
           {total > 0 ? `Mostrando ${desde}–${hasta} de ${total}` : ''}
         </span>
