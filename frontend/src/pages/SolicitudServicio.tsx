@@ -865,9 +865,7 @@ function StepContratacion({ form, set, solicitudId }: { form: SolicitudState; se
   });
 
   const variables = tipoConfig?.variables ?? [];
-  // Rama del árbol de uso: un documento con aplicaUso solo se exige en la rama
-  // que le corresponde (form.usoDomestico viene del paso Solicitud).
-  const ramaUso = form.usoDomestico === 'si' ? 'domestico' : form.usoDomestico === 'no' ? 'no_domestico' : null;
+  // Un documento con aplicaUso solo se exige en la rama de uso elegida (ramaUso, arriba).
   const documentos = (tipoConfig?.documentos ?? []).filter(
     (d) => !d.aplicaUso || !ramaUso || d.aplicaUso === ramaUso,
   );
