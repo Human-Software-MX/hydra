@@ -34,6 +34,36 @@ ok('SubTotal = 120', xml.includes('SubTotal="120.00"'));
 ok('Total = 124.80', xml.includes('Total="124.80"'));
 ok('totales.total correcto', Math.abs(totales.total - 124.8) < 0.005);
 ok('Impuestos globales TotalImpuestosTrasladados', xml.includes('TotalImpuestosTrasladados="4.80"'));
+// La Base del traslado a nivel comprobante es la suma de los importes GRAVADOS
+// (el concepto de agua es ObjetoImp '01', no objeto de impuesto), no el SubTotal.
+ok('Base del traslado = sólo el concepto gravado (30.00)', xml.includes('<cfdi:Traslado Base="30.00"'));
+// Un traslado en el concepto gravado y uno solo (una tasa) a nivel comprobante.
+ok('un traslado por tasa: 1 en concepto + 1 en comprobante', (xml.match(/<cfdi:Traslado /g) || []).length === 2);
+
+// ── Factura mixta 0 % / 16 %: un Traslado por tasa, cada uno con su propia base ──
+const mixta = construirCfdiXml({
+  fecha: '2026-07-17T12:00:00', formaPago: '99', metodoPago: 'PUE',
+  emisor: { rfc: 'EKU9003173C9', nombre: 'ORGANISMO OPERADOR', regimenFiscal: '603', codigoPostal: '76000' },
+  receptor: { rfc: 'XAXX010101000', nombre: 'PUBLICO EN GENERAL', domicilioFiscalCP: '76000', regimenFiscal: '616', usoCFDI: 'S01' },
+  conceptos: [
+    // Doméstico: gravado a tasa 0 % (SAT exige el Traslado con TasaOCuota 0.000000).
+    { claveProdServ: '83101509', claveUnidad: 'MTQ', cantidad: 12, descripcion: 'Consumo de agua doméstico', valorUnitario: 5, importe: 60, objetoImp: '02', ivaTasa: 0, ivaImporte: 0 },
+    // Saneamiento comercial: 16 %.
+    { claveProdServ: '83101509', claveUnidad: 'E48', cantidad: 1, descripcion: 'Saneamiento comercial', valorUnitario: 40, importe: 40, objetoImp: '02', ivaTasa: 0.16, ivaImporte: 6.4 },
+  ],
+});
+ok('mixta: SubTotal = 100.00', mixta.xml.includes('SubTotal="100.00"'));
+ok('mixta: Total = 106.40', mixta.xml.includes('Total="106.40"'));
+ok('mixta: TotalImpuestosTrasladados = 6.40', mixta.xml.includes('TotalImpuestosTrasladados="6.40"'));
+ok('mixta: 2 traslados de concepto + 2 tasas en el comprobante', (mixta.xml.match(/<cfdi:Traslado /g) || []).length === 4);
+ok(
+  'mixta: traslado 0 % con base 60.00',
+  mixta.xml.includes('<cfdi:Traslado Base="60.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/><cfdi:Traslado Base="40.00"'),
+);
+ok(
+  'mixta: traslado 16 % con base 40.00 (no el subtotal)',
+  mixta.xml.includes('<cfdi:Traslado Base="40.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="6.40"/></cfdi:Traslados></cfdi:Impuestos>'),
+);
 
 // Escapado XML
 const conAmp = construirCfdiXml({

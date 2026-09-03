@@ -1442,11 +1442,13 @@ model TipoContratacion {
   tiposClientePermitidos    String?                              @map("tipos_cliente_permitidos")  // EMP,GRUPO,MUNICIPAL,OFICIAL,PARTICULAR
   administracionId          String?                              @map("administracion_id")
   claseContratoId           String?                              @map("clase_contrato_id")
+  claseTarifaId             String?                              @map("clase_tarifa_id") // clase tarifaria (tipo de servicio) que factura este tipo
   activo                    Boolean                              @default(true)
   createdAt                 DateTime                             @default(now()) @map("created_at")
   updatedAt                 DateTime                             @updatedAt @map("updated_at")
   administracion            Administracion?                      @relation(fields: [administracionId], references: [id], onDelete: SetNull)
   claseContrato             ClaseContrato?                       @relation(fields: [claseContratoId], references: [id], onDelete: SetNull)
+  claseTarifa               ClaseTarifa?                         @relation(fields: [claseTarifaId], references: [id], onDelete: SetNull)
   contratos                 Contrato[]
   conceptos                 ConceptoCobroTipoContratacion[]
   clausulas                 ClausulaTipoContratacion[]
@@ -1455,6 +1457,7 @@ model TipoContratacion {
 
   @@index([administracionId])
   @@index([claseContratoId])
+  @@index([claseTarifaId])
   @@map("tipos_contratacion")
 }
 
@@ -1539,28 +1542,106 @@ model Tarifa {
   id                     String    @id @default(cuid())
   codigo                 String
   nombre                 String
-  tipoServicio           String    @map("tipo_servicio") // agua | saneamiento | alcantarillado
-  tipoCalculo            String    @map("tipo_calculo") // escalonado | fijo | variable
+  tipoServicio           String    @map("tipo_servicio") // agua | saneamiento | alcantarillado | agua_tratada | <concepto fijo>
+  tipoCalculo            String    @map("tipo_calculo") // escalonado | fijo | variable | tabla | lineal
   administracionId       String?   @map("administracion_id")
   tipoContratacionCodigo String?   @map("tipo_contratacion_codigo")
+  claseTarifaId          String?   @map("clase_tarifa_id")
+  concepto               String? // concepto de cobro para tarifas por concepto fijo (p. ej. ALCANTARILLADO POR PIPAS)
   rangoMinM3             Int?      @map("rango_min_m3")
   rangoMaxM3             Int?      @map("rango_max_m3")
-  precioUnitario         Decimal?  @map("precio_unitario") @db.Decimal(10, 4)
-  cuotaFija              Decimal?  @map("cuota_fija") @db.Decimal(10, 2)
+  precioUnitario         Decimal?  @map("precio_unitario") @db.Decimal(12, 4)
+  cuotaFija              Decimal?  @map("cuota_fija") @db.Decimal(12, 4)
+  precios                Json? // tipoCalculo=tabla: importe acumulado por m³ [0..rangoMaxM3]
+  valorReferencia        Decimal?  @map("valor_referencia") @db.Decimal(12, 4) // denormalizado: tabla → precios[10]; fijo → cuotaFija; resto → precioUnitario
   ivaPct                 Decimal   @default(16) @map("iva_pct") @db.Decimal(5, 2)
   vigenciaDesde          DateTime  @map("vigencia_desde")
   vigenciaHasta          DateTime? @map("vigencia_hasta")
   activo                 Boolean   @default(true)
   version                Int       @default(1)
+  tarifaAnteriorId       String?   @unique @map("tarifa_anterior_id") // versión que esta fila reemplaza
+  motivo                 String? // contexto del alta de esta versión
+  creadoPor              String?   @map("creado_por")
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
+  claseTarifa            ClaseTarifa?       @relation(fields: [claseTarifaId], references: [id], onDelete: SetNull)
+  tarifaAnterior         Tarifa?            @relation("TarifaVersiones", fields: [tarifaAnteriorId], references: [id], onDelete: SetNull)
+  tarifaSiguiente        Tarifa?            @relation("TarifaVersiones")
+  movimientos            TarifaMovimiento[]
 
+  @@unique([codigo, version])
   @@index([codigo])
   @@index([tipoServicio])
   @@index([vigenciaDesde])
   @@index([administracionId])
   @@index([tipoContratacionCodigo])
+  @@index([claseTarifaId])
   @@map("tarifas")
+}
+
+/// Clasificación principal / fiscal de las tarifas (DOMESTICA, COMERCIAL, INDUSTRIAL, PUBLICO, …).
+/// Define el tratamiento de IVA por defecto que heredan sus clases.
+model CategoriaTarifa {
+  id          String        @id @default(cuid())
+  codigo      String        @unique
+  nombre      String
+  descripcion String?
+  ivaPct      Decimal       @default(16) @map("iva_pct") @db.Decimal(5, 2)
+  orden       Int           @default(0)
+  activo      Boolean       @default(true)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  clases      ClaseTarifa[]
+
+  @@map("categorias_tarifa")
+}
+
+/// Tipo de tarifa / variante comercial dentro de una categoría (DOMÉSTICA MEDIO, DOMÉSTICO ALTO, …).
+/// `ivaPct` nulo = hereda el de la categoría. `sigeTpsId` enlaza con tipo_punto_servicio (tcttpsid) del SIGE.
+model ClaseTarifa {
+  id                String             @id @default(cuid())
+  codigo            String             @unique
+  nombre            String
+  categoriaId       String             @map("categoria_id")
+  ivaPct            Decimal?           @map("iva_pct") @db.Decimal(5, 2)
+  sigeTpsId         Int?               @map("sige_tps_id")
+  orden             Int                @default(0)
+  activo            Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  categoria         CategoriaTarifa    @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  tarifas           Tarifa[]
+  tiposContratacion TipoContratacion[]
+
+  @@index([categoriaId])
+  @@map("clases_tarifa")
+}
+
+/// Kardex de tarifas: un movimiento por cada versión creada (alta, cambio de valor, ajuste %, cambio fiscal).
+/// Guarda snapshot de valores anteriores y nuevos para reconstruir la historia sin depender de otras filas.
+model TarifaMovimiento {
+  id                String                  @id @default(cuid())
+  codigo            String // linaje (Tarifa.codigo)
+  tarifaId          String                  @map("tarifa_id") // versión resultante
+  tarifaAnteriorId  String?                 @map("tarifa_anterior_id") // versión reemplazada
+  tipo              String // ALTA | CAMBIO_VALOR | AJUSTE_PORCENTUAL | AJUSTE_MASIVO | CAMBIO_FISCAL | BAJA
+  porcentaje        Decimal?                @db.Decimal(8, 4)
+  valoresAnteriores Json?                   @map("valores_anteriores")
+  valoresNuevos     Json                    @map("valores_nuevos")
+  vigenciaDesde     DateTime                @map("vigencia_desde")
+  motivo            String?
+  actualizacionId   String?                 @map("actualizacion_id")
+  usuarioId         String?                 @map("usuario_id")
+  usuarioEmail      String?                 @map("usuario_email")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  tarifa            Tarifa                  @relation(fields: [tarifaId], references: [id], onDelete: Cascade)
+  actualizacion     ActualizacionTarifaria? @relation(fields: [actualizacionId], references: [id], onDelete: SetNull)
+
+  @@index([codigo])
+  @@index([tarifaId])
+  @@index([actualizacionId])
+  @@index([createdAt])
+  @@map("tarifa_movimientos")
 }
 
 model CorreccionTarifaria {
@@ -1599,16 +1680,20 @@ model AjusteTarifario {
 }
 
 model ActualizacionTarifaria {
-  id               String   @id @default(cuid())
+  id               String             @id @default(cuid())
   descripcion      String
-  fechaPublicacion DateTime @map("fecha_publicacion")
-  fechaAplicacion  DateTime @map("fecha_aplicacion")
-  fuenteOficial    String?  @map("fuente_oficial")
-  estado           String   @default("pendiente") // pendiente | aplicada | revertida
-  tarifasAfectadas Json?    @map("tarifas_afectadas")
-  aplicadoPor      String?  @map("aplicado_por")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  fechaPublicacion DateTime           @map("fecha_publicacion")
+  fechaAplicacion  DateTime           @map("fecha_aplicacion")
+  fuenteOficial    String?            @map("fuente_oficial")
+  estado           String             @default("pendiente") // pendiente | aplicada | revertida
+  tarifasAfectadas Json?              @map("tarifas_afectadas")
+  porcentaje       Decimal?           @db.Decimal(8, 4) // ajuste porcentual aplicado (lote masivo)
+  filtro           Json? // criterio de selección del lote (administracionId, categoriaId, claseTarifaId, tipoServicio)
+  totalTarifas     Int?               @map("total_tarifas")
+  aplicadoPor      String?            @map("aplicado_por")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  movimientos      TarifaMovimiento[]
 
   @@index([estado])
   @@index([fechaAplicacion])

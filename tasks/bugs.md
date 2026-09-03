@@ -92,3 +92,19 @@ Bugs spotted outside the task at hand. Self-contained entries; another agent wit
 - **Fix propuesto**: split método-a-método — dejar los GET abiertos y poner `@Roles(...ROLES_ADMIN)` (o el grupo dueño) en cada write. No se hizo en esta pasada por el riesgo de romper flujos que crean catálogos inline (p.ej. alta de medidor que crea una marca) sin verificar cada uno; err hacia menos restricción. Requiere revisar consumidores reales antes de endurecer.
 - **Status:** deferred (endurecimiento de writes pendiente, bajo riesgo)
 - **Date:** 2026-08-11
+
+## Tarifas demo sembradas con `tipoServicio` en mayúsculas nunca las usa facturación
+
+- **Where**: `backend/prisma/seed-catalogos.ts:382-393` (`seedTarifas`, `tipoServicio: 'AGUA' | 'SANEAMIENTO' | 'ALCANTARILLADO'`) vs `backend/src/modules/facturacion/facturacion.service.ts:16` (`SERVICIOS_FACTURABLES = ['agua', 'saneamiento', 'alcantarillado']`).
+- **What**: El seed demo escribe los servicios en MAYÚSCULAS y la resolución de tarifas de facturación filtra por minúsculas. Las 6 tarifas demo (TAR01–TAR06) jamás se seleccionan al facturar un consumo; solo `GET /tarifas/vigentes?tipoServicio=AGUA` y `/tarifas/calcular` las ven.
+- **How it fails**: En una BD que solo tiene el seed demo, `FacturacionService.calcularParaConsumo` lanza "No hay tarifas vigentes para el periodo …" aunque `/tarifas` liste tarifas activas. Con el catálogo real (Excel, `tipoServicio: 'agua'`) la facturación sí funciona; el seed demo debería normalizarse a minúsculas o eliminarse.
+- **Status:** pending
+- **Date:** 2026-09-03
+
+## Scripts npm con `--compiler-options {\"module\":\"CommonJS\"}` fallan bajo Git Bash
+
+- **Where**: `backend/package.json` scripts `seed:catalogos`, `bootstrap:admin`, `import-sige-hydra`, `export:tarifas-periodicas-json`, etc.
+- **What**: El JSON inline pierde las comillas cuando npm ejecuta el script desde Git Bash en Windows (`SyntaxError: Expected property name or '}' in JSON at position 1` de ts-node). Desde PowerShell/cmd funciona.
+- **How it fails**: `npm run seed:catalogos` termina en error inmediato en Git Bash. Workaround: `npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed-catalogos.ts`. Fix sugerido: mover la opción a un `tsconfig.seed.json` (`ts-node -P`) o usar `TS_NODE_COMPILER_OPTIONS` como ya hace `seed:demo-aquacis`.
+- **Status:** pending
+- **Date:** 2026-09-03

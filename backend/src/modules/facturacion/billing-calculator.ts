@@ -9,15 +9,20 @@
  *  - escalonado: bloques acumulativos [min, max) a precioUnitario por m³.
  *  - variable:   precioUnitario por m³ sobre el rango declarado (bloque único).
  *  - fijo:       cuotaFija independiente del consumo.
+ *  - tabla:      importe acumulado leído de `precios[m³]` (m³ redondeados) hasta
+ *                rangoMaxM3; por encima, cuotaFija + precioUnitario × m³.
+ *  - lineal:     cuotaFija + precioUnitario × consumo.
  */
 
 export interface TarifaCalculo {
   tipoServicio: string;
-  tipoCalculo: 'escalonado' | 'variable' | 'fijo' | string;
+  tipoCalculo: 'escalonado' | 'variable' | 'fijo' | 'tabla' | 'lineal' | string;
   rangoMinM3: number | null;
   rangoMaxM3: number | null;
   precioUnitario: number | null;
   cuotaFija: number | null;
+  /** tipoCalculo=tabla: importe acumulado por m³ (índice = m³, 0..rangoMaxM3). */
+  precios?: number[] | null;
   ivaPct: number;
 }
 
@@ -42,6 +47,21 @@ export interface ResultadoFactura {
 /** Redondea a 2 decimales evitando la deriva de punto flotante (12.005 -> 12.01). */
 export function redondear(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** Redondeo a 4 decimales (precios unitarios derivados de una tabla). */
+function redondear4(n: number): number {
+  return Math.round((n + Number.EPSILON) * 10000) / 10000;
+}
+
+/**
+ * m³ facturables de una tarifa de tabla: el consumo se redondea al entero más
+ * cercano y la fracción exacta de 0.5 se queda en el m³ inferior (regla CEA:
+ * sólo sube cuando la fracción supera 0.5).
+ */
+export function m3Facturables(consumoM3: number): number {
+  const piso = Math.floor(consumoM3);
+  return consumoM3 - piso > 0.5 ? piso + 1 : piso;
 }
 
 const nombreServicio = (tipoServicio: string): string => {
@@ -98,6 +118,42 @@ export function calcularServicio(
       tipoServicio,
       concepto: `${nombre} — consumo ${min}-${max === Infinity ? '∞' : max} m³`,
       m3: redondear(m3EnRango),
+      precioUnitario: precio,
+      importe,
+      ivaPct: Number(t.ivaPct ?? 0),
+      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+    });
+  }
+
+  // Tabla: el importe ya viene acumulado por m³ (índice = m³ facturables).
+  for (const t of tarifas.filter((x) => x.tipoCalculo === 'tabla')) {
+    const m3 = Math.max(0, m3Facturables(consumoM3));
+    const tope = t.rangoMaxM3 ?? (t.precios?.length ? t.precios.length - 1 : 0);
+    const dentroDeTabla = !!t.precios?.length && m3 <= tope;
+    const importe = dentroDeTabla
+      ? redondear(Number(t.precios?.[Math.min(m3, (t.precios?.length ?? 1) - 1)] ?? 0))
+      : redondear(Number(t.cuotaFija ?? 0) + Number(t.precioUnitario ?? 0) * m3);
+    if (importe === 0) continue;
+    lineas.push({
+      tipoServicio,
+      concepto: `${nombre} — consumo ${m3} m³ (tabla)`,
+      m3,
+      precioUnitario: m3 > 0 ? redondear4(importe / m3) : importe,
+      importe,
+      ivaPct: Number(t.ivaPct ?? 0),
+      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+    });
+  }
+
+  // Lineal: cuota fija más precio por unidad consumida.
+  for (const t of tarifas.filter((x) => x.tipoCalculo === 'lineal')) {
+    const precio = Number(t.precioUnitario ?? 0);
+    const importe = redondear(Number(t.cuotaFija ?? 0) + precio * consumoM3);
+    if (importe === 0) continue;
+    lineas.push({
+      tipoServicio,
+      concepto: `${nombre} — cargo lineal`,
+      m3: redondear(consumoM3),
       precioUnitario: precio,
       importe,
       ivaPct: Number(t.ivaPct ?? 0),
