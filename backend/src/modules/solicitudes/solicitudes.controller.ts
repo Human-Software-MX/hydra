@@ -24,8 +24,17 @@ import { SolicitudesService } from './solicitudes.service';
 import { Roles, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'cotizaciones');
-// Ensure directory exists at module load time
+const DOCS_UPLOAD_DIR = join(process.cwd(), 'uploads', 'documentos-solicitud');
+// Ensure directories exist at module load time
 mkdirSync(UPLOAD_DIR, { recursive: true });
+mkdirSync(DOCS_UPLOAD_DIR, { recursive: true });
+
+const DOC_MIME_PERMITIDOS = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 @Roles(...ROLES_SERVICIOS)
 @Controller('solicitudes')
@@ -134,6 +143,80 @@ export class SolicitudesController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="cotizacion-${id}.pdf"`);
     createReadStream(filePath).pipe(res);
+  }
+
+  // ─── Documentos entregados por el ciudadano ────────────────────────────────
+
+  @Get(':id/documentos')
+  listDocumentos(@Param('id') id: string) {
+    return this.service.listDocumentos(id);
+  }
+
+  /** Sube un archivo clasificado contra el catálogo de documentos (varios por tipo permitidos). */
+  @Post(':id/documentos')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: DOCS_UPLOAD_DIR,
+        filename: (_req, file, cb) => {
+          const safe = file.originalname.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80);
+          cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!DOC_MIME_PERMITIDOS.has(file.mimetype)) {
+          return cb(new BadRequestException('Solo PDF o imagen (JPG/PNG/WebP)'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+    }),
+  )
+  async subirDocumento(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { documentoId?: string; nombreDocumento?: string },
+  ) {
+    if (!file) throw new BadRequestException('No se recibió archivo');
+    try {
+      return await this.service.addDocumento(id, {
+        documentoId: body.documentoId || undefined,
+        nombreDocumento: body.nombreDocumento || undefined,
+        archivoNombre: file.originalname,
+        archivoPath: file.path,
+        mimeType: file.mimetype,
+        tamanoBytes: file.size,
+      });
+    } catch (e) {
+      // si el registro falla, no dejar el archivo huérfano
+      const { unlinkSync } = require('fs') as typeof import('fs');
+      try { unlinkSync(file.path); } catch { /* noop */ }
+      throw e;
+    }
+  }
+
+  /** Descarga/visualiza el archivo de un documento entregado. */
+  @Get(':id/documentos/:docId/archivo')
+  async descargarDocumento(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Res() res: Response,
+  ) {
+    const doc = await this.service.getDocumento(id, docId);
+    if (!existsSync(doc.archivoPath)) throw new NotFoundException('Archivo no encontrado en disco');
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.archivoNombre.replace(/"/g, '')}"`);
+    createReadStream(doc.archivoPath).pipe(res);
+  }
+
+  @Delete(':id/documentos/:docId')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  async eliminarDocumento(@Param('id') id: string, @Param('docId') docId: string) {
+    const doc = await this.service.removeDocumento(id, docId);
+    const { unlinkSync } = require('fs') as typeof import('fs');
+    try { unlinkSync(doc.archivoPath); } catch { /* archivo ya no existe: no bloquear */ }
+    return { ok: true };
   }
 
   @Delete(':id')

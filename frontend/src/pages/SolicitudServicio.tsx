@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
 import DomicilioPickerForm from '@/components/contratacion/DomicilioPickerForm';
+import EntregaDocumentos from '@/components/contratacion/EntregaDocumentos';
 import { fetchAdministraciones, fetchDistritos, fetchActividades, type DistritoCatalogo, type CatalogoActividad } from '@/api/catalogos';
 import { fetchTiposContratacion, fetchTipoContratacionConfiguracion, type TipoContratacion } from '@/api/tipos-contratacion';
 import { hasApi } from '@/api/contratos';
@@ -807,7 +808,7 @@ const OPCIONES_RESERVADAS_SOL: Record<string, { label: string; value: string }[]
   ],
 };
 
-function StepContratacion({ form, set }: { form: SolicitudState; set: (p: Partial<SolicitudState>) => void }) {
+function StepContratacion({ form, set, solicitudId }: { form: SolicitudState; set: (p: Partial<SolicitudState>) => void; solicitudId?: string }) {
   const useApi = hasApi();
   // Rama del árbol de uso elegida en el paso Solicitud: de ella dependen las
   // administraciones y los tipos de contratación que se ofrecen.
@@ -1104,6 +1105,21 @@ function StepContratacion({ form, set }: { form: SolicitudState; set: (p: Partia
             />
           )}
         </div>
+
+        <EntregaDocumentos
+          solicitudId={solicitudId}
+          documentosDelTipo={documentos}
+          onDocumentoEntregado={(nombre) => {
+            // al subir un archivo, el tipo de documento queda marcado como recibido
+            const doc = documentos.find(
+              (d) => (d.documento?.nombre ?? d.nombreDocumento) === nombre,
+            );
+            const key = doc?.id ?? nombre;
+            if (!form.documentosRecibidos.includes(key)) {
+              set({ documentosRecibidos: [...form.documentosRecibidos, key] });
+            }
+          }}
+        />
       </div>
     </div>
   );
@@ -1783,7 +1799,7 @@ export default function SolicitudServicio() {
     predio: <StepPredio form={form} set={set} />,
     propietario: <StepPropietario form={form} set={set} />,
     solicitud: <StepSolicitud form={form} set={set} />,
-    contratacion: <StepContratacion form={form} set={set} />,
+    contratacion: <StepContratacion form={form} set={set} solicitudId={id} />,
     fiscal: <StepFiscal form={form} set={set} />,
     resumen: <StepResumen form={form} />,
   };

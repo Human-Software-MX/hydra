@@ -133,6 +133,13 @@ export function fetchTiposContratacion(params?: {
   );
 }
 
+export const fetchCatalogoDocumentos = (params?: { activo?: boolean }) =>
+  apiRequest<CatalogoDocumento[]>(
+    params?.activo !== undefined
+      ? `/catalogos/documentos?activo=${params.activo}`
+      : '/catalogos/documentos',
+  );
+
 export const fetchTipoContratacion = (id: string) =>
   apiRequest<TipoContratacion>(`/tipos-contratacion/${id}`);
 

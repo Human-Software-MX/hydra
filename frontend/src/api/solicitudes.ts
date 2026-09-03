@@ -162,6 +162,66 @@ export const deleteSolicitud = (id: string) => apiRequest<void>(`/solicitudes/${
 // ── PDF cotización ─────────────────────────────────────────────────────────────
 
 /** Sube el PDF de cotización al servidor y lo guarda en uploads/cotizaciones/{id}.pdf */
+// ─── Documentos entregados por el ciudadano ──────────────────────────────────
+
+export interface SolicitudDocumentoDto {
+  id: string;
+  documentoId?: string | null;
+  documento?: { id: string; nombre: string; presentacion?: string | null; clasificacion?: string | null } | null;
+  nombreDocumento?: string | null;
+  archivoNombre: string;
+  mimeType: string;
+  tamanoBytes: number;
+  createdAt: string;
+}
+
+function apiBaseUrl(): string {
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
+  const r = base.replace(/\/$/, '');
+  return r.endsWith('/api') ? r : `${r}/api`;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('ctcf_access_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export const fetchSolicitudDocumentos = (solicitudId: string) =>
+  apiRequest<SolicitudDocumentoDto[]>(`/solicitudes/${solicitudId}/documentos`);
+
+export async function uploadSolicitudDocumento(
+  solicitudId: string,
+  file: File,
+  params: { documentoId?: string; nombreDocumento?: string },
+): Promise<SolicitudDocumentoDto> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  if (params.documentoId) form.append('documentoId', params.documentoId);
+  if (params.nombreDocumento) form.append('nombreDocumento', params.nombreDocumento);
+  const res = await fetch(`${apiBaseUrl()}/solicitudes/${solicitudId}/documentos`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Error al subir documento: HTTP ${res.status}`);
+  return res.json() as Promise<SolicitudDocumentoDto>;
+}
+
+export const deleteSolicitudDocumento = (solicitudId: string, docId: string) =>
+  apiRequest<{ ok: boolean }>(`/solicitudes/${solicitudId}/documentos/${docId}`, { method: 'DELETE' });
+
+/** Abre el archivo (requiere JWT, por eso no sirve window.open directo). */
+export async function openSolicitudDocumento(solicitudId: string, docId: string): Promise<void> {
+  const res = await fetch(`${apiBaseUrl()}/solicitudes/${solicitudId}/documentos/${docId}/archivo`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Error al abrir documento: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export async function uploadCotizacionPdf(solicitudId: string, pdfBlob: Blob): Promise<{ url: string }> {
   const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
   const normalizeBase = (b: string) => { const r = b.replace(/\/$/, ''); return r.endsWith('/api') ? r : `${r}/api`; };
