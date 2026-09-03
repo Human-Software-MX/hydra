@@ -11,6 +11,7 @@ import { Plus, Package, Gauge, SlidersHorizontal } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -174,13 +175,14 @@ const Medidores = () => {
 
         <TabsContent value="asignados" className="space-y-4">
           <div className="flex gap-2 flex-wrap items-center">
-            <Select value={filtroZona} onValueChange={setFiltroZona}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Zona" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las zonas</SelectItem>
-                {zonas.map(z => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={filtroZona}
+              onValueChange={setFiltroZona}
+              options={[{ value: 'all', label: 'Todas las zonas' }, ...zonas.map(z => ({ value: z.id, label: z.nombre }))]}
+              placeholder="Zona"
+              searchPlaceholder="Buscar zona…"
+              className="w-[160px]"
+            />
             <Select value={filtroEstado} onValueChange={setFiltroEstado}>
               <SelectTrigger className="w-[140px]"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
@@ -319,36 +321,33 @@ const Medidores = () => {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Medidor disponible en bodega</Label>
-              <Select value={assignForm.medidorBodegaId || undefined} onValueChange={v => setAssignForm({ ...assignForm, medidorBodegaId: v })}>
-                <SelectTrigger><SelectValue placeholder="Seleccione un medidor" /></SelectTrigger>
-                <SelectContent>
-                  {disponiblesBodega.map(m => (
-                    <SelectItem key={m.id} value={m.id}>{m.serie}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={assignForm.medidorBodegaId || ''}
+                onValueChange={v => setAssignForm({ ...assignForm, medidorBodegaId: v })}
+                options={disponiblesBodega.map(m => ({ value: m.id, label: m.serie }))}
+                placeholder="Seleccione un medidor"
+                searchPlaceholder="Buscar por serie…"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Contrato pendiente</Label>
-              <Select value={assignForm.contratoId || undefined} onValueChange={v => setAssignForm({ ...assignForm, contratoId: v })}>
-                <SelectTrigger><SelectValue placeholder="Seleccione un contrato" /></SelectTrigger>
-                <SelectContent>
-                  {pendientes.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.id} – {c.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={assignForm.contratoId || ''}
+                onValueChange={v => setAssignForm({ ...assignForm, contratoId: v })}
+                options={pendientes.map(c => ({ value: c.id, label: `${c.id} – ${c.nombre}` }))}
+                placeholder="Seleccione un contrato"
+                searchPlaceholder="Buscar contrato…"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Zona (se asigna al contrato)</Label>
-              <Select value={assignForm.zonaId || undefined} onValueChange={v => setAssignForm({ ...assignForm, zonaId: v })}>
-                <SelectTrigger><SelectValue placeholder="Seleccione una zona" /></SelectTrigger>
-                <SelectContent>
-                  {(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => (
-                    <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={assignForm.zonaId || ''}
+                onValueChange={v => setAssignForm({ ...assignForm, zonaId: v })}
+                options={(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => ({ value: z.id, label: z.nombre }))}
+                placeholder="Seleccione una zona"
+                searchPlaceholder="Buscar zona…"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="assign-lectura">Lectura inicial</Label>

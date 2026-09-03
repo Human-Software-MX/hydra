@@ -1,360 +1,224 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Percent } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { hasApi } from '@/api/client';
+import { fetchAdministraciones } from '@/api/catalogos';
 import {
-  fetchTarifasVigentes,
-  calcularMonto,
   fetchActualizaciones,
-  crearActualizacion,
-  aplicarActualizacion,
+  fetchCategoriasTarifa,
+  fetchServiciosTarifa,
+  fetchTarifasVigentes,
+  type FiltroTarifas,
+  type TarifaVigenteDto,
 } from '@/api/tarifas';
 import { PageHeader } from '@/components/PageHeader';
 import { KpiCard } from '@/components/KpiCard';
-import StatusBadge from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
-import { Plus, Calculator, RefreshCw, TrendingUp } from 'lucide-react';
+import { ActualizacionMasivaDialog } from '@/components/tarifas/ActualizacionMasivaDialog';
+import { ActualizacionesTab } from '@/components/tarifas/ActualizacionesTab';
+import { ConfiguracionFiscalTab } from '@/components/tarifas/ConfiguracionFiscalTab';
+import { KardexGlobalTab } from '@/components/tarifas/KardexGlobalTab';
+import { SimuladorTarifas } from '@/components/tarifas/SimuladorTarifas';
+import { TarifaActualizarDialog } from '@/components/tarifas/TarifaActualizarDialog';
+import { TarifaKardexSheet } from '@/components/tarifas/TarifaKardexSheet';
+import { TarifasVigentesTable } from '@/components/tarifas/TarifasVigentesTable';
+import { fmtFecha, fmtPct } from '@/components/tarifas/format';
 
-const TIPOS_SERVICIO = ['AGUA', 'SANEAMIENTO', 'ALCANTARILLADO', 'MIXTO'];
+const FILTRO_VACIO: FiltroTarifas = {};
 
 const Tarifas = () => {
   const useApi = hasApi();
-  const { tarifas: ctxTarifas, descuentos } = useData();
-  const { toast } = useToast();
-  const qc = useQueryClient();
+  const { tarifas: ctxTarifas } = useData();
 
-  // Simulador
-  const [simTipo, setSimTipo] = useState('AGUA');
-  const [simM3, setSimM3] = useState('');
-  const [simResultado, setSimResultado] = useState<{ monto: number; detalle: any[] } | null>(null);
-  const [simLoading, setSimLoading] = useState(false);
+  const [tab, setTab] = useState('vigentes');
+  const [filtro, setFiltro] = useState<FiltroTarifas>(FILTRO_VACIO);
+  const [masivaAbierta, setMasivaAbierta] = useState(false);
+  const [tarifaAActualizar, setTarifaAActualizar] = useState<TarifaVigenteDto | null>(null);
+  const [kardex, setKardex] = useState<{ id: string; resumen: TarifaVigenteDto | null } | null>(null);
+  const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
 
-  // Nueva actualización
-  const [showNuevaAct, setShowNuevaAct] = useState(false);
-  const [actForm, setActForm] = useState({ descripcion: '', fechaPublicacion: '', fechaAplicacion: '', fuenteOficial: '' });
+  /** `buscar` se filtra en cliente, así que no forma parte de la petición ni de la clave. */
+  const filtroServidor = useMemo<FiltroTarifas>(
+    () => ({
+      administracionId: filtro.administracionId,
+      categoriaId: filtro.categoriaId,
+      claseTarifaId: filtro.claseTarifaId,
+      tipoServicio: filtro.tipoServicio,
+      concepto: filtro.concepto,
+    }),
+    [filtro.administracionId, filtro.categoriaId, filtro.claseTarifaId, filtro.tipoServicio, filtro.concepto],
+  );
 
-  const { data: tarifasApi = [] } = useQuery({
-    queryKey: ['tarifas-vigentes'],
-    queryFn: () => fetchTarifasVigentes(),
+  const { data: tarifas = [], isLoading: cargandoTarifas } = useQuery({
+    queryKey: ['tarifas-vigentes', filtroServidor],
+    queryFn: () => fetchTarifasVigentes(filtroServidor),
     enabled: useApi,
+  });
+
+  const { data: servicios = [] } = useQuery({
+    queryKey: ['tarifas-servicios'],
+    queryFn: fetchServiciosTarifa,
+    enabled: useApi,
+  });
+
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['tarifas-categorias'],
+    queryFn: fetchCategoriasTarifa,
+    enabled: useApi,
+  });
+
+  const { data: administraciones = [] } = useQuery({
+    queryKey: ['catalogos-operativos', 'administraciones'],
+    queryFn: fetchAdministraciones,
+    enabled: useApi,
+    staleTime: 60 * 60 * 1000,
   });
 
   const { data: actualizaciones = [] } = useQuery({
     queryKey: ['tarifas-actualizaciones'],
-    queryFn: fetchActualizaciones,
+    queryFn: () => fetchActualizaciones(),
     enabled: useApi,
   });
 
-  const crearMut = useMutation({
-    mutationFn: crearActualizacion,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tarifas-actualizaciones'] });
-      setShowNuevaAct(false);
-      setActForm({ descripcion: '', fechaPublicacion: '', fechaAplicacion: '', fuenteOficial: '' });
-      toast({ title: 'Actualización creada', description: 'Lista para aplicar cuando sea necesario.' });
-    },
-  });
-
-  const aplicarMut = useMutation({
-    mutationFn: aplicarActualizacion,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tarifas-vigentes'] });
-      qc.invalidateQueries({ queryKey: ['tarifas-actualizaciones'] });
-      toast({ title: 'Actualización aplicada', description: 'Las tarifas han sido actualizadas.' });
-    },
-  });
-
-  const handleSimular = async () => {
-    if (!simM3 || isNaN(Number(simM3))) return;
-    setSimLoading(true);
-    try {
-      if (useApi) {
-        const res = await calcularMonto(simTipo, Number(simM3));
-        setSimResultado({
-          monto: res.total,
-          detalle: (res.desglose ?? []).map(d => ({ rango: d.rango, m3: d.m3, importe: d.subtotal })),
-        });
-      } else {
-        // fallback: cálculo simple con tarifas del context
-        const tarifa = ctxTarifas.find(t => Number(simM3) >= t.rangoMin && Number(simM3) <= t.rangoMax);
-        const monto = tarifa ? tarifa.cargoFijo + Number(simM3) * tarifa.precioPorM3 : 0;
-        setSimResultado({ monto, detalle: [] });
-      }
-    } catch (err: any) {
-      toast({
-        title: 'Sin tarifas configuradas',
-        description: `No hay tarifas vigentes para el servicio "${simTipo}". Crea tarifas primero desde la pestaña Vigentes.`,
-        variant: 'destructive',
-      });
-    } finally {
-      setSimLoading(false);
-    }
-  };
-
-  const tarifas = useApi ? tarifasApi : ctxTarifas.map(t => ({
-    id: t.id, tipoServicio: t.tipo, rangoMin: t.rangoMin, rangoMax: t.rangoMax,
-    precioPorM3: t.precioPorM3, cargoFijo: t.cargoFijo,
-    vigenciaDesde: '2026-01-01', vigenciaHasta: null, activo: true,
-  }));
-
+  const hayFiltros = Object.values(filtroServidor).some(Boolean);
+  /** Sin backend la página conserva el conteo del dataset demo (DataContext). */
+  const totalVigentes = useApi ? tarifas.length : ctxTarifas.length;
+  const exentas = tarifas.filter((t) => t.ivaPct === 0).length;
+  const pctExentas = tarifas.length > 0 ? Math.round((exentas / tarifas.length) * 100) : 0;
+  const totalClases = categorias.reduce((acc, c) => acc + c.clases.length, 0);
   const ultimaAct = actualizaciones[0];
+
+  const limpiarFiltros = () => setFiltro(FILTRO_VACIO);
+
+  const abrirLote = (actualizacionId: string) => {
+    setKardex(null);
+    setLoteExpandido(actualizacionId);
+    setTab('actualizaciones');
+  };
 
   return (
     <div>
       <PageHeader
-        title="Motor Tarifario"
-        subtitle="Gestión de tarifas vigentes, simulador de cálculo y actualizaciones tarifarias."
+        title="Tarifas"
+        subtitle="Catálogo vigente, actualizaciones y Kardex"
         breadcrumbs={[{ label: 'Facturación', href: '#' }, { label: 'Tarifas' }]}
         actions={
-          <Button onClick={() => setShowNuevaAct(true)} className="bg-[#007BFF] hover:bg-blue-600 text-white">
-            <Plus className="w-4 h-4 mr-1.5" /> Nueva actualización
+          <Button
+            onClick={() => setMasivaAbierta(true)}
+            className="bg-[#007BFF] text-white hover:bg-blue-600"
+          >
+            <Percent className="mr-1.5 h-4 w-4" /> Actualización masiva %
           </Button>
         }
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <KpiCard label="Tarifas activas" value={tarifas.length} sub="Esquemas vigentes hoy" />
-        <KpiCard label="Descuentos vigentes" value={descuentos.filter(d => d.activo).length} accent="success" />
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard
+          label="Tarifas vigentes"
+          value={totalVigentes}
+          sub={hayFiltros ? 'Con los filtros aplicados' : 'Versiones vigentes hoy'}
+        />
+        <KpiCard
+          label="Exentas de IVA"
+          value={exentas}
+          sub={`${pctExentas} % del catálogo listado`}
+          accent="success"
+        />
+        <KpiCard
+          label="Categorías / clases"
+          value={`${categorias.length} · ${totalClases}`}
+          sub="Clasificación fiscal"
+        />
         <KpiCard
           label="Última actualización"
-          value={ultimaAct ? ultimaAct.estado : '—'}
-          sub={ultimaAct?.descripcion ?? 'Sin actualizaciones'}
-          accent={ultimaAct?.estado === 'aplicada' ? 'success' : actualizaciones.length > 0 ? 'warning' : 'default'}
+          value={ultimaAct ? fmtFecha(ultimaAct.fechaAplicacion) : '—'}
+          sub={
+            ultimaAct
+              ? `${ultimaAct.porcentaje != null ? `${fmtPct(ultimaAct.porcentaje)} · ` : ''}${ultimaAct.descripcion}`
+              : 'Sin actualizaciones'
+          }
+          accent={ultimaAct ? 'primary' : 'default'}
         />
       </div>
 
-      <Tabs defaultValue="vigentes">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="vigentes">Tarifas vigentes</TabsTrigger>
-          <TabsTrigger value="simulador">Simulador</TabsTrigger>
+          <TabsTrigger value="kardex">Kardex</TabsTrigger>
           <TabsTrigger value="actualizaciones">Actualizaciones</TabsTrigger>
-          <TabsTrigger value="descuentos">Descuentos</TabsTrigger>
+          <TabsTrigger value="fiscal">Configuración fiscal</TabsTrigger>
+          <TabsTrigger value="simulador">Simulador</TabsTrigger>
         </TabsList>
 
-        {/* ── Tarifas vigentes ── */}
         <TabsContent value="vigentes">
-          <div className="bg-white rounded-xl border border-border/50 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/40">
-                  {['Tipo servicio', 'Rango (m³)', '$/m³', 'Cargo fijo', 'Vigencia desde', 'Estado'].map(h => (
-                    <th key={h} className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tarifas.map(t => (
-                  <tr key={t.id} className="border-t border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3.5 font-medium">{t.tipoServicio}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground font-mono">
-                      {t.rangoMinM3 ?? 0} – {t.rangoMaxM3 == null || t.rangoMaxM3 >= 9999 ? '∞' : t.rangoMaxM3} m³
-                    </td>
-                    <td className="px-4 py-3.5 font-semibold text-[#003366]">
-                      {t.precioUnitario != null ? `$${Number(t.precioUnitario).toFixed(2)}` : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground">
-                      {t.cuotaFija != null ? `$${Number(t.cuotaFija).toFixed(2)}` : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{t.vigenciaDesde?.split('T')[0] ?? '—'}</td>
-                    <td className="px-4 py-3.5"><StatusBadge status={t.activo ? 'Activo' : 'Inactivo'} /></td>
-                  </tr>
-                ))}
-                {tarifas.length === 0 && (
-                  <tr><td colSpan={6} className="text-center text-muted-foreground py-10">No hay tarifas registradas</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <TarifasVigentesTable
+            tarifas={tarifas}
+            isLoading={cargandoTarifas}
+            useApi={useApi}
+            filtro={filtro}
+            onFiltroChange={setFiltro}
+            onLimpiarFiltros={limpiarFiltros}
+            administraciones={administraciones}
+            categorias={categorias}
+            servicios={servicios}
+            onActualizar={setTarifaAActualizar}
+            onKardex={(t) => setKardex({ id: t.id, resumen: t })}
+          />
         </TabsContent>
 
-        {/* ── Simulador ── */}
-        <TabsContent value="simulador">
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border border-border/50 shadow-sm p-6">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-                Calcular monto por consumo
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Tipo de servicio</label>
-                  <Select value={simTipo} onValueChange={setSimTipo}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_SERVICIO.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Consumo (m³)</label>
-                  <Input
-                    type="number"
-                    placeholder="Ej. 22"
-                    value={simM3}
-                    onChange={e => { setSimM3(e.target.value); setSimResultado(null); }}
-                  />
-                </div>
-                <Button
-                  onClick={handleSimular}
-                  disabled={!simM3 || simLoading}
-                  className="w-full bg-[#007BFF] hover:bg-blue-600 text-white"
-                >
-                  <Calculator className="w-4 h-4 mr-1.5" />
-                  {simLoading ? 'Calculando…' : 'Calcular monto'}
-                </Button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-border/50 shadow-sm p-6 flex flex-col items-center justify-center">
-              {simResultado ? (
-                <div className="text-center w-full">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Monto calculado
-                  </p>
-                  <p className="text-5xl font-bold font-display text-[#003366] mb-1">
-                    ${simResultado.monto.toFixed(2)}
-                  </p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {simM3} m³ · {simTipo}
-                  </p>
-                  {simResultado.detalle.length > 0 && (
-                    <div className="text-left border rounded-lg overflow-hidden mt-4">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-muted/40">
-                            <th className="px-3 py-2 text-left text-muted-foreground">Rango</th>
-                            <th className="px-3 py-2 text-right text-muted-foreground">m³</th>
-                            <th className="px-3 py-2 text-right text-muted-foreground">Importe</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {simResultado.detalle.map((d, i) => (
-                            <tr key={i} className="border-t">
-                              <td className="px-3 py-2">{d.rango}</td>
-                              <td className="px-3 py-2 text-right tabular-nums">{d.m3}</td>
-                              <td className="px-3 py-2 text-right tabular-nums font-medium">${d.importe.toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-muted-foreground">
-                  <Calculator className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">Ingresa el consumo y tipo de servicio para calcular el monto</p>
-                </div>
-              )}
-            </div>
-          </div>
+        <TabsContent value="kardex">
+          <KardexGlobalTab useApi={useApi} onVerKardex={(id) => setKardex({ id, resumen: null })} />
         </TabsContent>
 
-        {/* ── Actualizaciones ── */}
         <TabsContent value="actualizaciones">
-          <div className="bg-white rounded-xl border border-border/50 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/40">
-                  {['Descripción', 'F. Publicación', 'F. Aplicación', 'Fuente oficial', 'Estado', 'Acción'].map(h => (
-                    <th key={h} className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {actualizaciones.map(a => (
-                  <tr key={a.id} className="border-t border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3.5 font-medium">{a.descripcion}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{a.fechaPublicacion?.split('T')[0] ?? '—'}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{a.fechaAplicacion?.split('T')[0]}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{a.fuenteOficial ?? '—'}</td>
-                    <td className="px-4 py-3.5"><StatusBadge status={a.estado === 'aplicada' ? 'Aprobada' : a.estado === 'pendiente' ? 'Pendiente' : a.estado} /></td>
-                    <td className="px-4 py-3.5">
-                      {a.estado === 'pendiente' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs border-[#007BFF] text-[#007BFF] hover:bg-[#007BFF]/10"
-                          disabled={aplicarMut.isPending}
-                          onClick={() => aplicarMut.mutate(a.id)}
-                        >
-                          <RefreshCw className="w-3 h-3 mr-1" /> Aplicar
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {actualizaciones.length === 0 && (
-                  <tr><td colSpan={6} className="text-center text-muted-foreground py-10">Sin actualizaciones registradas</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <ActualizacionesTab
+            useApi={useApi}
+            administraciones={administraciones}
+            categorias={categorias}
+            expandidoId={loteExpandido}
+            onToggleExpandido={(id) => setLoteExpandido((prev) => (prev === id ? null : id))}
+          />
         </TabsContent>
 
-        {/* ── Descuentos ── */}
-        <TabsContent value="descuentos">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {descuentos.map(d => (
-              <div key={d.id} className="bg-white rounded-xl border border-border/50 shadow-sm p-5 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-sm">{d.nombre}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Tipo: {d.tipo}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold font-display text-[#007BFF]">{d.porcentaje}%</p>
-                  <div className="mt-1"><StatusBadge status={d.activo ? 'Activo' : 'Inactivo'} /></div>
-                </div>
-              </div>
-            ))}
-            {descuentos.length === 0 && (
-              <p className="text-sm text-muted-foreground col-span-3 py-8 text-center">Sin descuentos configurados</p>
-            )}
-          </div>
+        <TabsContent value="fiscal">
+          <ConfiguracionFiscalTab useApi={useApi} />
+        </TabsContent>
+
+        <TabsContent value="simulador">
+          <SimuladorTarifas
+            useApi={useApi}
+            administraciones={administraciones}
+            categorias={categorias}
+            servicios={servicios}
+          />
         </TabsContent>
       </Tabs>
 
-      {/* Dialog nueva actualización */}
-      <Dialog open={showNuevaAct} onOpenChange={setShowNuevaAct}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Nueva actualización tarifaria</DialogTitle></DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Descripción</label>
-              <Input placeholder="Ej. Actualización Q2 2026" value={actForm.descripcion} onChange={e => setActForm({ ...actForm, descripcion: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Fecha de publicación</label>
-              <Input type="date" value={actForm.fechaPublicacion} onChange={e => setActForm({ ...actForm, fechaPublicacion: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Fecha de aplicación</label>
-              <Input type="date" value={actForm.fechaAplicacion} onChange={e => setActForm({ ...actForm, fechaAplicacion: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Fuente oficial (opcional)</label>
-              <Input placeholder="Ej. Decreto DOF 2026-04-01" value={actForm.fuenteOficial} onChange={e => setActForm({ ...actForm, fuenteOficial: e.target.value })} />
-            </div>
-            <Button
-              className="w-full bg-[#007BFF] hover:bg-blue-600 text-white mt-2"
-              disabled={!actForm.descripcion || !actForm.fechaPublicacion || !actForm.fechaAplicacion || crearMut.isPending}
-              onClick={() => crearMut.mutate({
-                descripcion: actForm.descripcion,
-                fechaPublicacion: actForm.fechaPublicacion,
-                fechaAplicacion: actForm.fechaAplicacion,
-                fuenteOficial: actForm.fuenteOficial || undefined,
-              })}
-            >
-              <TrendingUp className="w-4 h-4 mr-1.5" />
-              {crearMut.isPending ? 'Guardando…' : 'Crear actualización'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ActualizacionMasivaDialog
+        open={masivaAbierta}
+        onOpenChange={setMasivaAbierta}
+        filtroInicial={filtroServidor}
+        administraciones={administraciones}
+        categorias={categorias}
+        servicios={servicios}
+        onAplicada={() => setTab('actualizaciones')}
+      />
+
+      <TarifaActualizarDialog
+        tarifa={tarifaAActualizar}
+        open={Boolean(tarifaAActualizar)}
+        onOpenChange={(o) => !o && setTarifaAActualizar(null)}
+      />
+
+      <TarifaKardexSheet
+        tarifaId={kardex?.id ?? null}
+        tarifaResumen={kardex?.resumen ?? null}
+        open={Boolean(kardex)}
+        onOpenChange={(o) => !o && setKardex(null)}
+        onVerLote={abrirLote}
+      />
     </div>
   );
 };

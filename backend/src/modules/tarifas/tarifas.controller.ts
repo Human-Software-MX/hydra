@@ -6,18 +6,29 @@ import {
   Param,
   Body,
   Query,
+  Req,
   ParseIntPipe,
   DefaultValuePipe,
-  ParseFloatPipe,
 } from '@nestjs/common';
 import { TarifasService } from './tarifas.service';
+import { TarifaVersionesService, UsuarioCtx } from './tarifa-versiones.service';
 import { SimularImpactoDto } from './dto/simular-impacto.dto';
+import { ListarVigentesQueryDto } from './dto/filtro-tarifas.dto';
+import { ActualizarTarifaDto } from './dto/actualizar-tarifa.dto';
+import { CreateTarifaDto } from './dto/create-tarifa.dto';
+import { UpdateTarifaMetadatosDto } from './dto/update-tarifa-metadatos.dto';
+import { CalcularMontoQueryDto } from './dto/calcular-monto.dto';
+import { AplicarMasivaDto, PreviewMasivaDto } from './dto/actualizacion-masiva.dto';
+import { UpdateCategoriaTarifaDto, UpdateClaseTarifaDto } from './dto/catalogo-fiscal.dto';
 import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
 
 @Roles(...ROLES_ADMIN)
 @Controller('tarifas')
 export class TarifasController {
-  constructor(private readonly service: TarifasService) {}
+  constructor(
+    private readonly service: TarifasService,
+    private readonly versiones: TarifaVersionesService,
+  ) {}
 
   // ─── Tarifa ───────────────────────────────────────────────────────────────
 
@@ -32,21 +43,80 @@ export class TarifasController {
     return this.service.findAllTarifas({ tipoServicio, tipoCalculo, soloActivas: soloActivas === 'true', page, limit });
   }
 
+  /** Tarifas vigentes a una fecha con su clasificación (sin la tabla de precios). */
   @Get('vigentes')
-  findVigentes(
-    @Query('tipoServicio') tipoServicio: string,
-    @Query('fecha') fecha?: string,
-  ) {
-    return this.service.findTarifaVigente(tipoServicio, fecha);
+  findVigentes(@Query() query: ListarVigentesQueryDto) {
+    const { fecha, ...filtro } = query;
+    return this.versiones.listarVigentes(filtro, fecha);
   }
 
-  @Get('calcular')
-  calcularMonto(
-    @Query('tipoServicio') tipoServicio: string,
-    @Query('consumoM3', ParseFloatPipe) consumoM3: number,
-    @Query('fecha') fecha?: string,
+  /** Servicios / conceptos distintos entre las tarifas vigentes. */
+  @Get('servicios')
+  findServicios() {
+    return this.versiones.listarServicios();
+  }
+
+  /** Kardex global paginado. */
+  @Get('movimientos')
+  findMovimientos(
+    @Query('codigo') codigo?: string,
+    @Query('actualizacionId') actualizacionId?: string,
+    @Query('tipo') tipo?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
   ) {
-    return this.service.calcularMonto({ tipoServicio, consumoM3, fecha });
+    return this.versiones.listarMovimientos({ codigo, actualizacionId, tipo, page, limit });
+  }
+
+  /**
+   * Cálculo puntual. Sin `administracionId`/`claseTarifaId` suma TODAS las
+   * tarifas vigentes del servicio; con ellos resuelve la tarifa como lo haría
+   * la facturación del contrato.
+   */
+  @Get('calcular')
+  calcularMonto(@Query() query: CalcularMontoQueryDto) {
+    return this.service.calcularMonto(query);
+  }
+
+  // ─── Configurador fiscal (categorías / clases) ────────────────────────────
+
+  @Get('catalogo/categorias')
+  findCategorias() {
+    return this.versiones.listarCategorias();
+  }
+
+  @Patch('catalogo/categorias/:id')
+  updateCategoria(@Param('id') id: string, @Body() dto: UpdateCategoriaTarifaDto, @Req() req: any) {
+    return this.versiones.actualizarCategoria(id, dto, this.usuarioDe(req));
+  }
+
+  @Patch('catalogo/clases/:id')
+  updateClase(@Param('id') id: string, @Body() dto: UpdateClaseTarifaDto, @Req() req: any) {
+    return this.versiones.actualizarClase(id, dto, this.usuarioDe(req));
+  }
+
+  // ─── Actualizaciones Trimestrales ─────────────────────────────────────────
+
+  /** Previsualiza el ajuste porcentual masivo (no escribe nada). */
+  @Post('actualizaciones/preview')
+  previewMasiva(@Body() dto: PreviewMasivaDto) {
+    return this.versiones.previewMasiva(dto);
+  }
+
+  /** Aplica el ajuste porcentual masivo: lote + una versión y un movimiento por tarifa. */
+  @Post('actualizaciones/aplicar')
+  aplicarMasiva(@Body() dto: AplicarMasivaDto, @Req() req: any) {
+    return this.versiones.aplicarMasiva(dto, this.usuarioDe(req));
+  }
+
+  @Get('actualizaciones/lista')
+  findActualizaciones(@Query('estado') estado?: string) {
+    return this.versiones.listarActualizaciones(estado);
+  }
+
+  @Get('actualizaciones/:id')
+  findActualizacion(@Param('id') id: string) {
+    return this.versiones.getActualizacion(id);
   }
 
   /** Simula el impacto de un cambio tarifario sobre los consumos de un periodo (no escribe nada). */
@@ -58,45 +128,30 @@ export class TarifasController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.service.findOneTarifa(id);
+    return this.versiones.getTarifaDetalle(id);
+  }
+
+  /** Historia completa del linaje (versiones + movimientos). */
+  @Get(':id/kardex')
+  findKardex(@Param('id') id: string) {
+    return this.versiones.getKardex(id);
+  }
+
+  /** Alta de una nueva versión (valores, porcentaje o IVA) conservando el histórico. */
+  @Post(':id/actualizar')
+  actualizarTarifa(@Param('id') id: string, @Body() dto: ActualizarTarifaDto, @Req() req: any) {
+    return this.versiones.actualizarTarifa(id, dto, this.usuarioDe(req));
   }
 
   @Post()
-  create(
-    @Body()
-    body: {
-      codigo: string;
-      nombre: string;
-      tipoServicio: string;
-      tipoCalculo: string;
-      rangoMinM3?: number;
-      rangoMaxM3?: number;
-      precioUnitario?: number;
-      cuotaFija?: number;
-      ivaPct?: number;
-      vigenciaDesde: string;
-      vigenciaHasta?: string;
-    },
-  ) {
-    return this.service.createTarifa(body);
+  create(@Body() dto: CreateTarifaDto) {
+    return this.service.createTarifa(dto);
   }
 
+  /** Metadatos de la tarifa (nombre, activo, vigenciaHasta). Los valores van por `/actualizar`. */
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body()
-    body: Partial<{
-      nombre: string;
-      rangoMinM3: number;
-      rangoMaxM3: number;
-      precioUnitario: number;
-      cuotaFija: number;
-      ivaPct: number;
-      vigenciaHasta: string;
-      activo: boolean;
-    }>,
-  ) {
-    return this.service.updateTarifa(id, body);
+  update(@Param('id') id: string, @Body() dto: UpdateTarifaMetadatosDto) {
+    return this.service.updateTarifa(id, dto);
   }
 
   // ─── Correcciones ─────────────────────────────────────────────────────────
@@ -154,12 +209,7 @@ export class TarifasController {
     return this.service.createAjuste(body);
   }
 
-  // ─── Actualizaciones Trimestrales ─────────────────────────────────────────
-
-  @Get('actualizaciones/lista')
-  findActualizaciones(@Query('estado') estado?: string) {
-    return this.service.findActualizaciones(estado);
-  }
+  // ─── Actualizaciones Trimestrales (alta manual del lote) ──────────────────
 
   @Post('actualizaciones')
   createActualizacion(
@@ -181,5 +231,13 @@ export class TarifasController {
     @Body() body: { aplicadoPor: string },
   ) {
     return this.service.aplicarActualizacion(id, body.aplicadoPor);
+  }
+
+  /** Usuario del JWT que firma los movimientos del Kardex. */
+  private usuarioDe(req: any): UsuarioCtx {
+    return {
+      usuarioId: req?.user?.userId ?? req?.user?.sub ?? null,
+      usuarioEmail: req?.user?.email ?? null,
+    };
   }
 }

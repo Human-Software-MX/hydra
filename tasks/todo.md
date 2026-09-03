@@ -1,3 +1,68 @@
+# Plan — Tarifas: histórico (Kardex), clasificación y configuración fiscal (2026-09-03)
+
+Ticket: evolucionar `/app/tarifas` con histórico completo, actualizaciones porcentuales
+(individual y masiva), clasificación por tipo de servicio y configuración fiscal (IVA).
+
+## Hallazgos de la investigación
+- `Tarifa` ya existe (vigenciaDesde/Hasta, ivaPct, administracionId, version sin uso) con 6 filas demo
+  sembradas (`seed-catalogos.ts`). El catálogo real (Excel Feb-2026) vive solo en
+  `frontend/src/data/tarifas-agua.json` (motor offline del wizard).
+- Facturación (`FacturacionService.tarifasVigentesPorServicio`) resuelve por administración + vigencia,
+  NO por clase tarifaria (DOMÉSTICA vs COMERCIAL). IVA por línea desde `Tarifa.ivaPct`; CFDI usa
+  `objetoImp` 01/02 según ivaPct. `ActualizacionTarifaria.aplicar` solo cambia estado.
+- Excel: la TASA es constante por NOMBRE de tarifa (clase) en las 5 hojas → la regla fiscal es
+  propiedad de la clase/categoría, no de la fila de precio. DOMÉSTIC* (7 variantes) = 0%;
+  COMERCIAL/INDUSTRIAL/BENEFICENCIA/PÚBLICO*/GANADERO/GENERAL/PODER EJECUTIVO/IAP = 16%;
+  excepciones nominales: HIDRANTE 0, SANTA MARIA MAGDALENA 0, COMUNIDAD LA LIRA 0, COMUNIDAD SEBASTIANES 16.
+- Ontología existente del cliente: SIGE `tipo_punto_servicio` (tcttpsid) en
+  `prisma/data/catalogos-tipos-contratacion-sige.json` — coincide 1:1 con las clases del Excel.
+  Hoy no se persiste en `TipoContratacion` (solo embebido en `nombre`).
+- `CatalogoCategoria` es condominial (CONDOM_*), no sirve para tarifas. `AuditoriaEvento` es log HTTP
+  genérico (no reconstruye valores). `HistoricoContrato` es por campo de contrato.
+
+## Decisiones de diseño
+- Dos niveles: `CategoriaTarifa` (clasificación fiscal/principal: DOMESTICA, COMERCIAL, INDUSTRIAL,
+  PUBLICO, BENEFICENCIA, GANADERO, GENERAL, ESPECIAL) con `ivaPct` por defecto, y `ClaseTarifa`
+  (variante comercial: DOMÉSTICA MEDIO, DOMÉSTICO ALTO, …) con `ivaPct` opcional (override) y
+  `sigeTpsId` (enlace a la ontología SIGE). IVA efectivo = clase.ivaPct ?? categoria.ivaPct.
+- Versionado inmutable: cada cambio crea una NUEVA fila `Tarifa` (mismo `codigo`, `version+1`,
+  `vigenciaDesde` nueva) y cierra la anterior (`vigenciaHasta`). Facturación ya filtra por vigencia,
+  así re-facturar un periodo pasado usa la versión vigente entonces.
+- Kardex: `TarifaMovimiento` (ledger) con valores anteriores/nuevos (snapshot JSON), tipo, porcentaje,
+  motivo, usuario, lote (`ActualizacionTarifaria`). `Tarifa.ivaPct` sigue siendo el valor aplicado
+  (snapshot) que consume facturación; el configurador fiscal lo propaga con movimientos CAMBIO_FISCAL.
+- Nuevo `tipoCalculo`: `tabla` (0..200 m³ acumulado en `precios` JSON; >200 = cuotaFija + precioUnitario×m³)
+  y `lineal` (cuotaFija + precioUnitario×cantidad). Redondeo de precios: 4 decimales; importes: 2 (`redondear`).
+- `TipoContratacion.claseTarifaId` enlaza contrato → clase; facturación filtra por clase de la
+  contratación (fallback a tarifas sin clase).
+- Migración de datos: Excel → `prisma/data/tarifas-periodicas.json` (script) → seed idempotente
+  (solo crea linajes inexistentes; nunca sobrescribe versiones). Filas demo previas se conservan.
+
+## Tareas
+- [x] T1 Schema Prisma + migración SQL (categorías, clases, movimientos, columnas Tarifa incl. `valor_referencia`, FK tipos_contratacion)
+- [x] T2 Script export Excel→JSON + seed idempotente (421 tarifas, 127 correcciones, 172 tipos enlazados)
+- [x] T3 Backend: TarifaVersionesService (versionado, kardex, % individual, preview + masiva transaccional,
+      configurador fiscal), DTOs validados, facturación por clase + tabla/lineal, CFDI traslados por tasa
+- [x] T4 Frontend: página Tarifas (vigentes con filtros, actualizar, masiva con preview, kardex, fiscal, simulador)
+- [x] T5 Verificación: prisma validate, typecheck back/front, jest 94, verify:* OK, build front, migración + seed
+      sobre Postgres temporal (replay limpio ×2), e2e contra BD real (versionado, masiva, fiscal, time-travel,
+      409 concurrente, exclusión de programadas), smoke UI en navegador
+- [x] T6 Docs (motor-tarifas.md §3, tarifas-kardex-api.md) + tasks/bugs.md (2 bugs preexistentes) + commit
+
+## Revisión (2026-09-03)
+- Code review independiente (opus) → 14 hallazgos; corregidos: P2002→409, bypass `null` en DTOs, PATCH /tarifas/:id
+  solo metadatos, /tarifas/calcular por admin+clase, listados sin `precios` (+ columna `valor_referencia`),
+  exclusión de versiones programadas en masivos, `buscar` no heredado por el masivo, decimales/a11y/columna acciones.
+- Pendientes de decisión de negocio (documentados en docs/motor-tarifas.md «Supuestos»): semántica de la fila
+  «> 200 m³» (salto en 200→201), IVA 0 % doméstico como tasa 0 vs no objeto en CFDI, servicios periódicos
+  adicionales en `SERVICIOS_FACTURABLES`, `TZ` del despliegue.
+
+## Riesgos
+- Replay limpio de migraciones tiene drift previo (bugs.md) → validar migración nueva sobre BD temporal.
+- Frontend `lib/tarifas.ts` (JSON estático) sigue siendo la fuente del wizard: fuera de alcance migrarlo.
+
+---
+
 # Roadmap "State of the Art" — ejecución
 
 Base: `docs/analisis-state-of-the-art.md`. Rama: `feat/state-of-the-art-billing`.
@@ -418,3 +483,30 @@ es `SolicitudState.predioDir` (DomicilioFormValue) → al aceptar, `Domicilio` +
 - [x] `VerSolicitudDialog` / `PasoResumen` muestran coordenadas
 - [x] Tests unitarios de la lógica pura del picker (vitest)
 - [x] Typecheck frontend + backend, vitest, build
+---
+
+# Selectores de nodos → SearchableSelect (drop-down con búsqueda) — 2026-09-02
+
+Contexto: la petición hablaba de "DripSearch"; no existe en Hydra. Se interpreta como
+"drop-down search" y se reutiliza el patrón existente `components/ui/searchable-select.tsx`.
+"Nodo" = entidad de la red de servicio (zona, sector hidráulico, distrito, ruta,
+punto/construcción, contrato, medidor). No se tocan dropdowns de enums fijos ni catálogos.
+
+- [x] Lecturas.tsx: ruta + contrato (captura), zona (carga masiva), ruta/zona/contrato (filtros historial)
+- [x] Medidores.tsx: zona (filtro), medidor bodega + contrato pendiente + zona (asignar)
+- [x] PreFacturacion.tsx / TimbradoPage.tsx: zona (filtro cabecera)
+- [x] Rutas.tsx: zona (nueva ruta)
+- [x] Tomas.tsx: construcción finalizada (nueva toma)
+- [x] AjustesFacturacion.tsx: contrato (filtro)
+- [x] PuntosServicio.tsx: sector hidráulico (127 opciones) + distrito
+- [x] Limpiar imports de Select que queden sin uso
+- [x] tsc --noEmit + build
+
+## Review
+
+- 17 selectores migrados en 8 archivos; `SearchableSelect` (Command + Popover) sin cambios en el componente compartido.
+- Valores almacenados, sentinelas `'all'`, `onValueChange` con side-effects (reset de contrato/página) y clases de ancho/error preservados.
+- Único cambio visual además del combobox: el filtro de contrato en AjustesFacturacion pierde el icono `Filter` dentro del trigger (SearchableSelect no admite icono); import huérfano eliminado.
+- Excluidos a propósito: dropdowns de Administración (13 opciones fijas, entidad organizativa) y catálogos (calibre, tipo suministro, estructura, tipo corte, enums de estado).
+- Verificado: `tsc --noEmit` OK, `eslint` sin errores (3 warnings preexistentes), `vite build` OK. NO verificado en navegador (backend/Docker apagados).
+- `frontend/node_modules` en el worktree es una junction al checkout principal (ignorada por git).

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, GripVertical, MapPin, Users } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const CONTRATO_DRAG_TYPE = 'application/x-contrato-id';
 const DROP_TARGET_SIN_RUTA = 'sin-ruta';
@@ -200,14 +200,13 @@ const Rutas = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Nueva Ruta</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Select value={form.zonaId} onValueChange={v => setForm({ ...form, zonaId: v })}>
-              <SelectTrigger><SelectValue placeholder="Zona" /></SelectTrigger>
-              <SelectContent>
-                {(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => (
-                  <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.zonaId}
+              onValueChange={v => setForm({ ...form, zonaId: v })}
+              options={(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => ({ value: z.id, label: z.nombre }))}
+              placeholder="Zona"
+              searchPlaceholder="Buscar zona…"
+            />
             <Input placeholder="Sector" value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} />
             <Input placeholder="Libreta" value={form.libreta} onChange={e => setForm({ ...form, libreta: e.target.value })} />
             <Input placeholder="Lecturista" value={form.lecturista} onChange={e => setForm({ ...form, lecturista: e.target.value })} />

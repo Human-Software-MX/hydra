@@ -1,13 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FacturacionService } from '../facturacion/facturacion.service';
 import {
   calcularFactura,
+  m3Facturables,
   redondear,
   TarifaCalculo,
 } from '../facturacion/billing-calculator';
+import { filtrarMasEspecificas } from '../facturacion/tarifa-especificidad';
 import { SimularImpactoDto, CambioTarifaSimulacionDto } from './dto/simular-impacto.dto';
+import { CreateTarifaDto } from './dto/create-tarifa.dto';
+import { UpdateTarifaMetadatosDto } from './dto/update-tarifa-metadatos.dto';
 
 /** Tope de consumos evaluados por simulación para acotar tiempo/memoria. */
 const MAX_CONSUMOS_SIMULACION = 5000;
@@ -53,69 +62,88 @@ export class TarifasService {
     return t;
   }
 
-  async findTarifaVigente(tipoServicio: string, fechaConsulta?: string) {
+  /**
+   * Tarifas vigentes de un servicio para el calculo puntual.
+   *
+   * `tipoServicio` se compara sin distinguir mayusculas (hay llamadores y seeds
+   * heredados que usan 'AGUA'). Cuando se indica administracion y/o clase se
+   * aplica la MISMA especificidad que la facturacion real
+   * ((admin, clase) > (admin, sin clase) > (global, clase) > (global, sin clase));
+   * sin ellas devuelve todo lo vigente del servicio (comportamiento historico).
+   */
+  async findTarifaVigente(
+    tipoServicio: string,
+    fechaConsulta?: string,
+    filtros?: { administracionId?: string | null; claseTarifaId?: string | null },
+  ) {
     const fecha = fechaConsulta ? new Date(fechaConsulta) : new Date();
-    return this.prisma.tarifa.findMany({
+    const and: Prisma.TarifaWhereInput[] = [
+      { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: fecha } }] },
+    ];
+    // Las tarifas sin administracion / sin clase son el fallback global.
+    if (filtros?.administracionId) {
+      and.push({ OR: [{ administracionId: filtros.administracionId }, { administracionId: null }] });
+    }
+    if (filtros?.claseTarifaId) {
+      and.push({ OR: [{ claseTarifaId: filtros.claseTarifaId }, { claseTarifaId: null }] });
+    }
+
+    const tarifas = await this.prisma.tarifa.findMany({
       where: {
-        tipoServicio,
+        tipoServicio: { equals: tipoServicio, mode: 'insensitive' },
         activo: true,
         vigenciaDesde: { lte: fecha },
-        OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: fecha } }],
+        AND: and,
       },
       orderBy: [{ tipoCalculo: 'asc' }, { rangoMinM3: 'asc' }],
     });
-  }
 
-  async createTarifa(dto: {
-    codigo: string;
-    nombre: string;
-    tipoServicio: string;
-    tipoCalculo: string;
-    rangoMinM3?: number;
-    rangoMaxM3?: number;
-    precioUnitario?: number;
-    cuotaFija?: number;
-    ivaPct?: number;
-    vigenciaDesde: string;
-    vigenciaHasta?: string;
-  }) {
-    return this.prisma.tarifa.create({
-      data: {
-        codigo: dto.codigo,
-        nombre: dto.nombre,
-        tipoServicio: dto.tipoServicio,
-        tipoCalculo: dto.tipoCalculo,
-        rangoMinM3: dto.rangoMinM3 ?? null,
-        rangoMaxM3: dto.rangoMaxM3 ?? null,
-        precioUnitario: dto.precioUnitario ?? null,
-        cuotaFija: dto.cuotaFija ?? null,
-        ivaPct: dto.ivaPct ?? 16,
-        vigenciaDesde: new Date(dto.vigenciaDesde),
-        vigenciaHasta: dto.vigenciaHasta ? new Date(dto.vigenciaHasta) : null,
-      },
+    if (!filtros?.administracionId && !filtros?.claseTarifaId) return tarifas;
+    return filtrarMasEspecificas(tarifas, {
+      administracionId: filtros.administracionId,
+      claseTarifaId: filtros.claseTarifaId,
     });
   }
 
-  async updateTarifa(id: string, dto: Partial<{
-    nombre: string;
-    rangoMinM3: number;
-    rangoMaxM3: number;
-    precioUnitario: number;
-    cuotaFija: number;
-    ivaPct: number;
-    vigenciaHasta: string;
-    activo: boolean;
-  }>) {
+  async createTarifa(dto: CreateTarifaDto) {
+    try {
+      return await this.prisma.tarifa.create({
+        data: {
+          codigo: dto.codigo,
+          nombre: dto.nombre,
+          tipoServicio: dto.tipoServicio,
+          tipoCalculo: dto.tipoCalculo,
+          rangoMinM3: dto.rangoMinM3 ?? null,
+          rangoMaxM3: dto.rangoMaxM3 ?? null,
+          precioUnitario: dto.precioUnitario ?? null,
+          cuotaFija: dto.cuotaFija ?? null,
+          ivaPct: dto.ivaPct ?? 16,
+          vigenciaDesde: new Date(dto.vigenciaDesde),
+          vigenciaHasta: dto.vigenciaHasta ? new Date(dto.vigenciaHasta) : null,
+        },
+      });
+    } catch (error) {
+      // UNIQUE (codigo, version): el linaje ya existe; sus cambios van por
+      // POST /tarifas/:id/actualizar (nueva version), no por un alta nueva.
+      if ((error as { code?: string }).code === 'P2002') {
+        throw new ConflictException(
+          `Ya existe una tarifa con codigo ${dto.codigo}; use POST /tarifas/:id/actualizar para versionarla`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Metadatos de la tarifa. Los valores economicos y el IVA NO se editan aqui:
+   * van por `POST /tarifas/:id/actualizar`, que versiona y deja rastro en el Kardex.
+   */
+  async updateTarifa(id: string, dto: UpdateTarifaMetadatosDto) {
     await this.findOneTarifa(id);
     return this.prisma.tarifa.update({
       where: { id },
       data: {
         ...(dto.nombre !== undefined && { nombre: dto.nombre }),
-        ...(dto.rangoMinM3 !== undefined && { rangoMinM3: dto.rangoMinM3 }),
-        ...(dto.rangoMaxM3 !== undefined && { rangoMaxM3: dto.rangoMaxM3 }),
-        ...(dto.precioUnitario !== undefined && { precioUnitario: dto.precioUnitario }),
-        ...(dto.cuotaFija !== undefined && { cuotaFija: dto.cuotaFija }),
-        ...(dto.ivaPct !== undefined && { ivaPct: dto.ivaPct }),
         ...(dto.vigenciaHasta !== undefined && { vigenciaHasta: new Date(dto.vigenciaHasta) }),
         ...(dto.activo !== undefined && { activo: dto.activo }),
       },
@@ -126,8 +154,17 @@ export class TarifasService {
    * Calcula el monto a facturar dada la tarifa escalonada vigente para un consumo en m3.
    * Soporta: escalonado (múltiples rangos), fijo (cuota fija) y variable (precio unitario).
    */
-  async calcularMonto(params: { tipoServicio: string; consumoM3: number; fecha?: string }) {
-    const tarifas = await this.findTarifaVigente(params.tipoServicio, params.fecha);
+  async calcularMonto(params: {
+    tipoServicio: string;
+    consumoM3: number;
+    fecha?: string;
+    administracionId?: string;
+    claseTarifaId?: string;
+  }) {
+    const tarifas = await this.findTarifaVigente(params.tipoServicio, params.fecha, {
+      administracionId: params.administracionId,
+      claseTarifaId: params.claseTarifaId,
+    });
     if (!tarifas.length) throw new BadRequestException('No hay tarifas vigentes para el servicio indicado');
     return this.computeMonto(tarifas, params.consumoM3);
   }
@@ -163,6 +200,31 @@ export class TarifasService {
             subtotal: sub,
           });
         }
+        continue;
+      }
+      if (t.tipoCalculo === 'tabla') {
+        // Mismo criterio que billing-calculator: m³ redondeados (fracción > 0.5 sube),
+        // importe acumulado de la tabla y, por encima del tope, cuota + unitario × m³.
+        const precios = Array.isArray(t.precios) ? (t.precios as unknown[]).map((p) => Number(p)) : null;
+        const m3 = Math.max(0, m3Facturables(consumoM3));
+        const tope = t.rangoMaxM3 ?? (precios?.length ? precios.length - 1 : 0);
+        const sub =
+          precios?.length && m3 <= tope
+            ? Number(precios[Math.min(m3, precios.length - 1)] ?? 0)
+            : Number(t.cuotaFija ?? 0) + Number(t.precioUnitario ?? 0) * m3;
+        subtotal += sub;
+        desglose.push({ rango: `tabla ${m3} m3`, m3, precio: m3 > 0 ? sub / m3 : sub, subtotal: sub });
+        continue;
+      }
+      if (t.tipoCalculo === 'lineal') {
+        const sub = Number(t.cuotaFija ?? 0) + Number(t.precioUnitario ?? 0) * consumoM3;
+        subtotal += sub;
+        desglose.push({
+          rango: 'lineal',
+          m3: consumoM3,
+          precio: Number(t.precioUnitario ?? 0),
+          subtotal: sub,
+        });
       }
     }
 
@@ -244,13 +306,6 @@ export class TarifasService {
 
   // ─── Actualización Tarifaria (trimestral) ─────────────────────────────────
 
-  async findActualizaciones(estado?: string) {
-    return this.prisma.actualizacionTarifaria.findMany({
-      where: { ...(estado && { estado }) },
-      orderBy: { fechaAplicacion: 'desc' },
-    });
-  }
-
   async createActualizacion(dto: {
     descripcion: string;
     fechaPublicacion: string;
@@ -311,7 +366,16 @@ export class TarifasService {
       where,
       take: MAX_CONSUMOS_SIMULACION,
       orderBy: { createdAt: 'asc' },
-      include: { contrato: { select: { id: true, nombre: true, zonaId: true } } },
+      include: {
+        contrato: {
+          select: {
+            id: true,
+            nombre: true,
+            zonaId: true,
+            tipoContratacion: { select: { claseTarifaId: true } },
+          },
+        },
+      },
     });
 
     const advertencias: string[] = [];
@@ -334,16 +398,20 @@ export class TarifasService {
     const [y, m] = dto.periodoBase.split('-').map((n) => parseInt(n, 10));
     const fecha = new Date(y, m, 0);
 
-    // Cache de tarifas (actuales y propuestas) por administración.
+    // Cache de tarifas (actuales y propuestas) por administración + clase tarifaria.
     const cacheTarifas = new Map<
       string,
       { actuales: Record<string, TarifaCalculo[]>; propuestas: Record<string, TarifaCalculo[]> }
     >();
-    const tarifasDe = async (administracionId: string | null) => {
-      const key = administracionId ?? '__global__';
+    const tarifasDe = async (administracionId: string | null, claseTarifaId: string | null) => {
+      const key = `${administracionId ?? '__global__'}|${claseTarifaId ?? '__sinClase__'}`;
       let entry = cacheTarifas.get(key);
       if (!entry) {
-        const actuales = await this.facturacion.tarifasVigentesPorServicio(fecha, administracionId);
+        const actuales = await this.facturacion.tarifasVigentesPorServicio(
+          fecha,
+          administracionId,
+          claseTarifaId,
+        );
         entry = { actuales, propuestas: this.aplicarCambios(actuales, dto.cambios, advertencias) };
         cacheTarifas.set(key, entry);
       }
@@ -360,7 +428,10 @@ export class TarifasService {
 
     for (const c of consumos) {
       const administracionId = c.contrato.zonaId ? adminPorZona.get(c.contrato.zonaId) ?? null : null;
-      const { actuales, propuestas } = await tarifasDe(administracionId);
+      const { actuales, propuestas } = await tarifasDe(
+        administracionId,
+        c.contrato.tipoContratacion?.claseTarifaId ?? null,
+      );
       if (!Object.keys(actuales).length) {
         sinTarifa++;
         continue;

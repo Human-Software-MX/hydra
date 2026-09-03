@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const Tomas = () => {
   const { tomas, addToma, construcciones } = useData();
@@ -47,12 +48,13 @@ const Tomas = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Nueva Toma</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Select value={form.construccionId} onValueChange={v => setForm({ ...form, construccionId: v })}>
-              <SelectTrigger><SelectValue placeholder="Construcción finalizada" /></SelectTrigger>
-              <SelectContent>
-                {finalizadas.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.construccionId}
+              onValueChange={v => setForm({ ...form, construccionId: v })}
+              options={finalizadas.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+              placeholder="Construcción finalizada"
+              searchPlaceholder="Buscar construcción…"
+            />
             <Input placeholder="Ubicación" value={form.ubicacion} onChange={e => setForm({ ...form, ubicacion: e.target.value })} />
             <Select value={form.tipo} onValueChange={v => setForm({ ...form, tipo: v as any })}>
               <SelectTrigger><SelectValue placeholder="Tipo de toma" /></SelectTrigger>

@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
 import {
@@ -681,18 +682,14 @@ export default function PuntosServicio() {
                   <Label className={err('sectorHidraulicoId') ? 'text-destructive' : ''}>
                     Sector hidráulico <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.sectorHidraulicoId} onValueChange={set('sectorHidraulicoId')}>
-                    <SelectTrigger className={err('sectorHidraulicoId') ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Seleccionar sector" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SECTORES_HIDRAULICOS.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.id} – {s.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.sectorHidraulicoId}
+                    onValueChange={set('sectorHidraulicoId')}
+                    options={SECTORES_HIDRAULICOS.map((s) => ({ value: s.id, label: `${s.id} – ${s.nombre}` }))}
+                    placeholder="Seleccionar sector"
+                    searchPlaceholder="Buscar sector…"
+                    className={err('sectorHidraulicoId') ? 'border-destructive' : ''}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="ps-zona">Zona de facturación</Label>
@@ -774,18 +771,13 @@ export default function PuntosServicio() {
                 </div>
                 <div className="space-y-1">
                   <Label>Distrito de atención de órdenes</Label>
-                  <Select value={form.distritoId} onValueChange={set('distritoId')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar distrito" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DISTRITOS.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.distritoId}
+                    onValueChange={set('distritoId')}
+                    options={DISTRITOS.map((d) => ({ value: d.id, label: d.nombre }))}
+                    placeholder="Seleccionar distrito"
+                    searchPlaceholder="Buscar distrito…"
+                  />
                 </div>
               </div>
             </section>

@@ -8,7 +8,7 @@ import { previewPeriodo, ejecutarPeriodo, type PreviewPeriodo } from '@/api/fact
 import { useToast } from '@/components/ui/use-toast';
 import StatusBadge from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -219,15 +219,14 @@ const PreFacturacion = () => {
     <div>
       <div className="page-header">
         <h1 className="page-title">Pre-Facturación</h1>
-        <Select value={zonaId} onValueChange={setZonaId}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Zona" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas las zonas</SelectItem>
-            {(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => (
-              <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={zonaId}
+          onValueChange={setZonaId}
+          options={[{ value: 'all', label: 'Todas las zonas' }, ...(allowedZonaIds ? zonas.filter(z => allowedZonaIds.includes(z.id)) : zonas).map(z => ({ value: z.id, label: z.nombre }))]}
+          placeholder="Zona"
+          searchPlaceholder="Buscar zona…"
+          className="w-[180px]"
+        />
       </div>
 
       {useApi && (
