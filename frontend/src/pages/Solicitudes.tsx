@@ -58,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Sheet,
   SheetContent,
@@ -807,16 +808,12 @@ function CobroAguaConfigDialog({
           <div className="grid grid-cols-3 items-center gap-2">
             <Label className="text-right text-sm">Administración</Label>
             <div className="col-span-2">
-              <Select value={admin} onValueChange={handleAdminChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ADMINISTRACIONES.map((a) => (
-                    <SelectItem key={a} value={a}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                className="w-full"
+                value={admin}
+                onValueChange={handleAdminChange}
+                options={ADMINISTRACIONES.map((a) => ({ value: a, label: a }))}
+              />
             </div>
           </div>
 
@@ -824,16 +821,12 @@ function CobroAguaConfigDialog({
           <div className="grid grid-cols-3 items-center gap-2">
             <Label className="text-right text-sm">Tarifa</Label>
             <div className="col-span-2">
-              <Select value={tipoTarifa} onValueChange={setTipoTarifa}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposTarifa.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                className="w-full"
+                value={tipoTarifa}
+                onValueChange={setTipoTarifa}
+                options={tiposTarifa.map((t) => ({ value: t, label: t }))}
+              />
             </div>
           </div>
 

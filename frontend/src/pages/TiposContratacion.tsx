@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Plus, Pencil, Settings2, FileText, CheckCircle2 } from 'lucide-react';
 import { hasApi } from '@/api/contratos';
 import { fetchAdministraciones } from '@/api/catalogos';
@@ -219,19 +220,17 @@ const TiposContratacion = () => {
         <div className="flex flex-wrap items-end gap-4 mb-4">
           <div className="space-y-1 min-w-[220px]">
             <Label className="text-xs text-muted-foreground">Administración</Label>
-            <Select value={adminFilter} onValueChange={setAdminFilter}>
-              <SelectTrigger className="w-[min(100%,280px)]">
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todas las administraciones</SelectItem>
-                {administracionesCatalog.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={adminFilter}
+              onValueChange={setAdminFilter}
+              options={[
+                { value: '__all__', label: 'Todas las administraciones' },
+                ...administracionesCatalog.map((a) => ({ value: a.id, label: a.nombre })),
+              ]}
+              placeholder="Todas"
+              searchPlaceholder="Buscar administración…"
+              className="w-[min(100%,280px)]"
+            />
           </div>
           <div className="space-y-1 min-w-[180px]">
             <Label className="text-xs text-muted-foreground">Medidor</Label>

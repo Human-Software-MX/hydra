@@ -13,13 +13,6 @@ import { fetchAjustesTarifarios, crearAjusteTarifario } from '@/api/tarifas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Dialog,
@@ -417,28 +410,22 @@ const AjustesFacturacion = () => {
             searchPlaceholder="Buscar contrato…"
             className="h-8 text-sm w-40"
           />
-          <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-            <SelectTrigger className="h-8 text-sm w-40">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos los estados</SelectItem>
-              {estadosDisponibles.map((e) => (
-                <SelectItem key={e} value={e}>{e}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
-            <SelectTrigger className="h-8 text-sm w-36">
-              <SelectValue placeholder="Periodo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos los periodos</SelectItem>
-              {periodosDisponibles.map((p) => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={filtroEstado}
+            onValueChange={setFiltroEstado}
+            options={[{ value: 'todos', label: 'Todos los estados' }, ...estadosDisponibles.map((e) => ({ value: e, label: e }))]}
+            placeholder="Estado"
+            searchPlaceholder="Buscar estado…"
+            className="h-8 text-sm w-40"
+          />
+          <SearchableSelect
+            value={filtroPeriodo}
+            onValueChange={setFiltroPeriodo}
+            options={[{ value: 'todos', label: 'Todos los periodos' }, ...periodosDisponibles.map((p) => ({ value: p, label: p }))]}
+            placeholder="Periodo"
+            searchPlaceholder="Buscar periodo…"
+            className="h-8 text-sm w-36"
+          />
           <span className="text-xs text-muted-foreground">
             {preFacturasFiltradas.length} de {preFacturasNoTimbradas.length} prefacturas
           </span>
@@ -588,16 +575,13 @@ const AjustesFacturacion = () => {
           <div className="grid gap-4 py-4">
             <div>
               <Label htmlFor="tipo-ajuste">Tipo de ajuste</Label>
-              <Select value={tipoAjusteId} onValueChange={(v) => setTipoAjusteId(v as TipoAjusteFacturacionId)}>
-                <SelectTrigger id="tipo-ajuste">
-                  <SelectValue placeholder="Seleccione tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPOS_AJUSTE_FACTURACION.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.label} ({t.area})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={tipoAjusteId}
+                onValueChange={(v) => setTipoAjusteId(v as TipoAjusteFacturacionId)}
+                options={TIPOS_AJUSTE_FACTURACION.map((t) => ({ value: t.id, label: `${t.label} (${t.area})` }))}
+                placeholder="Seleccione tipo"
+                searchPlaceholder="Buscar tipo de ajuste…"
+              />
             </div>
             {(tipoAjusteId === 'actualizacion_datos' || tipoAjusteId === 'correccion_lectura') && (
               <div>

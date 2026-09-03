@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Outlet, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogOut, Menu, X, ChevronDown } from 'lucide-react';
+import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { getPortalContratos, type PortalContrato } from '@/api/portal';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export interface PortalContextValue {
   contratos: PortalContrato[];
@@ -29,7 +30,6 @@ const PortalLayout = () => {
   const [contratos, setContratos] = useState<PortalContrato[]>([]);
   const [loadingContratos, setLoadingContratos] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [contractDropdownOpen, setContractDropdownOpen] = useState(false);
 
   const contratoIdFromUrl = searchParams.get('contrato');
   const [contratoId, setContratoIdState] = useState<string | null>(contratoIdFromUrl);
@@ -86,7 +86,6 @@ const PortalLayout = () => {
     navigate('/portal/login', { replace: true });
   };
 
-  const selectedContrato = contratos.find((c) => c.id === contratoId);
 
   const contextValue: PortalContextValue = {
     contratos,
@@ -137,41 +136,14 @@ const PortalLayout = () => {
             <div className="ml-auto flex items-center gap-3">
               {/* Contract selector */}
               {contratos.length > 0 && (
-                <div className="relative hidden sm:block">
-                  <button
-                    onClick={() => setContractDropdownOpen((o) => !o)}
-                    className="flex items-center gap-1.5 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="text-gray-700 font-medium">
-                      {selectedContrato
-                        ? `${selectedContrato.id} — ${selectedContrato.tipoServicio}`
-                        : 'Seleccionar contrato'}
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-gray-400" aria-hidden />
-                  </button>
-                  {contractDropdownOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setContractDropdownOpen(false)}
-                      />
-                      <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-                        {contratos.map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => setContratoId(c.id)}
-                            className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                              c.id === contratoId
-                                ? 'bg-blue-50 text-blue-700 font-medium'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            {c.id} — {c.tipoServicio}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                <div className="hidden sm:block w-64">
+                  <SearchableSelect
+                    options={contratos.map((c) => ({ value: c.id, label: `${c.id} — ${c.tipoServicio}` }))}
+                    value={contratoId ?? ''}
+                    onValueChange={setContratoId}
+                    placeholder="Seleccionar contrato"
+                    searchPlaceholder="Buscar contrato…"
+                  />
                 </div>
               )}
 
@@ -222,17 +194,14 @@ const PortalLayout = () => {
             {contratos.length > 0 && (
               <div className="mb-2 pb-2 border-b border-gray-100">
                 <p className="text-xs text-gray-400 mb-1">Contrato activo</p>
-                <select
+                <SearchableSelect
+                  options={contratos.map((c) => ({ value: c.id, label: `${c.id} — ${c.tipoServicio}` }))}
                   value={contratoId ?? ''}
-                  onChange={(e) => setContratoId(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
-                >
-                  {contratos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id} — {c.tipoServicio}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setContratoId}
+                  placeholder="Seleccionar contrato"
+                  searchPlaceholder="Buscar contrato…"
+                  className="w-full"
+                />
               </div>
             )}
             {NAV_ITEMS.map(({ label, tab }) => (

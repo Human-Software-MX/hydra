@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import StatusBadge from '@/components/StatusBadge';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   fetchActividades,
   fetchGruposActividad,
@@ -945,21 +946,19 @@ const Catalogos = () => {
           <div className="flex flex-wrap items-end gap-3 bg-white rounded-xl border border-border/50 shadow-sm p-4">
             <div className="space-y-1.5 min-w-[200px]">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Estado</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'Todos' },
+                  ...inegiEstados.map((e) => ({ value: e.id, label: `${e.claveINEGI} — ${e.nombre}` })),
+                ]}
                 value={munEstadoId}
-                onChange={(e) => {
-                  setMunEstadoId(e.target.value);
+                onValueChange={(v) => {
+                  setMunEstadoId(v);
                   setMunPage(1);
                 }}
-              >
-                <option value="">Todos</option>
-                {inegiEstados.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.claveINEGI} — {e.nombre}
-                  </option>
-                ))}
-              </select>
+                placeholder="Todos"
+                searchPlaceholder="Buscar estado…"
+              />
             </div>
             <div className="space-y-1.5 flex-1 min-w-[180px] max-w-sm">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Nombre (contiene)</label>

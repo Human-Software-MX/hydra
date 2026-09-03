@@ -4,13 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { StepProps } from '../hooks/useWizardState';
 import { variableStorageKey } from '../hooks/useWizardState';
 import { useTipoContratacionConfig } from '../hooks/useTipoContratacionConfig';
@@ -183,26 +177,15 @@ export default function PasoVariables({ data, updateData, config }: StepProps) {
             return (
               <div key={row.id} className="space-y-2">
                 <Label htmlFor={`var-${key}`}>{label}</Label>
-                <Select
+                <SearchableSelect
                   value={selectValue}
                   onValueChange={(v) => setVar(key, v === '__none__' ? undefined : v)}
-                >
-                  <SelectTrigger id={`var-${key}`}>
-                    <SelectValue placeholder="Seleccione…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {!row.obligatorio && (
-                      <SelectItem value="__none__">
-                        <span className="text-muted-foreground">(vacío)</span>
-                      </SelectItem>
-                    )}
-                    {opcionesReservadas.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Seleccione…"
+                  options={[
+                    ...(!row.obligatorio ? [{ value: '__none__', label: '(vacío)' }] : []),
+                    ...opcionesReservadas,
+                  ]}
+                />
               </div>
             );
           }
@@ -259,26 +242,15 @@ export default function PasoVariables({ data, updateData, config }: StepProps) {
             return (
               <div key={row.id} className="space-y-2">
                 <Label htmlFor={`var-${key}`}>{label}</Label>
-                <Select
+                <SearchableSelect
                   value={selectValue}
                   onValueChange={(v) => setVar(key, v === '__none__' ? undefined : v)}
-                >
-                  <SelectTrigger id={`var-${key}`}>
-                    <SelectValue placeholder="Seleccione…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {!row.obligatorio ? (
-                      <SelectItem value="__none__">
-                        <span className="text-muted-foreground">(vacío)</span>
-                      </SelectItem>
-                    ) : null}
-                    {lista.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Seleccione…"
+                  options={[
+                    ...(!row.obligatorio ? [{ value: '__none__', label: '(vacío)' }] : []),
+                    ...lista.map((opt) => ({ value: opt, label: opt })),
+                  ]}
+                />
               </div>
             );
           }

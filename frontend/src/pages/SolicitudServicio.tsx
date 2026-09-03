@@ -10,13 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
@@ -1003,24 +996,16 @@ function StepContratacion({
                     return (
                       <div key={v.id} className="space-y-2">
                         <Label htmlFor={`var-sol-${tv.codigo}`}>{labelNode}</Label>
-                        <Select
+                        <SearchableSelect
+                          className="h-9"
                           value={valStr || '__none__'}
                           onValueChange={(s) => setVar(s === '__none__' ? undefined : s)}
-                        >
-                          <SelectTrigger id={`var-sol-${tv.codigo}`} className="h-9">
-                            <SelectValue placeholder="Seleccione…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {!v.obligatorio && (
-                              <SelectItem value="__none__">
-                                <span className="text-muted-foreground">(vacío)</span>
-                              </SelectItem>
-                            )}
-                            {opcionesRes.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="Seleccione…"
+                          options={[
+                            ...(!v.obligatorio ? [{ value: '__none__', label: '(vacío)' }] : []),
+                            ...opcionesRes,
+                          ]}
+                        />
                       </div>
                     );
                   }
@@ -1257,43 +1242,29 @@ function StepFiscal({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Régimen fiscal" required>
-                  <Select
+                  <SearchableSelect
+                    className="h-9"
                     value={form.fiscalRegimenFiscal}
                     onValueChange={(v) => set({ fiscalRegimenFiscal: v, fiscalUsoCfdi: '' })}
-                  >
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Seleccione régimen…" /></SelectTrigger>
-                    <SelectContent>
-                      {regimenOpciones.map((r) => (
-                        <SelectItem key={r.clave} value={r.clave}>
-                          <span className="font-mono text-xs text-muted-foreground">{r.clave}</span>
-                          <span className="ml-2">{r.texto}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Seleccione régimen…"
+                    options={regimenOpciones.map((r) => ({
+                      value: r.clave,
+                      label: `${r.clave} — ${r.texto}`,
+                    }))}
+                  />
                 </Field>
                 <Field label="Uso del CFDI" required>
-                  <Select
+                  <SearchableSelect
+                    className="h-9"
                     value={form.fiscalUsoCfdi}
                     onValueChange={(v) => set({ fiscalUsoCfdi: v })}
                     disabled={!regimenSel}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue
-                        placeholder={
-                          regimenSel ? 'Seleccione uso…' : 'Primero elija régimen fiscal…'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {usoOpciones.map((u) => (
-                        <SelectItem key={u.clave} value={u.clave}>
-                          <span className="font-mono text-xs text-muted-foreground">{u.clave}</span>
-                          <span className="ml-2">{u.texto}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={regimenSel ? 'Seleccione uso…' : 'Primero elija régimen fiscal…'}
+                    options={usoOpciones.map((u) => ({
+                      value: u.clave,
+                      label: `${u.clave} — ${u.texto}`,
+                    }))}
+                  />
                 </Field>
               </div>
             </div>

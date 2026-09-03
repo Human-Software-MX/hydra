@@ -18,6 +18,7 @@ import {
 import { getCeaDeuda, getCeaConsumos, type CeaConsumo } from '@/api/cea';
 import type { PortalContextValue } from '@/components/PortalLayout';
 import PagarEnLinea from '@/components/portal/PagarEnLinea';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   FileText,
   BarChart3,
@@ -559,16 +560,14 @@ const PortalCliente = () => {
               {aniosDisponibles.length > 1 && (
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium text-gray-700">Filtrar por año:</span>
-                  <select
+                  <SearchableSelect
+                    options={[{ value: 'todos', label: 'Todos los años' }, ...aniosDisponibles.map((a) => ({ value: a, label: a }))]}
                     value={consumoAnioFiltro}
-                    onChange={(e) => { setConsumoAnioFiltro(e.target.value); setConsumosPagina(1); }}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="todos">Todos los años</option>
-                    {aniosDisponibles.map((a) => (
-                      <option key={a} value={a}>{a}</option>
-                    ))}
-                  </select>
+                    onValueChange={(v) => { setConsumoAnioFiltro(v); setConsumosPagina(1); }}
+                    placeholder="Todos los años"
+                    searchPlaceholder="Buscar año…"
+                    className="w-44"
+                  />
                 </div>
               )}
 
