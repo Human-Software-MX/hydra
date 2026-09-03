@@ -603,69 +603,53 @@ export default function PuntosServicio() {
                   <Label className={err('administracion') ? 'text-destructive' : ''}>
                     Administración <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.administracion} onValueChange={set('administracion')}>
-                    <SelectTrigger className={err('administracion') ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Seleccionar administración" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ADMINISTRACIONES.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.id} – {a.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.administracion}
+                    onValueChange={set('administracion')}
+                    options={ADMINISTRACIONES.map((a) => ({ value: a.id, label: `${a.id} – ${a.nombre}` }))}
+                    placeholder="Seleccionar administración"
+                    searchPlaceholder="Buscar administración…"
+                    className={err('administracion') ? 'border-destructive' : ''}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className={err('estructuraTecnicaId') ? 'text-destructive' : ''}>
                     Tipo de estructura técnica <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.estructuraTecnicaId} onValueChange={set('estructuraTecnicaId')}>
-                    <SelectTrigger className={err('estructuraTecnicaId') ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Seleccionar estructura" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {estructuras.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.codigo} – {e.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.estructuraTecnicaId}
+                    onValueChange={set('estructuraTecnicaId')}
+                    options={estructuras.map((e) => ({ value: e.id, label: `${e.codigo} – ${e.descripcion}` }))}
+                    placeholder="Seleccionar estructura"
+                    searchPlaceholder="Buscar estructura…"
+                    className={err('estructuraTecnicaId') ? 'border-destructive' : ''}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className={err('tipoSuministroId') ? 'text-destructive' : ''}>
                     Tipo de suministro <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.tipoSuministroId} onValueChange={set('tipoSuministroId')}>
-                    <SelectTrigger className={err('tipoSuministroId') ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Seleccionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tiposSuministro.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.codigo} – {t.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.tipoSuministroId}
+                    onValueChange={set('tipoSuministroId')}
+                    options={tiposSuministro.map((t) => ({ value: t.id, label: `${t.codigo} – ${t.descripcion}` }))}
+                    placeholder="Seleccionar tipo"
+                    searchPlaceholder="Buscar tipo…"
+                    className={err('tipoSuministroId') ? 'border-destructive' : ''}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className={err('tipoPuntoServicio') ? 'text-destructive' : ''}>
                     Tipo de punto de servicio <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.tipoPuntoServicio} onValueChange={set('tipoPuntoServicio')}>
-                    <SelectTrigger className={err('tipoPuntoServicio') ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Seleccionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_PUNTO_SERVICIO.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.id} – {t.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.tipoPuntoServicio}
+                    onValueChange={set('tipoPuntoServicio')}
+                    options={TIPOS_PUNTO_SERVICIO.map((t) => ({ value: t.id, label: `${t.id} – ${t.nombre}` }))}
+                    placeholder="Seleccionar tipo"
+                    searchPlaceholder="Buscar tipo…"
+                    className={err('tipoPuntoServicio') ? 'border-destructive' : ''}
+                  />
                 </div>
               </div>
             </section>
@@ -736,18 +720,13 @@ export default function PuntosServicio() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>Calibre de la toma</Label>
-                  <Select value={form.calibreId} onValueChange={set('calibreId')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar calibre" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {calibres.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.codigo} – {c.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.calibreId}
+                    onValueChange={set('calibreId')}
+                    options={calibres.map((c) => ({ value: c.id, label: `${c.codigo} – ${c.descripcion}` }))}
+                    placeholder="Seleccionar calibre"
+                    searchPlaceholder="Buscar calibre…"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="ps-recorrido">Código de recorrido</Label>
@@ -809,18 +788,13 @@ export default function PuntosServicio() {
                 </div>
                 <div className="space-y-1">
                   <Label>Tipo de corte</Label>
-                  <Select value={form.tipoCorteId} onValueChange={set('tipoCorteId')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tiposCorte.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.codigo} – {t.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={form.tipoCorteId}
+                    onValueChange={set('tipoCorteId')}
+                    options={tiposCorte.map((t) => ({ value: t.id, label: `${t.codigo} – ${t.descripcion}` }))}
+                    placeholder="Seleccionar tipo"
+                    searchPlaceholder="Buscar tipo…"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="ps-fecha-corte">Fecha de corte</Label>

@@ -51,13 +51,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Sheet,
   SheetContent,
@@ -604,17 +598,25 @@ function OrdenInspeccionSheet({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Material de calle</Label>
-                  <Select value={fMatCalle} onValueChange={setFMatCalle}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                    <SelectContent>{MATERIAL_CALLE.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={fMatCalle}
+                    onValueChange={setFMatCalle}
+                    placeholder="Seleccionar..."
+                    searchPlaceholder="Buscar material…"
+                    options={MATERIAL_CALLE.map(m => ({ value: m.id, label: m.label }))}
+                    className="h-8 text-xs"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Material de banqueta</Label>
-                  <Select value={fMatBanqueta} onValueChange={setFMatBanqueta}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                    <SelectContent>{MATERIAL_BANQUETA.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={fMatBanqueta}
+                    onValueChange={setFMatBanqueta}
+                    placeholder="Seleccionar..."
+                    searchPlaceholder="Buscar material…"
+                    options={MATERIAL_BANQUETA.map(m => ({ value: m.id, label: m.label }))}
+                    className="h-8 text-xs"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Ruptura agua — calle (ml)</Label>
@@ -807,16 +809,12 @@ function CobroAguaConfigDialog({
           <div className="grid grid-cols-3 items-center gap-2">
             <Label className="text-right text-sm">Administración</Label>
             <div className="col-span-2">
-              <Select value={admin} onValueChange={handleAdminChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ADMINISTRACIONES.map((a) => (
-                    <SelectItem key={a} value={a}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                className="w-full"
+                value={admin}
+                onValueChange={handleAdminChange}
+                options={ADMINISTRACIONES.map((a) => ({ value: a, label: a }))}
+              />
             </div>
           </div>
 
@@ -824,16 +822,12 @@ function CobroAguaConfigDialog({
           <div className="grid grid-cols-3 items-center gap-2">
             <Label className="text-right text-sm">Tarifa</Label>
             <div className="col-span-2">
-              <Select value={tipoTarifa} onValueChange={setTipoTarifa}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposTarifa.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                className="w-full"
+                value={tipoTarifa}
+                onValueChange={setTipoTarifa}
+                options={tiposTarifa.map((t) => ({ value: t, label: t }))}
+              />
             </div>
           </div>
 

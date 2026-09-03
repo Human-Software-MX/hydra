@@ -8,7 +8,6 @@ import { fetchRecibos } from '@/api/recibos';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -148,12 +147,13 @@ const Pagos = () => {
                   placeholder="Contrato"
                 />
                 <Input type="number" placeholder="Monto" value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })} />
-                <Select value={form.tipo} onValueChange={v => setForm({ ...form, tipo: v as TipoPago })}>
-                  <SelectTrigger><SelectValue placeholder="Tipo de pago" /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_PAGO.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={TIPOS_PAGO.map(t => ({ value: t, label: t }))}
+                  value={form.tipo}
+                  onValueChange={v => setForm({ ...form, tipo: v as TipoPago })}
+                  placeholder="Tipo de pago"
+                  searchPlaceholder="Buscar tipo de pago…"
+                />
                 <Input placeholder="Concepto" value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} />
                 <Button onClick={handlePago} disabled={registrarPagoMut.isPending || !form.contratoId || !form.monto || !form.tipo} className="w-full">
                   {registrarPagoMut.isPending ? 'Registrando…' : 'Registrar pago'}

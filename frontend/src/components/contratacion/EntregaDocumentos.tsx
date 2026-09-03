@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Trash2, Upload, Eye, Loader2, Clock } from 'lucide-react';
+import { FileText, Trash2, Paperclip, Eye, Loader2, Clock, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { toast } from '@/components/ui/sonner';
@@ -43,13 +43,19 @@ export async function subirArchivosPendientes(
   return { subidos, fallidos };
 }
 
+export function nombreDeRequerido(d: DocumentoRequeridoTipoContratacion): string {
+  return d.documento?.nombre ?? d.nombreDocumento ?? d.id;
+}
+
 interface Props {
   /** Con id los archivos se suben de inmediato; sin id (y con onPendientesChange) quedan en cola. */
   solicitudId?: string;
   /** Documentos configurados para el tipo de contratación (ya filtrados por rama de uso). */
   documentosDelTipo: DocumentoRequeridoTipoContratacion[];
-  /** Marca el tipo de documento como recibido en el checklist del formulario. */
-  onDocumentoEntregado?: (nombre: string) => void;
+  /** Estado del checklist: ¿este documento está marcado como recibido? */
+  esRecibido: (d: DocumentoRequeridoTipoContratacion) => boolean;
+  /** Marca/desmarca el documento como recibido. */
+  onToggleRecibido: (d: DocumentoRequeridoTipoContratacion, recibido: boolean) => void;
   /** Cola de archivos para solicitudes aún no guardadas (estado del padre). */
   archivosPendientes?: ArchivoPendiente[];
   onPendientesChange?: (pendientes: ArchivoPendiente[]) => void;
@@ -63,25 +69,36 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const PRESENTACION_LABEL: Record<string, string> = {
+  ORIGINAL: 'original',
+  COPIA: 'copia',
+  ORIGINAL_Y_COPIA: 'original y copia',
+};
+
 /**
- * Entrega de documentos: se elige el tipo de documento (según el tipo de
- * contratación) y se suben uno o varios archivos bajo ese tipo. Si la solicitud
- * aún no existe, los archivos quedan en cola y se suben al guardar.
+ * Lista unificada de documentos del tipo de contratación: cada fila lleva su
+ * check de "recibido" y su botón para adjuntar archivos (subida inmediata con
+ * solicitud guardada; en cola si la solicitud aún no existe). Si el tipo no
+ * tiene documentos configurados, se ofrece un combo con búsqueda sobre el
+ * catálogo completo.
  */
 export default function EntregaDocumentos({
   solicitudId,
   documentosDelTipo,
-  onDocumentoEntregado,
+  esRecibido,
+  onToggleRecibido,
   archivosPendientes,
   onPendientesChange,
   mensajeSinSolicitud,
 }: Props) {
   const qc = useQueryClient();
-  const [tipoDocSel, setTipoDocSel] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  // destino del próximo archivo: clave del documento al que se adjunta
+  const [destino, setDestino] = useState<{ documentoId?: string; nombre: string } | null>(null);
+  const [tipoDocSel, setTipoDocSel] = useState('');
   const conId = Boolean(solicitudId);
   const modoCola = !conId && Boolean(onPendientesChange);
-  const habilitado = conId || modoCola;
+  const puedeAdjuntar = conId || modoCola;
   const pendientes = archivosPendientes ?? [];
 
   const entregadosQ = useQuery({
@@ -96,56 +113,44 @@ export default function EntregaDocumentos({
   const catalogoQ = useQuery({
     queryKey: ['catalogo-documentos', 'activos'],
     queryFn: () => fetchCatalogoDocumentos({ activo: true }),
-    enabled: habilitado && usarCatalogoCompleto,
+    enabled: puedeAdjuntar && usarCatalogoCompleto,
     staleTime: 60 * 60 * 1000,
   });
 
-  const opciones = useMemo(() => {
-    if (!usarCatalogoCompleto) {
-      return documentosDelTipo.map((d) => ({
-        value: d.documentoId ?? `libre:${d.id}`,
-        label: (d.documento?.nombre ?? d.nombreDocumento ?? d.id) + (d.obligatorio ? ' *' : ''),
-        nombre: d.documento?.nombre ?? d.nombreDocumento ?? d.id,
-      }));
+  const archivosPorClave = useMemo(() => {
+    type Item =
+      | { kind: 'subido'; dto: SolicitudDocumentoDto }
+      | { kind: 'pendiente'; idx: number; p: ArchivoPendiente };
+    const m = new Map<string, Item[]>();
+    const push = (key: string, item: Item) => {
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(item);
+    };
+    for (const d of entregadosQ.data ?? []) {
+      push(d.documentoId ?? d.nombreDocumento ?? 'otros', { kind: 'subido', dto: d });
     }
-    return (catalogoQ.data ?? []).map((d) => ({ value: d.id, label: d.nombre, nombre: d.nombre }));
-  }, [usarCatalogoCompleto, documentosDelTipo, catalogoQ.data]);
-
-  const resolverSeleccion = () => {
-    const opcion = opciones.find((o) => o.value === tipoDocSel);
-    const esLibre = tipoDocSel.startsWith('libre:');
-    return { documentoId: esLibre ? undefined : tipoDocSel, nombre: opcion?.nombre ?? tipoDocSel };
-  };
+    pendientes.forEach((p, idx) => push(p.documentoId ?? p.nombre, { kind: 'pendiente', idx, p }));
+    return m;
+  }, [entregadosQ.data, pendientes]);
 
   const subirMut = useMutation({
-    mutationFn: async (files: File[]) => {
-      const { documentoId, nombre } = resolverSeleccion();
+    mutationFn: async ({ files, doc }: { files: File[]; doc: { documentoId?: string; nombre: string } }) => {
       for (const file of files) {
         await uploadSolicitudDocumento(solicitudId!, file, {
-          documentoId,
-          nombreDocumento: documentoId ? undefined : nombre,
+          documentoId: doc.documentoId,
+          nombreDocumento: doc.documentoId ? undefined : doc.nombre,
         });
       }
-      return nombre;
+      return doc;
     },
-    onSuccess: (nombre) => {
+    onSuccess: (doc) => {
       qc.invalidateQueries({ queryKey: ['solicitud-documentos', solicitudId] });
-      if (nombre && onDocumentoEntregado) onDocumentoEntregado(nombre);
+      const fila = documentosDelTipo.find((d) => (d.documentoId ?? nombreDeRequerido(d)) === (doc.documentoId ?? doc.nombre));
+      if (fila && !esRecibido(fila)) onToggleRecibido(fila, true);
       toast.success('Documento(s) subido(s)');
-      if (fileRef.current) fileRef.current.value = '';
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Error al subir'),
   });
-
-  const encolar = (files: File[]) => {
-    const { documentoId, nombre } = resolverSeleccion();
-    onPendientesChange?.([
-      ...pendientes,
-      ...files.map((file) => ({ documentoId, nombre, file })),
-    ]);
-    if (onDocumentoEntregado) onDocumentoEntregado(nombre);
-    if (fileRef.current) fileRef.current.value = '';
-  };
 
   const eliminarMut = useMutation({
     mutationFn: (docId: string) => deleteSolicitudDocumento(solicitudId!, docId),
@@ -153,131 +158,177 @@ export default function EntregaDocumentos({
     onError: () => toast.error('No se pudo eliminar el archivo'),
   });
 
-  // Agrupar (subidos + en cola) por tipo de documento
-  const grupos = useMemo(() => {
-    type Item =
-      | { kind: 'subido'; dto: SolicitudDocumentoDto }
-      | { kind: 'pendiente'; idx: number; p: ArchivoPendiente };
-    const m = new Map<string, { nombre: string; items: Item[] }>();
-    const push = (key: string, nombre: string, item: Item) => {
-      if (!m.has(key)) m.set(key, { nombre, items: [] });
-      m.get(key)!.items.push(item);
-    };
-    for (const d of entregadosQ.data ?? []) {
-      push(d.documentoId ?? d.nombreDocumento ?? 'otros', d.documento?.nombre ?? d.nombreDocumento ?? 'Sin clasificar', { kind: 'subido', dto: d });
+  const abrirSelectorPara = (doc: { documentoId?: string; nombre: string }) => {
+    setDestino(doc);
+    fileRef.current?.click();
+  };
+
+  const onArchivosElegidos = (files: File[]) => {
+    if (!destino || files.length === 0) return;
+    if (conId) {
+      subirMut.mutate({ files, doc: destino });
+    } else {
+      onPendientesChange?.([
+        ...pendientes,
+        ...files.map((file) => ({ documentoId: destino.documentoId, nombre: destino.nombre, file })),
+      ]);
+      const fila = documentosDelTipo.find((d) => (d.documentoId ?? nombreDeRequerido(d)) === (destino.documentoId ?? destino.nombre));
+      if (fila && !esRecibido(fila)) onToggleRecibido(fila, true);
     }
-    pendientes.forEach((p, idx) => {
-      push(p.documentoId ?? p.nombre, p.nombre, { kind: 'pendiente', idx, p });
-    });
-    return [...m.values()];
-  }, [entregadosQ.data, pendientes]);
+    if (fileRef.current) fileRef.current.value = '';
+    setDestino(null);
+  };
+
+  const renderArchivos = (clave: string) => {
+    const items = archivosPorClave.get(clave) ?? [];
+    if (items.length === 0) return null;
+    return (
+      <ul className="mt-1.5 space-y-1 pl-7">
+        {items.map((it) =>
+          it.kind === 'subido' ? (
+            <li key={it.dto.id} className="flex items-center gap-2 text-xs">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{it.dto.archivoNombre}</span>
+              <span className="text-muted-foreground">{formatBytes(it.dto.tamanoBytes)}</span>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Ver"
+                onClick={() => void openSolicitudDocumento(solicitudId!, it.dto.id)}>
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="Eliminar"
+                disabled={eliminarMut.isPending} onClick={() => eliminarMut.mutate(it.dto.id)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </li>
+          ) : (
+            <li key={`p-${it.idx}`} className="flex items-center gap-2 text-xs">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span className="min-w-0 flex-1 truncate">{it.p.file.name}</span>
+              <span className="text-muted-foreground">{formatBytes(it.p.file.size)} · en cola</span>
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="Quitar de la cola"
+                onClick={() => onPendientesChange?.(pendientes.filter((_, i) => i !== it.idx))}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </li>
+          ),
+        )}
+      </ul>
+    );
+  };
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">Archivos entregados:</p>
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        accept="application/pdf,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => onArchivosElegidos(Array.from(e.target.files ?? []))}
+      />
 
-      {!habilitado && (
+      {!puedeAdjuntar && (
         <p className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
           {mensajeSinSolicitud ?? 'Guarde la solicitud para poder adjuntar archivos.'}
         </p>
       )}
 
-      {habilitado && (
-        <>
+      {!usarCatalogoCompleto && (
+        <div className="space-y-2 rounded-md border bg-background p-3">
+          {documentosDelTipo.map((d) => {
+            const nombre = nombreDeRequerido(d);
+            const clave = d.documentoId ?? nombre;
+            const checked = esRecibido(d);
+            const pres = d.documento?.presentacion ? PRESENTACION_LABEL[d.documento.presentacion] : null;
+            return (
+              <div key={d.id} className="border-b pb-2 last:border-b-0 last:pb-0">
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input accent-primary"
+                    checked={checked}
+                    onChange={(e) => onToggleRecibido(d, e.target.checked)}
+                  />
+                  <span className={`min-w-0 flex-1 text-sm ${d.obligatorio ? 'font-medium' : ''}`}>
+                    {nombre.toUpperCase()}
+                    {d.obligatorio && <span className="ml-1 text-destructive">*</span>}
+                    {pres && <span className="ml-2 text-xs font-normal text-muted-foreground">({pres})</span>}
+                  </span>
+                  {puedeAdjuntar && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      disabled={subirMut.isPending}
+                      onClick={() => abrirSelectorPara({ documentoId: d.documentoId ?? undefined, nombre })}
+                    >
+                      {subirMut.isPending && destino?.nombre === nombre ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Paperclip className="h-3.5 w-3.5" />
+                      )}
+                      Adjuntar
+                    </Button>
+                  )}
+                </div>
+                {renderArchivos(clave)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {usarCatalogoCompleto && puedeAdjuntar && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Este tipo de contratación aún no tiene documentos configurados; elija del catálogo completo.
+          </p>
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[260px] flex-1">
               <SearchableSelect
                 value={tipoDocSel}
                 onValueChange={setTipoDocSel}
-                options={opciones.map(({ value, label }) => ({ value, label }))}
-                placeholder={opciones.length === 0 ? 'Sin documentos en catálogo' : 'Tipo de documento…'}
+                options={(catalogoQ.data ?? []).map((d) => ({ value: d.id, label: d.nombre }))}
+                placeholder={(catalogoQ.data ?? []).length === 0 ? 'Sin documentos en catálogo' : 'Tipo de documento…'}
                 searchPlaceholder="Buscar documento…"
-                disabled={opciones.length === 0}
+                disabled={(catalogoQ.data ?? []).length === 0}
               />
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept="application/pdf,image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length === 0) return;
-                if (conId) subirMut.mutate(files);
-                else encolar(files);
-              }}
-            />
             <Button
               type="button"
               variant="outline"
               size="sm"
               disabled={!tipoDocSel || subirMut.isPending}
-              onClick={() => fileRef.current?.click()}
+              onClick={() => {
+                const doc = (catalogoQ.data ?? []).find((d) => d.id === tipoDocSel);
+                if (doc) abrirSelectorPara({ documentoId: doc.id, nombre: doc.nombre });
+              }}
             >
-              {subirMut.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-1.5 h-4 w-4" />
-              )}
+              <Upload className="mr-1.5 h-4 w-4" />
               {conId ? 'Subir archivo(s)' : 'Agregar archivo(s)'}
             </Button>
           </div>
+          {[...archivosPorClave.keys()].map((clave) => {
+            const nombre =
+              (catalogoQ.data ?? []).find((d) => d.id === clave)?.nombre ??
+              (archivosPorClave.get(clave)?.[0]?.kind === 'pendiente'
+                ? (archivosPorClave.get(clave)![0] as { p: ArchivoPendiente }).p.nombre
+                : clave);
+            return (
+              <div key={clave} className="rounded-md border p-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{nombre}</p>
+                {renderArchivos(clave)}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-          {modoCola && pendientes.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              <Clock className="mr-1 inline h-3 w-3" />
-              {pendientes.length} archivo(s) en cola — se subirán al guardar la solicitud.
-            </p>
-          )}
-
-          {usarCatalogoCompleto && opciones.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Este tipo de contratación aún no tiene documentos configurados; se muestra el catálogo completo.
-            </p>
-          )}
-
-          {grupos.length > 0 && (
-            <div className="space-y-2 rounded-md border p-3">
-              {grupos.map((g) => (
-                <div key={g.nombre}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {g.nombre} ({g.items.length})
-                  </p>
-                  <ul className="mt-1 space-y-1">
-                    {g.items.map((it) =>
-                      it.kind === 'subido' ? (
-                        <li key={it.dto.id} className="flex items-center gap-2 text-sm">
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate">{it.dto.archivoNombre}</span>
-                          <span className="text-xs text-muted-foreground">{formatBytes(it.dto.tamanoBytes)}</span>
-                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Ver"
-                            onClick={() => void openSolicitudDocumento(solicitudId!, it.dto.id)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Eliminar"
-                            disabled={eliminarMut.isPending} onClick={() => eliminarMut.mutate(it.dto.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      ) : (
-                        <li key={`p-${it.idx}`} className="flex items-center gap-2 text-sm">
-                          <Clock className="h-4 w-4 shrink-0 text-amber-500" />
-                          <span className="min-w-0 flex-1 truncate">{it.p.file.name}</span>
-                          <span className="text-xs text-muted-foreground">{formatBytes(it.p.file.size)} · en cola</span>
-                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Quitar de la cola"
-                            onClick={() => onPendientesChange?.(pendientes.filter((_, i) => i !== it.idx))}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+      {modoCola && pendientes.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          <Clock className="mr-1 inline h-3 w-3" />
+          {pendientes.length} archivo(s) en cola — se subirán al guardar la solicitud.
+        </p>
       )}
     </div>
   );

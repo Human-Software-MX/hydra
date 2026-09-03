@@ -5,13 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Switch } from '@/components/ui/switch';
 import { fetchCalibres } from '@/api/catalogos';
 import type { StepProps } from '@/components/contratacion/hooks/useWizardState';
@@ -124,24 +118,15 @@ export default function PasoOrdenes({ data, updateData }: StepProps) {
           ) : calibresQ.isError ? (
             <p className="text-sm text-destructive">No se pudieron cargar los calibres.</p>
           ) : (
-            <Select
+            <SearchableSelect
               value={data.calibreMedidorId ?? ''}
               onValueChange={(v) => updateData({ calibreMedidorId: v || undefined })}
-            >
-              <SelectTrigger id="calibre-medidor">
-                <SelectValue placeholder="Seleccione calibre…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(calibresQ.data ?? [])
-                  .filter((c) => c.activo)
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.descripcion}
-                      <span className="ml-1 font-mono text-[10px] text-muted-foreground">{c.codigo}</span>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+              options={(calibresQ.data ?? [])
+                .filter((c) => c.activo)
+                .map((c) => ({ value: c.id, label: `${c.descripcion} ${c.codigo}` }))}
+              placeholder="Seleccione calibre…"
+              searchPlaceholder="Buscar calibre…"
+            />
           )}
         </div>
       </div>

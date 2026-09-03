@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { createQueja } from '@/api/atencion';
 
@@ -104,14 +105,14 @@ export default function QuejaDialog({ open, onOpenChange, contratoId, usuarioAct
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="categoria">Categoría <span className="text-red-500">*</span></Label>
-              <Select value={form.categoria} onValueChange={(v) => { setForm((f) => ({ ...f, categoria: v })); setErrors((e) => ({ ...e, categoria: undefined })); }}>
-                <SelectTrigger id="categoria" className={errors.categoria ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Seleccionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIAS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={CATEGORIAS.map((c) => ({ value: c, label: c }))}
+                value={form.categoria}
+                onValueChange={(v) => { setForm((f) => ({ ...f, categoria: v })); setErrors((e) => ({ ...e, categoria: undefined })); }}
+                placeholder="Seleccionar..."
+                searchPlaceholder="Buscar categoría…"
+                className={errors.categoria ? 'border-red-500' : ''}
+              />
               {errors.categoria && <p className="text-xs text-red-500">{errors.categoria}</p>}
             </div>
           </div>

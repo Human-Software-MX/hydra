@@ -10,13 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
@@ -1003,24 +996,16 @@ function StepContratacion({
                     return (
                       <div key={v.id} className="space-y-2">
                         <Label htmlFor={`var-sol-${tv.codigo}`}>{labelNode}</Label>
-                        <Select
+                        <SearchableSelect
+                          className="h-9"
                           value={valStr || '__none__'}
                           onValueChange={(s) => setVar(s === '__none__' ? undefined : s)}
-                        >
-                          <SelectTrigger id={`var-sol-${tv.codigo}`} className="h-9">
-                            <SelectValue placeholder="Seleccione…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {!v.obligatorio && (
-                              <SelectItem value="__none__">
-                                <span className="text-muted-foreground">(vacío)</span>
-                              </SelectItem>
-                            )}
-                            {opcionesRes.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="Seleccione…"
+                          options={[
+                            ...(!v.obligatorio ? [{ value: '__none__', label: '(vacío)' }] : []),
+                            ...opcionesRes,
+                          ]}
+                        />
                       </div>
                     );
                   }
@@ -1077,61 +1062,24 @@ function StepContratacion({
       {/* Documentos Presentados */}
       <div className="space-y-3">
         <p className="text-sm font-medium">Documentos Presentados:</p>
-        <div className="rounded-md border bg-background p-4">
-          {configLoading ? (
-            <p className="text-xs text-muted-foreground">Cargando documentos…</p>
-          ) : documentos.length > 0 ? (
-            <div className="space-y-2">
-              {documentos.map((doc) => {
-                const checked = form.documentosRecibidos.includes(doc.id);
-                return (
-                  <label key={doc.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input accent-primary"
-                      checked={checked}
-                      onChange={(e) =>
-                        set({
-                          documentosRecibidos: e.target.checked
-                            ? [...form.documentosRecibidos, doc.id]
-                            : form.documentosRecibidos.filter((id) => id !== doc.id),
-                        })
-                      }
-                    />
-                    <span className={doc.obligatorio ? 'font-medium' : ''}>
-                      {(doc.documento?.nombre ?? doc.nombreDocumento ?? doc.id).toUpperCase()}
-                      {doc.obligatorio && <span className="ml-1 text-destructive">*</span>}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <textarea
-              className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-              placeholder="Lista los documentos presentados…"
-              value={form.documentosTexto}
-              onChange={(e) => set({ documentosTexto: e.target.value })}
-            />
-          )}
-        </div>
-
-        <EntregaDocumentos
-          solicitudId={solicitudId}
-          documentosDelTipo={documentos}
-          archivosPendientes={archivosPendientes}
-          onPendientesChange={onPendientesChange}
-          onDocumentoEntregado={(nombre) => {
-            // al subir un archivo, el tipo de documento queda marcado como recibido
-            const doc = documentos.find(
-              (d) => (d.documento?.nombre ?? d.nombreDocumento) === nombre,
-            );
-            const key = doc?.id ?? nombre;
-            if (!form.documentosRecibidos.includes(key)) {
-              set({ documentosRecibidos: [...form.documentosRecibidos, key] });
+        {configLoading ? (
+          <p className="text-xs text-muted-foreground">Cargando documentos…</p>
+        ) : (
+          <EntregaDocumentos
+            solicitudId={solicitudId}
+            documentosDelTipo={documentos}
+            esRecibido={(d) => form.documentosRecibidos.includes(d.id)}
+            onToggleRecibido={(d, recibido) =>
+              set({
+                documentosRecibidos: recibido
+                  ? [...form.documentosRecibidos, d.id]
+                  : form.documentosRecibidos.filter((x) => x !== d.id),
+              })
             }
-          }}
-        />
+            archivosPendientes={archivosPendientes}
+            onPendientesChange={onPendientesChange}
+          />
+        )}
       </div>
     </div>
   );
@@ -1294,43 +1242,29 @@ function StepFiscal({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Régimen fiscal" required>
-                  <Select
+                  <SearchableSelect
+                    className="h-9"
                     value={form.fiscalRegimenFiscal}
                     onValueChange={(v) => set({ fiscalRegimenFiscal: v, fiscalUsoCfdi: '' })}
-                  >
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Seleccione régimen…" /></SelectTrigger>
-                    <SelectContent>
-                      {regimenOpciones.map((r) => (
-                        <SelectItem key={r.clave} value={r.clave}>
-                          <span className="font-mono text-xs text-muted-foreground">{r.clave}</span>
-                          <span className="ml-2">{r.texto}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Seleccione régimen…"
+                    options={regimenOpciones.map((r) => ({
+                      value: r.clave,
+                      label: `${r.clave} — ${r.texto}`,
+                    }))}
+                  />
                 </Field>
                 <Field label="Uso del CFDI" required>
-                  <Select
+                  <SearchableSelect
+                    className="h-9"
                     value={form.fiscalUsoCfdi}
                     onValueChange={(v) => set({ fiscalUsoCfdi: v })}
                     disabled={!regimenSel}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue
-                        placeholder={
-                          regimenSel ? 'Seleccione uso…' : 'Primero elija régimen fiscal…'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {usoOpciones.map((u) => (
-                        <SelectItem key={u.clave} value={u.clave}>
-                          <span className="font-mono text-xs text-muted-foreground">{u.clave}</span>
-                          <span className="ml-2">{u.texto}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={regimenSel ? 'Seleccione uso…' : 'Primero elija régimen fiscal…'}
+                    options={usoOpciones.map((u) => ({
+                      value: u.clave,
+                      label: `${u.clave} — ${u.texto}`,
+                    }))}
+                  />
                 </Field>
               </div>
             </div>

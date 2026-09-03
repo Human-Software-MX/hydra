@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { fetchAdministraciones } from '@/api/catalogos';
@@ -536,14 +537,13 @@ export function CuantificacionModal({
 
             <Field label="Material de la calle" hint="Inspección">
               {editandoInspeccion ? (
-                <Select value={matCalle} onValueChange={setMatCalle}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                  <SelectContent>
-                    {MATERIALES_CALLE.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={matCalle}
+                  onValueChange={setMatCalle}
+                  placeholder="Seleccionar…"
+                  searchPlaceholder="Buscar material…"
+                  options={MATERIALES_CALLE}
+                />
               ) : (
                 <Input
                   value={MATERIALES_CALLE.find((m) => m.value === matCalle)?.label ?? matCalle}
@@ -556,14 +556,12 @@ export function CuantificacionModal({
 
             <Field label="Material de la banqueta" hint="Inspección">
               {editandoInspeccion ? (
-                <Select value={matBanqueta} onValueChange={setMatBanqueta}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                  <SelectContent>
-                    {MATERIALES_BANQUETA.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={matBanqueta}
+                  onValueChange={setMatBanqueta}
+                  placeholder="Seleccionar…"
+                  options={MATERIALES_BANQUETA}
+                />
               ) : (
                 <Input
                   value={MATERIALES_BANQUETA.find((m) => m.value === matBanqueta)?.label ?? matBanqueta}
@@ -585,25 +583,21 @@ export function CuantificacionModal({
 
             {/* Diámetros */}
             <Field label="Diámetro de la toma">
-              <Select value={diametroToma} onValueChange={setDiametroToma}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                <SelectContent>
-                  {DIAMETROS_TOMA.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={diametroToma}
+                onValueChange={setDiametroToma}
+                placeholder="Seleccionar…"
+                options={DIAMETROS_TOMA.map((d) => ({ value: d, label: d }))}
+              />
             </Field>
 
             <Field label="Diámetro de la descarga">
-              <Select value={diametroDescarga} onValueChange={setDiametroDescarga}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                <SelectContent>
-                  {DIAMETROS_TOMA.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={diametroDescarga}
+                onValueChange={setDiametroDescarga}
+                placeholder="Seleccionar…"
+                options={DIAMETROS_TOMA.map((d) => ({ value: d, label: d }))}
+              />
             </Field>
 
             {/* Longitudes — inspección, editables con botón en sección superior */}
@@ -635,14 +629,12 @@ export function CuantificacionModal({
 
             {/* Tarifa agua periódica y unidades */}
             <Field label="Tarifa periódica de agua">
-              <Select value={tarifa} onValueChange={setTarifa}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                <SelectContent>
-                  {TARIFAS_FIJAS.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={tarifa}
+                onValueChange={setTarifa}
+                placeholder="Seleccionar…"
+                options={TARIFAS_FIJAS.map((t) => ({ value: t, label: t }))}
+              />
             </Field>
 
             <Field label="Unidades servidas">

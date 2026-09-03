@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -344,12 +345,12 @@ function PreviewDialog({
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Tipo de pago</Label>
-                    <Select value={payForm.tipo} onValueChange={(v) => setPayForm((f) => ({ ...f, tipo: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_PAGO.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={payForm.tipo}
+                      onValueChange={(v) => setPayForm((f) => ({ ...f, tipo: v }))}
+                      searchPlaceholder="Buscar tipo de pago…"
+                      options={TIPOS_PAGO.map((t) => ({ value: t, label: t }))}
+                    />
                   </div>
                 </div>
                 <div className="space-y-1">

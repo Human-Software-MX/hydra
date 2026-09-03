@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -378,15 +379,14 @@ const Monitoreo = () => {
         {/* ── Logs Tab ── */}
         <TabsContent value="logs" className="space-y-4 mt-4">
           <div className="flex flex-wrap gap-2 items-center">
-            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-              <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Tipo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los tipos</SelectItem>
-                {Object.entries(TIPO_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={filtroTipo}
+              onValueChange={setFiltroTipo}
+              options={[{ value: 'todos', label: 'Todos los tipos' }, ...Object.entries(TIPO_LABELS).map(([k, v]) => ({ value: k, label: v }))]}
+              placeholder="Tipo"
+              searchPlaceholder="Buscar tipo…"
+              className="h-8 text-sm w-44"
+            />
             <Select value={filtroEstado} onValueChange={setFiltroEstado}>
               <SelectTrigger className="h-8 text-sm w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>

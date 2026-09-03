@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table,
   TableBody,
@@ -360,39 +361,31 @@ const VariablesContratacion = () => {
           <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end">
             <div className="space-y-2 min-w-[220px]">
               <Label>Administración</Label>
-              <Select value={adminFilter} onValueChange={setAdminFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas las administraciones</SelectItem>
-                  {administraciones.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={adminFilter}
+                onValueChange={setAdminFilter}
+                options={[
+                  { value: '__all__', label: 'Todas las administraciones' },
+                  ...administraciones.map((a) => ({ value: a.id, label: a.nombre })),
+                ]}
+                placeholder="Todas"
+                searchPlaceholder="Buscar administración…"
+              />
             </div>
             <div className="space-y-2 min-w-[280px] flex-1">
               <Label>Tipo de contratación</Label>
-              <Select
+              <SearchableSelect
                 value={tipoSeleccionado || '__none__'}
                 onValueChange={(v) => setTipoSeleccionado(v === '__none__' ? '' : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione un tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Seleccione —</SelectItem>
-                  {!loadingTiposTc &&
-                    tiposContratacion.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.codigo} — {t.nombre}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: '__none__', label: '— Seleccione —' },
+                  ...(loadingTiposTc
+                    ? []
+                    : tiposContratacion.map((t) => ({ value: t.id, label: `${t.codigo} — ${t.nombre}` }))),
+                ]}
+                placeholder="Seleccione un tipo"
+                searchPlaceholder="Buscar tipo…"
+              />
             </div>
           </div>
 
@@ -409,19 +402,19 @@ const VariablesContratacion = () => {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <div className="space-y-2 flex-1 min-w-[240px]">
                   <Label>Añadir variable del catálogo</Label>
-                  <Select value={addVariableId || '__pick__'} onValueChange={(v) => setAddVariableId(v === '__pick__' ? '' : v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Elija una variable a vincular" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__pick__">— Elegir —</SelectItem>
-                      {tiposDisponiblesParaAgregar.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.codigo} — {t.nombre} ({t.tipoDato})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={addVariableId || '__pick__'}
+                    onValueChange={(v) => setAddVariableId(v === '__pick__' ? '' : v)}
+                    options={[
+                      { value: '__pick__', label: '— Elegir —' },
+                      ...tiposDisponiblesParaAgregar.map((t) => ({
+                        value: t.id,
+                        label: `${t.codigo} — ${t.nombre} (${t.tipoDato})`,
+                      })),
+                    ]}
+                    placeholder="Elija una variable a vincular"
+                    searchPlaceholder="Buscar variable…"
+                  />
                 </div>
                 <Button
                   type="button"

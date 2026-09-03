@@ -10,13 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   FileText,
   UserPlus,
@@ -310,23 +304,16 @@ const TramitesDigitales = () => {
               <div key={field.name}>
                 <Label htmlFor={`tramite-${field.name}`}>{field.label}</Label>
                 {field.type === 'select' && field.options ? (
-                  <Select
+                  <SearchableSelect
+                    options={field.options}
                     value={formValues[field.name] ?? ''}
                     onValueChange={(v) =>
                       setFormValues((prev) => ({ ...prev, [field.name]: v }))
                     }
-                  >
-                    <SelectTrigger id={`tramite-${field.name}`} className="mt-1.5">
-                      <SelectValue placeholder="Seleccione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {field.options.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Seleccione..."
+                    searchPlaceholder="Buscar…"
+                    className="mt-1.5"
+                  />
                 ) : (
                   <Input
                     id={`tramite-${field.name}`}
