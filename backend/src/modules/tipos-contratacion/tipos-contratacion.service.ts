@@ -39,6 +39,14 @@ interface UpdateTipoContratacionDto {
   tiposClientePermitidos?: string | null;
 }
 
+function parseAplicaUso(v?: string): string | null {
+  const x = v?.trim().toLowerCase();
+  if (!x) return null;
+  if (x === 'domestico' || x === 'doméstico') return 'domestico';
+  if (x === 'no_domestico' || x === 'no-domestico') return 'no_domestico';
+  throw new BadRequestException(`aplicaUso '${v}' inválido: use 'domestico', 'no_domestico' u omita`);
+}
+
 @Injectable()
 export class TiposContratacionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -150,7 +158,8 @@ export class TiposContratacionService {
           orderBy: { orden: 'asc' },
         },
         documentos: {
-          orderBy: [{ obligatorio: 'desc' }, { createdAt: 'asc' }],
+          include: { documento: true },
+          orderBy: [{ orden: 'asc' }, { obligatorio: 'desc' }, { createdAt: 'asc' }],
         },
         variables: {
           include: { tipoVariable: true },
@@ -232,16 +241,127 @@ export class TiposContratacionService {
 
   // ─── Asociaciones: Documentos Requeridos ──────────────────────────────────
 
-  async agregarDocumento(tipoId: string, dto: { nombreDocumento: string; descripcion?: string; obligatorio?: boolean }) {
+  async agregarDocumento(
+    tipoId: string,
+    dto: {
+      documentoId?: string;
+      nombreDocumento?: string;
+      descripcion?: string;
+      obligatorio?: boolean;
+      aplicaUso?: string;
+      orden?: number;
+    },
+  ) {
     const tipo = await this.findOne(tipoId);
+    if (!dto.documentoId && !dto.nombreDocumento?.trim()) {
+      throw new BadRequestException('Se requiere documentoId (catálogo) o nombreDocumento');
+    }
+    const aplicaUso = parseAplicaUso(dto.aplicaUso);
+    if (dto.documentoId) {
+      const doc = await this.prisma.catalogoDocumento.findUnique({ where: { id: dto.documentoId } });
+      if (!doc) throw new NotFoundException(`CatalogoDocumento '${dto.documentoId}' no encontrado`);
+      const exists = await this.prisma.documentoRequeridoTipoContratacion.findUnique({
+        where: {
+          tipoContratacionId_documentoId: { tipoContratacionId: tipo.id, documentoId: dto.documentoId },
+        },
+      });
+      if (exists) throw new ConflictException('Este documento ya está asociado al tipo de contratación');
+    }
     return this.prisma.documentoRequeridoTipoContratacion.create({
       data: {
         tipoContratacionId: tipo.id,
-        nombreDocumento: dto.nombreDocumento,
+        documentoId: dto.documentoId ?? null,
+        nombreDocumento: dto.nombreDocumento?.trim() || null,
         descripcion: dto.descripcion ?? null,
         obligatorio: dto.obligatorio ?? true,
+        aplicaUso,
+        orden: dto.orden ?? 0,
+      },
+      include: { documento: true },
+    });
+  }
+
+  // ─── Catálogo de Documentos ────────────────────────────────────────────────
+
+  async findCatalogoDocumentos(params: { activo?: string; clasificacion?: string }) {
+    return this.prisma.catalogoDocumento.findMany({
+      where: {
+        ...(params.activo !== undefined && { activo: params.activo === 'true' }),
+        ...(params.clasificacion ? { clasificacion: params.clasificacion } : {}),
+      },
+      orderBy: [{ clasificacion: 'asc' }, { nombre: 'asc' }],
+    });
+  }
+
+  async createCatalogoDocumento(dto: {
+    nombre: string;
+    presentacion?: string;
+    clasificacion?: string;
+  }) {
+    if (!dto.nombre?.trim()) throw new BadRequestException('nombre es requerido');
+    return this.prisma.catalogoDocumento.create({
+      data: {
+        nombre: dto.nombre.trim(),
+        presentacion: dto.presentacion ?? null,
+        clasificacion: dto.clasificacion ?? null,
       },
     });
+  }
+
+  async updateCatalogoDocumento(
+    id: string,
+    dto: { nombre?: string; presentacion?: string | null; clasificacion?: string | null; activo?: boolean },
+  ) {
+    const doc = await this.prisma.catalogoDocumento.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException(`CatalogoDocumento '${id}' no encontrado`);
+    return this.prisma.catalogoDocumento.update({ where: { id }, data: dto });
+  }
+
+  /**
+   * Asignación masiva: asocia un documento del catálogo a muchos tipos de contratación
+   * en una sola operación (por ids explícitos o por filtro de administración).
+   * Es la operación de elasticidad: "este documento aplica a todos los ALTA NUEVA
+   * COMERCIAL" es una llamada, no 13 capturas.
+   */
+  async asignarDocumentoMasivo(dto: {
+    documentoId: string;
+    tipoContratacionIds?: string[];
+    filtro?: { administracionId?: string; nombreContiene?: string };
+    obligatorio?: boolean;
+    aplicaUso?: string;
+  }) {
+    const doc = await this.prisma.catalogoDocumento.findUnique({ where: { id: dto.documentoId } });
+    if (!doc) throw new NotFoundException(`CatalogoDocumento '${dto.documentoId}' no encontrado`);
+    const aplicaUso = parseAplicaUso(dto.aplicaUso);
+
+    let tipoIds = dto.tipoContratacionIds ?? [];
+    if (tipoIds.length === 0 && dto.filtro) {
+      const tipos = await this.prisma.tipoContratacion.findMany({
+        where: {
+          activo: true,
+          ...(dto.filtro.administracionId ? { administracionId: dto.filtro.administracionId } : {}),
+          ...(dto.filtro.nombreContiene
+            ? { nombre: { contains: dto.filtro.nombreContiene, mode: 'insensitive' } }
+            : {}),
+        },
+        select: { id: true },
+      });
+      tipoIds = tipos.map((t) => t.id);
+    }
+    if (tipoIds.length === 0) {
+      throw new BadRequestException('Sin tipos destino: pase tipoContratacionIds o un filtro');
+    }
+
+    const result = await this.prisma.documentoRequeridoTipoContratacion.createMany({
+      data: tipoIds.map((tipoContratacionId) => ({
+        tipoContratacionId,
+        documentoId: dto.documentoId,
+        obligatorio: dto.obligatorio ?? true,
+        aplicaUso,
+      })),
+      skipDuplicates: true,
+    });
+    return { asignados: result.count, tiposDestino: tipoIds.length };
   }
 
   async removerDocumento(tipoId: string, documentoId: string) {

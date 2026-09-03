@@ -120,7 +120,15 @@ export class TiposContratacionController {
   @Post(':id/documentos-requeridos')
   agregarDocumento(
     @Param('id') id: string,
-    @Body() body: { nombreDocumento: string; descripcion?: string; obligatorio?: boolean },
+    @Body()
+    body: {
+      documentoId?: string;
+      nombreDocumento?: string;
+      descripcion?: string;
+      obligatorio?: boolean;
+      aplicaUso?: string;
+      orden?: number;
+    },
   ) {
     return this.service.agregarDocumento(id, body);
   }

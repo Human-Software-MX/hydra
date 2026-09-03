@@ -847,7 +847,12 @@ function StepContratacion({ form, set }: { form: SolicitudState; set: (p: Partia
   });
 
   const variables = tipoConfig?.variables ?? [];
-  const documentos = tipoConfig?.documentos ?? [];
+  // Rama del árbol de uso: un documento con aplicaUso solo se exige en la rama
+  // que le corresponde (form.usoDomestico viene del paso Solicitud).
+  const ramaUso = form.usoDomestico === 'si' ? 'domestico' : form.usoDomestico === 'no' ? 'no_domestico' : null;
+  const documentos = (tipoConfig?.documentos ?? []).filter(
+    (d) => !d.aplicaUso || !ramaUso || d.aplicaUso === ramaUso,
+  );
 
   return (
     <div className="space-y-5">
@@ -1066,7 +1071,7 @@ function StepContratacion({ form, set }: { form: SolicitudState; set: (p: Partia
                       }
                     />
                     <span className={doc.obligatorio ? 'font-medium' : ''}>
-                      {doc.nombreDocumento.toUpperCase()}
+                      {(doc.documento?.nombre ?? doc.nombreDocumento ?? doc.id).toUpperCase()}
                       {doc.obligatorio && <span className="ml-1 text-destructive">*</span>}
                     </span>
                   </label>

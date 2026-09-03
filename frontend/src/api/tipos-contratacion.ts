@@ -22,10 +22,24 @@ export interface TipoContratacion {
   _count?: { contratos: number };
 }
 
+export interface CatalogoDocumento {
+  id: string;
+  codigoSige?: number | null;
+  nombre: string;
+  presentacion?: string | null; // ORIGINAL | COPIA | ORIGINAL_Y_COPIA
+  clasificacion?: string | null; // COMUN | PERSONA_MORAL | REPRESENTACION | ...
+  activo: boolean;
+}
+
 export interface DocumentoRequeridoTipoContratacion {
   id: string;
-  nombreDocumento: string;
+  documentoId?: string | null;
+  documento?: CatalogoDocumento | null;
+  /// Texto libre legacy; si hay documento del catálogo, úsese documento.nombre
+  nombreDocumento?: string | null;
   obligatorio: boolean;
+  aplicaUso?: 'domestico' | 'no_domestico' | null;
+  orden?: number;
   descripcion?: string | null;
 }
 
