@@ -134,6 +134,7 @@ const Tarifas = () => {
         <KpiCard
           label="Última actualización"
           value={ultimaAct ? fmtFecha(ultimaAct.fechaAplicacion) : '—'}
+          valueClassName={ultimaAct ? 'text-2xl xl:text-3xl' : undefined}
           sub={
             ultimaAct
               ? `${ultimaAct.porcentaje != null ? `${fmtPct(ultimaAct.porcentaje)} · ` : ''}${ultimaAct.descripcion}`

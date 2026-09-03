@@ -142,7 +142,7 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !mutation.isPending && onOpenChange(o)}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Actualizar tarifa</DialogTitle>
           <DialogDescription>

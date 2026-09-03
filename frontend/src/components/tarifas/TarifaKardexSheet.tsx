@@ -116,7 +116,7 @@ export function TarifaKardexSheet({ tarifaId, tarifaResumen, open, onOpenChange,
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Versiones
               </p>
-              <div className="overflow-hidden rounded-lg border">
+              <div className="overflow-x-auto rounded-lg border">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-muted/40">

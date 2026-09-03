@@ -76,7 +76,9 @@ export function KardexGlobalTab({ useApi, onVerKardex }: Props) {
                   <th
                     key={h}
                     scope="col"
-                    className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground ${
+                      h === 'Kardex' ? 'sticky right-0 bg-[#f1f5f9]' : ''
+                    }`}
                   >
                     {h}
                   </th>
@@ -95,7 +97,11 @@ export function KardexGlobalTab({ useApi, onVerKardex }: Props) {
                     <td className="px-4 py-3">
                       <TipoMovimientoBadge tipo={m.tipo} />
                     </td>
-                    <td className="px-4 py-3 font-medium">{m.tarifaNombre}</td>
+                    <td className="max-w-[260px] px-4 py-3 font-medium">
+                      <span className="line-clamp-2" title={m.tarifaNombre}>
+                        {m.tarifaNombre}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{m.claseNombre ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{m.administracionNombre ?? 'Global'}</td>
                     <td className="px-4 py-3 tabular-nums">{m.porcentaje != null ? fmtPct(m.porcentaje) : '—'}</td>
@@ -114,7 +120,7 @@ export function KardexGlobalTab({ useApi, onVerKardex }: Props) {
                     <td className="max-w-[220px] truncate px-4 py-3 text-xs text-muted-foreground" title={m.motivo ?? ''}>
                       {m.motivo ?? '—'}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.25)]">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button

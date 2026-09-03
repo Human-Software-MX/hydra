@@ -574,7 +574,7 @@ export async function seedTarifasPeriodicas(prisma: PrismaClient, options: SeedT
     console.warn(`[tarifas] No existe ${jsonPath}; se omite la carga de tarifas del Excel (npm run export:tarifas-periodicas-json).`);
   } else {
     const payload = readTarifasPeriodicasPayload(jsonPath);
-    const vigenciaDesde = new Date(`${payload.vigenciaDesde}T00:00:00`);
+    const vigenciaDesde = new Date(`${payload.vigenciaDesde}T00:00:00Z`); // medianoche UTC (ver normalizarVigencia)
     const existentes = new Set(
       (await prisma.tarifa.findMany({ where: { codigo: { in: payload.tarifas.map((t) => t.codigo) } }, select: { codigo: true }, distinct: ['codigo'] })).map((t) => t.codigo),
     );

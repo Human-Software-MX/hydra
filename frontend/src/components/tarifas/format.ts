@@ -26,13 +26,18 @@ export function fmtPct(n: number | null | undefined, decimals = 2): string {
   return `${v > 0 ? '+' : ''}${texto} %`;
 }
 
-/** dd/mm/yyyy a partir de un ISO o YYYY-MM-DD. */
+/**
+ * dd/mm/yyyy para vigencias (fechas de calendario). El backend las ancla a medianoche UTC
+ * (`normalizarVigencia`), así que se formatean en UTC para que el día no cambie según la zona
+ * horaria del navegador. Un `YYYY-MM-DD` suelto se muestra tal cual.
+ */
 export function fmtFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso);
-  const d = soloFecha ? new Date(`${iso}T12:00:00`) : new Date(iso);
+  const soloFecha = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (soloFecha) return `${soloFecha[3]}/${soloFecha[2]}/${soloFecha[1]}`;
+  const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 }
 
 export function fmtFechaHora(iso: string | null | undefined): string {

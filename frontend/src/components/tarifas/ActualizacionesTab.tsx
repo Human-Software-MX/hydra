@@ -11,12 +11,22 @@ import {
 import type { AdministracionCatalogo } from '@/api/catalogos';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import StatusBadge from '@/components/StatusBadge';
 import { useToast } from '@/components/ui/use-toast';
-import { TipoMovimientoBadge } from './badges';
+import { TipoMovimientoBadge, Pill } from './badges';
 import { fmtFecha, fmtMXN, fmtPct, fmtPrecio, valorReferenciaDe } from './format';
 
-const COLUMNAS = ['', 'Aplicación', 'Descripción', '%', 'Alcance', 'Tarifas', 'Estado', 'Aplicado por', ''];
+/** [etiqueta, ancho]: la tabla es `table-fixed` para que el detalle expandido haga scroll dentro de su fila. */
+const COLUMNAS: Array<[string, string]> = [
+  ['', 'w-10'],
+  ['Aplicación', 'w-28'],
+  ['Descripción', ''],
+  ['%', 'w-16'],
+  ['Alcance', 'w-44'],
+  ['Tarifas', 'w-20'],
+  ['Estado', 'w-28'],
+  ['Aplicado por', 'w-40'],
+  ['', 'w-24'],
+];
 
 interface Props {
   useApi: boolean;
@@ -81,14 +91,14 @@ export function ActualizacionesTab({
   return (
     <div className="overflow-hidden rounded-xl border border-border/50 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="bg-muted/40">
-              {COLUMNAS.map((h, i) => (
+              {COLUMNAS.map(([h, ancho], i) => (
                 <th
                   key={i}
                   scope="col"
-                  className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                  className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground ${ancho}`}
                 >
                   {h}
                 </th>
@@ -133,9 +143,9 @@ export function ActualizacionesTab({
                     </td>
                     <td className="px-4 py-3.5 tabular-nums">{a.totalTarifas ?? '—'}</td>
                     <td className="px-4 py-3.5">
-                      <StatusBadge
-                        status={a.estado === 'aplicada' ? 'Aprobada' : a.estado === 'pendiente' ? 'Pendiente' : a.estado}
-                      />
+                      <Pill tono={a.estado === 'aplicada' ? 'success' : a.estado === 'pendiente' ? 'warning' : 'muted'}>
+                        {a.estado === 'aplicada' ? 'Aplicada' : a.estado === 'pendiente' ? 'Pendiente' : a.estado}
+                      </Pill>
                     </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground">{a.aplicadoPor ?? '—'}</td>
                     <td className="px-4 py-3.5">
@@ -200,7 +210,7 @@ function DetalleLote({ id }: { id: string }) {
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         Movimientos del lote ({movimientos.length})
       </p>
-      <div className="overflow-hidden rounded-lg border bg-white">
+      <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/40">

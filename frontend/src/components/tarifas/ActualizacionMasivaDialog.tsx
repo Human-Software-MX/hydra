@@ -149,7 +149,7 @@ export function ActualizacionMasivaDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pendiente && onOpenChange(o)}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-5xl overflow-hidden [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Actualización masiva de tarifas</DialogTitle>
           <DialogDescription>
@@ -300,7 +300,7 @@ export function ActualizacionMasivaDialog({
             )}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <p className="text-sm">
               Se actualizarán{' '}
               <span className="font-semibold">{resultado?.total ?? 0} tarifa{resultado?.total === 1 ? '' : 's'}</span>{' '}
@@ -342,48 +342,62 @@ export function ActualizacionMasivaDialog({
               </div>
             )}
 
-            <div className="max-h-[45vh] overflow-auto rounded-lg border">
+            <div className="w-full max-w-full max-h-[52vh] overflow-auto rounded-lg border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/60 backdrop-blur">
                   <tr>
-                    {['Clase', 'Servicio', 'Administración', 'IVA', 'Precio base', 'Precio m³', 'Ref. 10 m³'].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          scope="col"
-                          className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-muted-foreground"
-                        >
-                          {h}
-                        </th>
-                      ),
-                    )}
+                    {(
+                      [
+                        ['Clase', ''],
+                        ['Servicio', ''],
+                        ['Administración', ''],
+                        ['IVA', ''],
+                        ['Precio base', 'text-right'],
+                        ['Precio m³', 'text-right'],
+                        ['Ref. 10 m³', 'text-right'],
+                      ] as const
+                    ).map(([h, align]) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className={`px-2.5 py-2 font-semibold uppercase tracking-wider text-muted-foreground ${align || 'text-left'}`}
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {(resultado?.tarifas ?? []).map((t) => (
                     <tr key={t.id} className="border-t">
-                      <td className="px-3 py-2">
-                        <p className="font-medium">{t.claseNombre ?? t.nombre}</p>
+                      <td className="px-2.5 py-2">
+                        <p className="max-w-[170px] truncate font-medium" title={t.claseNombre ?? t.nombre}>
+                          {t.claseNombre ?? t.nombre}
+                        </p>
                         {t.categoriaNombre && (
                           <p className="text-[11px] text-muted-foreground">{t.categoriaNombre}</p>
                         )}
                       </td>
-                      <td className="px-3 py-2">{t.tipoServicio}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{t.administracionNombre ?? 'Global'}</td>
-                      <td className="px-3 py-2">
+                      <td className="max-w-[120px] truncate px-2.5 py-2" title={t.tipoServicio}>
+                        {t.tipoServicio}
+                      </td>
+                      <td className="max-w-[140px] px-2.5 py-2 text-[11px] leading-tight text-muted-foreground">
+                        {t.administracionNombre ?? 'Global'}
+                      </td>
+                      <td className="px-2.5 py-2">
                         <IvaBadge ivaPct={t.ivaPct} />
                       </td>
-                      <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                      <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
                         {fmtPrecio(t.actual.cuotaFija)}{' '}
                         <span className="text-muted-foreground">→</span>{' '}
                         <span className="font-semibold text-[#003366]">{fmtPrecio(t.nuevo.cuotaFija)}</span>
                       </td>
-                      <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                      <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
                         {fmtPrecio(t.actual.precioUnitario)}{' '}
                         <span className="text-muted-foreground">→</span>{' '}
                         <span className="font-semibold text-[#003366]">{fmtPrecio(t.nuevo.precioUnitario)}</span>
                       </td>
-                      <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                      <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
                         {fmtMXN(t.actual.valorReferencia)}{' '}
                         <span className="text-muted-foreground">→</span>{' '}
                         <span className="font-semibold text-[#003366]">{fmtMXN(t.nuevo.valorReferencia)}</span>

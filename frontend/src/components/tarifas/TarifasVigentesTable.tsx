@@ -12,18 +12,16 @@ import { fmtFecha, fmtMXN, fmtPrecio } from './format';
 
 const TODAS = '__all__';
 
-const COLUMNAS = [
-  'Clase',
-  'Servicio / concepto',
-  'Administración',
-  'Cálculo',
-  'Precio base',
-  'Precio m³',
-  'Ref. 10 m³',
-  'IVA',
-  'Vigente desde',
-  'v',
-  'Acciones',
+/** Columnas compactas: cálculo e IVA van junto a la clase y la versión junto a la vigencia para caber en ~1180 px. */
+const COLUMNAS: Array<{ label: string; align?: 'right' }> = [
+  { label: 'Clase' },
+  { label: 'Servicio / concepto' },
+  { label: 'Administración' },
+  { label: 'Precio base', align: 'right' },
+  { label: 'Precio m³', align: 'right' },
+  { label: 'Ref. 10 m³', align: 'right' },
+  { label: 'Vigencia' },
+  { label: 'Acciones' },
 ];
 
 /** Codifica el par (tipoServicio, concepto) en un único valor de select. */
@@ -178,16 +176,18 @@ export function TarifasVigentesTable({
 
       <div className="overflow-hidden rounded-xl border border-border/50 bg-white shadow-sm">
         <div className="min-w-0 overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-sm">
+          <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="bg-muted/40">
                 {COLUMNAS.map((h) => (
                   <th
-                    key={h}
+                    key={h.label}
                     scope="col"
-                    className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    className={`px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground ${
+                      h.align === 'right' ? 'text-right' : 'text-left'
+                    } ${h.label === 'Acciones' ? 'sticky right-0 bg-[#f1f5f9]' : ''}`}
                   >
-                    {h}
+                    {h.label}
                   </th>
                 ))}
               </tr>
@@ -195,33 +195,37 @@ export function TarifasVigentesTable({
             <tbody>
               {filas.map((t) => (
                 <tr key={t.id} className="border-t border-border/50 transition-colors hover:bg-muted/30">
-                  <td className="px-4 py-3.5">
+                  <td className="min-w-[230px] max-w-[280px] px-3 py-3">
                     <p className="font-medium leading-tight">{t.claseNombre ?? t.nombre}</p>
-                    {t.categoriaNombre && (
-                      <Badge variant="secondary" className="mt-1 text-[10px] font-semibold">
-                        {t.categoriaNombre}
-                      </Badge>
-                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {t.categoriaNombre && (
+                        <Badge variant="secondary" className="text-[10px] font-semibold">
+                          {t.categoriaNombre}
+                        </Badge>
+                      )}
+                      <TipoCalculoBadge tipoCalculo={t.tipoCalculo} />
+                      <IvaBadge ivaPct={t.ivaPct} />
+                    </div>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="max-w-[200px] px-3 py-3">
                     <p className="leading-tight">{t.tipoServicio}</p>
-                    {t.concepto && <p className="text-xs text-muted-foreground">{t.concepto}</p>}
+                    {t.concepto && <p className="truncate text-xs text-muted-foreground" title={t.concepto}>{t.concepto}</p>}
                   </td>
-                  <td className="px-4 py-3.5 text-muted-foreground">{t.administracionNombre ?? 'Global'}</td>
-                  <td className="px-4 py-3.5">
-                    <TipoCalculoBadge tipoCalculo={t.tipoCalculo} />
+                  <td className="max-w-[170px] px-3 py-3 text-xs text-muted-foreground">
+                    <span className="line-clamp-2" title={t.administracionNombre ?? 'Global'}>
+                      {t.administracionNombre ?? 'Global'}
+                    </span>
                   </td>
-                  <td className="px-4 py-3.5 tabular-nums">{fmtPrecio(t.cuotaFija)}</td>
-                  <td className="px-4 py-3.5 tabular-nums">{fmtPrecio(t.precioUnitario)}</td>
-                  <td className="px-4 py-3.5 tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtPrecio(t.cuotaFija)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtPrecio(t.precioUnitario)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     {t.tipoCalculo === 'tabla' ? fmtMXN(t.valorReferencia) : '—'}
                   </td>
-                  <td className="px-4 py-3.5">
-                    <IvaBadge ivaPct={t.ivaPct} />
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                    <p className="leading-tight">{fmtFecha(t.vigenciaDesde)}</p>
+                    <p className="text-[11px] tabular-nums">versión {t.version}</p>
                   </td>
-                  <td className="px-4 py-3.5 text-muted-foreground">{fmtFecha(t.vigenciaDesde)}</td>
-                  <td className="px-4 py-3.5 tabular-nums text-muted-foreground">{t.version}</td>
-                  <td className="whitespace-nowrap px-4 py-3.5">
+                  <td className="sticky right-0 whitespace-nowrap bg-white px-3 py-3 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.25)]">
                     <div className="flex items-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>

@@ -122,15 +122,20 @@ export function cierreVigenciaAnterior(vigenciaDesdeNueva: Date): Date {
   return new Date(vigenciaDesdeNueva.getTime() - 1);
 }
 
-/** Normaliza a fecha (00:00 local) una vigencia recibida como ISO `YYYY-MM-DD` o Date. */
+/**
+ * Normaliza una vigencia a medianoche UTC del día calendario indicado (`YYYY-MM-DD` o Date).
+ * Las vigencias son fechas de calendario, no instantes: anclarlas a UTC evita que el servidor
+ * (p. ej. contenedor en UTC) y el navegador (America/Mexico_City) muestren días distintos.
+ * El frontend las formatea con `timeZone: 'UTC'`.
+ */
 export function normalizarVigencia(v?: string | Date | null): Date {
   if (!v) {
     const hoy = new Date();
-    return new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    return new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
   }
   if (v instanceof Date) return v;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) throw new Error(`Fecha de vigencia inválida: ${v}`);
   return d;

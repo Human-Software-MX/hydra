@@ -89,7 +89,7 @@ export function TipoMovimientoBadge({
     <span className="inline-flex items-center gap-1">
       <Pill tono={MOVIMIENTO_TONO[tipo] ?? 'muted'}>{etiquetaMovimiento(tipo)}</Pill>
       {muestraPct && (
-        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-800">
+        <span className="whitespace-nowrap rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-800">
           {fmtPct(porcentaje)}
         </span>
       )}

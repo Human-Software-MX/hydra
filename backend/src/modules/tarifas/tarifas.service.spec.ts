@@ -278,14 +278,14 @@ function filaTarifa(over: Record<string, unknown> = {}) {
     precioUnitario: 5,
     precios: [0, 10, 20],
     ivaPct: 0,
-    vigenciaDesde: new Date(2026, 1, 1),
+    vigenciaDesde: new Date(Date.UTC(2026, 1, 1)),
     vigenciaHasta: null,
     activo: true,
     version: 1,
     tarifaAnteriorId: null,
     motivo: 'Carga inicial',
     creadoPor: 'seed',
-    createdAt: new Date(2026, 1, 1),
+    createdAt: new Date(Date.UTC(2026, 1, 1)),
     claseTarifa: {
       id: 'CL1',
       codigo: 'DOM_MEDIO',
@@ -308,7 +308,7 @@ const PROGRAMADAS = [
   {
     codigo: 'ADM1:agua:DOM_PROGRAMADA',
     nombre: 'Agua DOMÉSTICA (con versión programada)',
-    tarifaSiguiente: { vigenciaDesde: new Date(2027, 0, 1) },
+    tarifaSiguiente: { vigenciaDesde: new Date(Date.UTC(2027, 0, 1)) },
   },
 ];
 
@@ -340,7 +340,7 @@ function makeVersiones(filas: FilaTarifa[], programadas: typeof PROGRAMADAS = []
         Promise.resolve({
           id: `MOV${seq}`,
           ...args.data,
-          createdAt: new Date(2026, 8, 1),
+          createdAt: new Date(Date.UTC(2026, 8, 1)),
           tarifa: {
             nombre: 'Agua DOMÉSTICA MEDIO',
             version: 2,
@@ -362,15 +362,15 @@ function makeVersiones(filas: FilaTarifa[], programadas: typeof PROGRAMADAS = []
         Promise.resolve({
           id: 'ACT1',
           descripcion: 'Ajuste',
-          fechaPublicacion: new Date(2026, 8, 1),
-          fechaAplicacion: new Date(2026, 8, 1),
+          fechaPublicacion: new Date(Date.UTC(2026, 8, 1)),
+          fechaAplicacion: new Date(Date.UTC(2026, 8, 1)),
           fuenteOficial: null,
           estado: 'aplicada',
           porcentaje: 10,
           filtro: {},
           totalTarifas: filas.length,
           aplicadoPor: 'ana@cea.mx',
-          createdAt: new Date(2026, 8, 1),
+          createdAt: new Date(Date.UTC(2026, 8, 1)),
         }),
       ),
     },
@@ -407,7 +407,7 @@ describe('TarifaVersionesService.crearVersion', () => {
     const { svc, cliente } = makeVersiones([filaTarifa()]);
     await svc.crearVersion('T1', { cuotaFija: 150, vigenciaDesde: '2026-09-01', motivo: 'Nuevo precio' }, CTX);
 
-    const inicio = new Date(2026, 8, 1);
+    const inicio = new Date(Date.UTC(2026, 8, 1));
     expect(cliente.tarifa.update).toHaveBeenCalledWith({
       where: { id: 'T1' },
       data: { vigenciaHasta: new Date(inicio.getTime() - 1) },
@@ -492,7 +492,7 @@ describe('TarifaVersionesService ajuste masivo', () => {
     expect(cabecera.estado).toBe('aplicada');
     expect(cabecera.totalTarifas).toBe(2);
     expect(cabecera.descripcion).toBe('Actualización trimestral');
-    expect(cabecera.fechaAplicacion).toEqual(new Date(2026, 8, 1));
+    expect(cabecera.fechaAplicacion).toEqual(new Date(Date.UTC(2026, 8, 1)));
     expect(lote.estado).toBe('aplicada');
   });
 
@@ -518,7 +518,7 @@ describe('TarifaVersionesService ajuste masivo', () => {
       {
         codigo: 'ADM1:agua:DOM_PROGRAMADA',
         nombre: 'Agua DOMÉSTICA (con versión programada)',
-        vigenciaDesdeProgramada: new Date(2027, 0, 1).toISOString(),
+        vigenciaDesdeProgramada: new Date(Date.UTC(2027, 0, 1)).toISOString(),
       },
     ]);
 

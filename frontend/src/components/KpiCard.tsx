@@ -10,6 +10,8 @@ interface KpiCardProps {
   accent?: 'default' | 'primary' | 'danger' | 'warning' | 'success';
   icon?: LucideIcon;
   className?: string;
+  /** Clases extra para el valor (p. ej. reducir tamaño cuando es una fecha). */
+  valueClassName?: string;
 }
 
 const accentValue: Record<string, string> = {
@@ -28,6 +30,7 @@ export function KpiCard({
   accent = 'default',
   icon: Icon,
   className,
+  valueClassName,
 }: KpiCardProps) {
   return (
     <div
@@ -41,7 +44,7 @@ export function KpiCard({
       </p>
 
       <div className="flex items-end justify-between gap-2">
-        <p className={cn('text-4xl font-bold font-display leading-none', accentValue[accent])}>
+        <p className={cn('text-4xl font-bold font-display leading-none', accentValue[accent], valueClassName)}>
           {value}
         </p>
         {Icon && (
