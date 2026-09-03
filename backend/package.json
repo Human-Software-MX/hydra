@@ -39,7 +39,8 @@
     "verify:reemplazo": "node -r ts-node/register/transpile-only scripts/verify-reemplazo.ts",
     "verify:forecast": "node -r ts-node/register/transpile-only scripts/verify-forecast.ts",
     "verify:clima": "node -r ts-node/register/transpile-only scripts/verify-clima.ts",
-    "verify:espacial": "node -r ts-node/register/transpile-only scripts/verify-espacial.ts"
+    "verify:espacial": "node -r ts-node/register/transpile-only scripts/verify-espacial.ts",
+    "seed:mapeo-documentos": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/seed-mapeo-documentos.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
