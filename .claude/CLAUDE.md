@@ -293,6 +293,12 @@ const mutation = useMutation({ mutationFn: apiCall, onSuccess: () => queryClient
   - Backend: `domicilios.service.ts` filtra colonias por `localidadId` (antes por `municipioId`)
   - Frontend: `domicilios-inegi.ts` — interfaces actualizadas con campos Aquasis
 
+- **Ubicación exacta del predio en mapa** (2026-09-02)
+  - `components/ui/map-picker.tsx`: port React (react-leaflet, ya instalado) del `MapPicker.vue` de Agora Core: tiles OSM, click/arrastre de marcador, "Ubicar por dirección" (Nominatim acotado a Querétaro), redondeo a 7 decimales; lógica pura en `lib/geo-picker.ts`
+  - `DomicilioFormValue` tiene `gpsLat?/gpsLng?` opcionales; `DomicilioPickerForm` muestra el mapa con la prop `conMapa` (activa en StepPredio de `SolicitudServicio` y en el alta de punto de servicio del wizard)
+  - Persistencia: viaja en `solicitud.formData.predioDir` y al aceptar la solicitud `predioDirToCreateDomicilioDto` (`predio-geo.ts`) la copia a `Domicilio.gpsLat/gpsLng` → alimenta `GET /gis/padron.geojson` (mapa operativo)
+  - Nota: **Sentinel no es un proveedor geográfico**; en Agora es un mapa externo que *lee* `GET /api/v1/tickets/export/geo`. No hay conexión a Sentinel que reutilizar; el equivalente Hydra ya es `/gis/padron.geojson`
+  - Env opcional: `VITE_NOMINATIM_EMAIL` (identificación ante Nominatim según su política de uso)
 - **Tarifas: versionado, Kardex y clasificación fiscal** (2026-09-03)
   - Modelo: `CategoriaTarifa` (IVA por defecto; DOMESTICA = 0) → `ClaseTarifa` (variantes, IVA heredado u override, `sigeTpsId`) → `Tarifa` versionada por fila (`codigo` + `version`, `tarifaAnteriorId`, vigencias) + `TarifaMovimiento` (Kardex). `TipoContratacion.claseTarifaId` enlaza contrato → clase.
   - Datos: `docs/Tarifas_periodicas.xlsx` → `npm run export:tarifas-periodicas-json` → `backend/prisma/data/tarifas-periodicas.json` → `seedTarifasPeriodicas` (idempotente, no reescribe historia).

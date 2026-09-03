@@ -1,0 +1,111 @@
+/**
+ * Lógica pura del selector de ubicación en mapa (MapPicker).
+ *
+ * Port del patrón de Agora Core (`ceaLookups/MapPicker.vue`): tiles de OpenStreetMap,
+ * marcador arrastrable, click para ubicar, geocodificación con Nominatim acotada a
+ * Querétaro y redondeo a 7 decimales (precisión de `Domicilio.gpsLat/gpsLng`, Decimal(10,7)).
+ */
+
+export interface Coordenadas {
+  lat: number;
+  lng: number;
+}
+
+/** Centro por defecto: Querétaro (mismo que `pages/Mapa.tsx` y que Agora Core). */
+export const GEO_CENTRO_DEFAULT: Coordenadas = { lat: 20.5888, lng: -100.3899 };
+export const GEO_ZOOM_DEFAULT = 14;
+export const GEO_ZOOM_SELECCION = 16;
+/** Umbral bajo el cual dos coordenadas se consideran iguales (ruido de redondeo). */
+export const GEO_UMBRAL = 0.00001;
+/** Caja de búsqueda de Nominatim para Querétaro: lon_min,lat_min,lon_max,lat_max. */
+export const GEO_VIEWBOX_QRO = '-100.6,20.2,-99.8,21.0';
+export const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
+
+/** Redondea a 7 decimales, la precisión de la columna Decimal(10,7). */
+export function redondearCoord(v: number): number {
+  return Math.round(v * 1e7) / 1e7;
+}
+
+export function esLatValida(lat: number): boolean {
+  return Number.isFinite(lat) && lat >= -90 && lat <= 90;
+}
+
+export function esLngValida(lng: number): boolean {
+  return Number.isFinite(lng) && lng >= -180 && lng <= 180;
+}
+
+function aNumero(v: unknown): number {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') return Number(v);
+  return NaN;
+}
+
+/**
+ * Normaliza un par lat/lng proveniente de formulario o JSON (número, cadena, null,
+ * undefined). Devuelve coordenadas válidas o `null` si falta o es inválido cualquiera.
+ */
+export function coordenadasDesde(lat: unknown, lng: unknown): Coordenadas | null {
+  const la = aNumero(lat);
+  const ln = aNumero(lng);
+  if (!esLatValida(la) || !esLngValida(ln)) return null;
+  return { lat: la, lng: ln };
+}
+
+/** `true` si las coordenadas difieren más allá del umbral (o una existe y la otra no). */
+export function coordenadasDifieren(
+  a: Coordenadas | null,
+  b: Coordenadas | null,
+  umbral = GEO_UMBRAL,
+): boolean {
+  if (!a || !b) return Boolean(a) !== Boolean(b);
+  return Math.abs(a.lat - b.lat) > umbral || Math.abs(a.lng - b.lng) > umbral;
+}
+
+/** Texto legible para resúmenes: "20.588800, -100.389900". */
+export function formatearCoordenadas(lat: unknown, lng: unknown): string {
+  const c = coordenadasDesde(lat, lng);
+  if (!c) return '';
+  return `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+}
+
+/** URL de búsqueda Nominatim (OSM) acotada a Querétaro, como en Agora Core. */
+export function nominatimSearchUrl(q: string, email?: string): string {
+  const params = new URLSearchParams({
+    q,
+    format: 'json',
+    countrycodes: 'mx',
+    viewbox: GEO_VIEWBOX_QRO,
+    bounded: '1',
+    limit: '1',
+  });
+  if (email) params.set('email', email);
+  return `${NOMINATIM_SEARCH_URL}?${params.toString()}`;
+}
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * Geocodifica una dirección con Nominatim. Devuelve `null` si no hay resultado o si la
+ * petición falla (el llamador decide cómo avisar al usuario).
+ */
+export async function geocodificarDireccion(
+  direccion: string,
+  opts: { email?: string; fetchImpl?: FetchLike } = {},
+): Promise<Coordenadas | null> {
+  const q = direccion.trim();
+  if (!q) return null;
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(nominatimSearchUrl(q, opts.email), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const primero = data[0] as { lat?: unknown; lon?: unknown };
+    const c = coordenadasDesde(primero.lat, primero.lon);
+    return c ? { lat: redondearCoord(c.lat), lng: redondearCoord(c.lng) } : null;
+  } catch {
+    return null;
+  }
+}

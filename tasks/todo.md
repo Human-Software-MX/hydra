@@ -462,6 +462,27 @@ Riesgo #1 para el review (logueado en bugs.md): `Dashboard.tsx` agrega listas de
 - Estado abierto/cerrado en localStorage clave `hydra.sidebar.openGroups`.
 - Pendiente decidido: botones Soporte/Configuración del bloque inferior sin acción (igual que antes; no hay destino definido).
 
+## Predio — selección geográfica en mapa (2026-09-02)
+
+Rama: `claude/hydra-predio-geographic-selection-fe389a` (sobre `main`).
+
+Hallazgo de investigación: en Agora Core (`agoracore`) **Sentinel no es un proveedor
+geográfico que Agora consuma**; es un mapa externo (`fcamachol/sentinel`) que *lee* de
+Agora (`GET /api/v1/tickets/export/geo`, `docs/sentinel-integration.md`). La selección
+de ubicación en Agora la hace `MapPicker.vue` (Leaflet + tiles OSM + marcador
+arrastrable + click + geocodificación Nominatim, centro Querétaro, redondeo a 7
+decimales). Hydra ya tiene `leaflet`/`react-leaflet` (`pages/Mapa.tsx`) y columnas
+`Domicilio.gpsLat/gpsLng` (Decimal(10,7)) sin UI que las capture. El "Predio" en Hydra
+es `SolicitudState.predioDir` (DomicilioFormValue) → al aceptar, `Domicilio` + `PuntoServicio`.
+
+- [x] `components/ui/map-picker.tsx`: port React del MapPicker de Agora (react-leaflet)
+- [x] `DomicilioFormValue` +`gpsLat?`/`gpsLng?`; `DomicilioPickerForm` prop `conMapa`
+- [x] `SolicitudServicio` StepPredio con mapa; resumen muestra coordenadas
+- [x] `PasoServicioPoint` (wizard) con mapa y gps en `createDomicilio`
+- [x] Backend `predioDirToCreateDomicilioDto` propaga gps → `Domicilio.gpsLat/gpsLng`
+- [x] `VerSolicitudDialog` / `PasoResumen` muestran coordenadas
+- [x] Tests unitarios de la lógica pura del picker (vitest)
+- [x] Typecheck frontend + backend, vitest, build
 ---
 
 # Selectores de nodos → SearchableSelect (drop-down con búsqueda) — 2026-09-02

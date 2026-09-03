@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
@@ -13,6 +14,7 @@ import {
 } from '@/api/domicilios-inegi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import MapPicker from '@/components/ui/map-picker';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export interface DomicilioFormValue {
@@ -25,12 +27,17 @@ export interface DomicilioFormValue {
   numExterior: string;
   numInterior: string;
   referencia: string;
+  /** Ubicación exacta seleccionada en el mapa (opcional; persiste en Domicilio.gpsLat/gpsLng). */
+  gpsLat?: number | null;
+  gpsLng?: number | null;
 }
 
 interface Props {
   value: DomicilioFormValue;
   onChange: (v: DomicilioFormValue) => void;
   disabled?: boolean;
+  /** Muestra el mapa para fijar la ubicación exacta (predio / punto de servicio). */
+  conMapa?: boolean;
 }
 
 const EMPTY: DomicilioFormValue = {
@@ -47,7 +54,7 @@ const EMPTY: DomicilioFormValue = {
 
 export const DOMICILIO_FORM_EMPTY = EMPTY;
 
-export default function DomicilioPickerForm({ value, onChange, disabled = false }: Props) {
+export default function DomicilioPickerForm({ value, onChange, disabled = false, conMapa = false }: Props) {
   const set = (patch: Partial<DomicilioFormValue>) => onChange({ ...value, ...patch });
 
   // ── Catálogos cascading ────────────────────────────────────────────────
@@ -82,7 +89,8 @@ export default function DomicilioPickerForm({ value, onChange, disabled = false 
   const colonias: CatalogoColoniaINEGIRow[] = colRes?.data ?? [];
 
   const handleEstado = (id: string) => {
-    onChange({ ...EMPTY, estadoINEGIId: id });
+    // La cascada INEGI se reinicia; la ubicación del mapa se conserva (es independiente del catálogo).
+    onChange({ ...EMPTY, estadoINEGIId: id, gpsLat: value.gpsLat, gpsLng: value.gpsLng });
   };
   const handleMunicipio = (id: string) => {
     set({ municipioINEGIId: id, localidadINEGIId: '', coloniaINEGIId: '', codigoPostal: '' });
@@ -90,6 +98,23 @@ export default function DomicilioPickerForm({ value, onChange, disabled = false 
   const handleLocalidad = (id: string) => {
     set({ localidadINEGIId: id, coloniaINEGIId: '' });
   };
+
+  /** Texto para geocodificar la dirección capturada (nombres del catálogo, no IDs). */
+  const direccionBusqueda = useMemo(() => {
+    if (!conMapa) return '';
+    const nombreDe = (rows: Array<{ id: string; nombre: string }> | undefined, id: string) =>
+      rows?.find((r) => r.id === id)?.nombre ?? '';
+    return [
+      [value.calle?.trim(), value.numExterior?.trim()].filter(Boolean).join(' '),
+      nombreDe(colRes?.data, value.coloniaINEGIId),
+      value.codigoPostal?.trim(),
+      nombreDe(locRes?.data, value.localidadINEGIId),
+      nombreDe(mpioRes?.data, value.municipioINEGIId),
+      nombreDe(estados, value.estadoINEGIId),
+    ]
+      .filter(Boolean)
+      .join(', ');
+  }, [conMapa, value, colRes, locRes, mpioRes, estados]);
 
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -237,6 +262,20 @@ export default function DomicilioPickerForm({ value, onChange, disabled = false 
           onChange={(e) => set({ referencia: e.target.value })}
         />
       </div>
+
+      {/* Ubicación exacta en mapa — full width */}
+      {conMapa && (
+        <div className="col-span-2 space-y-1 pt-1">
+          <Label>Ubicación exacta en el mapa</Label>
+          <MapPicker
+            lat={value.gpsLat}
+            lng={value.gpsLng}
+            disabled={disabled}
+            direccionBusqueda={direccionBusqueda}
+            onChange={(c) => set({ gpsLat: c?.lat ?? null, gpsLng: c?.lng ?? null })}
+          />
+        </div>
+      )}
     </div>
   );
 }

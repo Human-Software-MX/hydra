@@ -79,6 +79,7 @@ import { uploadCotizacionPdf, openCotizacionPdf } from '@/api/solicitudes';
 import { pdf } from '@react-pdf/renderer';
 // PDF document components loaded lazily (dynamic import) to avoid Rollup TDZ init issues
 import { ADMINISTRACIONES, getTiposTarifa, resolveAdministracion, resolveTipoTarifa } from '@/lib/tarifas';
+import { formatearCoordenadas } from '@/lib/geo-picker';
 import type { SolicitudRecord, OrdenInspeccionData, SolicitudEstado } from '@/types/solicitudes';
 import { CuantificacionModal, type CuantificacionData } from '@/components/solicitudes/CuantificacionModal';
 
@@ -998,6 +999,11 @@ function VerSolicitudDialog({
           <div className="rounded-lg border p-4 space-y-2">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Predio / Domicilio del servicio</p>
             <p className="text-sm">{domPredio || '—'}</p>
+            {formatearCoordenadas(fd.predioDir?.gpsLat, fd.predioDir?.gpsLng) ? (
+              <p className="text-sm text-muted-foreground">
+                Ubicación GPS: {formatearCoordenadas(fd.predioDir?.gpsLat, fd.predioDir?.gpsLng)}
+              </p>
+            ) : null}
             {fd.claveCatastral ? <p className="text-sm text-muted-foreground">Clave catastral: {fd.claveCatastral}</p> : null}
             {fd.superficieTotal ? <p className="text-sm text-muted-foreground">Superficie total: {fd.superficieTotal} m²</p> : null}
           </div>
