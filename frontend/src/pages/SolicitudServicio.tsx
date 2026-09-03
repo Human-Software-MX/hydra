@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
 import DomicilioPickerForm from '@/components/contratacion/DomicilioPickerForm';
-import EntregaDocumentos from '@/components/contratacion/EntregaDocumentos';
+import EntregaDocumentos, { subirArchivosPendientes, type ArchivoPendiente } from '@/components/contratacion/EntregaDocumentos';
 import { fetchAdministraciones, fetchDistritos, fetchActividades, type DistritoCatalogo, type CatalogoActividad } from '@/api/catalogos';
 import { fetchTiposContratacion, fetchTipoContratacionConfiguracion, type TipoContratacion } from '@/api/tipos-contratacion';
 import { hasApi } from '@/api/contratos';
@@ -808,7 +808,19 @@ const OPCIONES_RESERVADAS_SOL: Record<string, { label: string; value: string }[]
   ],
 };
 
-function StepContratacion({ form, set, solicitudId }: { form: SolicitudState; set: (p: Partial<SolicitudState>) => void; solicitudId?: string }) {
+function StepContratacion({
+  form,
+  set,
+  solicitudId,
+  archivosPendientes,
+  onPendientesChange,
+}: {
+  form: SolicitudState;
+  set: (p: Partial<SolicitudState>) => void;
+  solicitudId?: string;
+  archivosPendientes?: ArchivoPendiente[];
+  onPendientesChange?: (p: ArchivoPendiente[]) => void;
+}) {
   const useApi = hasApi();
   // Rama del árbol de uso elegida en el paso Solicitud: de ella dependen las
   // administraciones y los tipos de contratación que se ofrecen.
@@ -1107,6 +1119,8 @@ function StepContratacion({ form, set, solicitudId }: { form: SolicitudState; se
         <EntregaDocumentos
           solicitudId={solicitudId}
           documentosDelTipo={documentos}
+          archivosPendientes={archivosPendientes}
+          onPendientesChange={onPendientesChange}
           onDocumentoEntregado={(nombre) => {
             // al subir un archivo, el tipo de documento queda marcado como recibido
             const doc = documentos.find(
@@ -1507,6 +1521,8 @@ export default function SolicitudServicio() {
 
   const [form, setForm] = useState<SolicitudState>(localRecord?.formData ?? SOLICITUD_STATE_EMPTY);
   const [currentStep, setCurrentStep] = useState(0);
+  // Archivos elegidos antes de guardar la solicitud; se suben al crearla.
+  const [archivosPendientes, setArchivosPendientes] = useState<ArchivoPendiente[]>([]);
 
   useEffect(() => {
     if (!localRecord && apiSolicitud?.formData) {
@@ -1783,6 +1799,15 @@ export default function SolicitudServicio() {
           formData: form,
         });
         toast.success(`Solicitud ${dto.folio} guardada`);
+        if (archivosPendientes.length > 0) {
+          const r = await subirArchivosPendientes(dto.id, archivosPendientes);
+          setArchivosPendientes([]);
+          if (r.fallidos > 0) {
+            toast.error(`${r.fallidos} archivo(s) no se pudieron subir; súbelos desde la solicitud`);
+          } else if (r.subidos > 0) {
+            toast.success(`${r.subidos} archivo(s) adjuntados`);
+          }
+        }
       } catch {
         const record = store.create(form);
         toast.success(`Solicitud ${record.folio} guardada`);
@@ -1797,7 +1822,15 @@ export default function SolicitudServicio() {
     predio: <StepPredio form={form} set={set} />,
     propietario: <StepPropietario form={form} set={set} />,
     solicitud: <StepSolicitud form={form} set={set} />,
-    contratacion: <StepContratacion form={form} set={set} solicitudId={id} />,
+    contratacion: (
+      <StepContratacion
+        form={form}
+        set={set}
+        solicitudId={id}
+        archivosPendientes={archivosPendientes}
+        onPendientesChange={setArchivosPendientes}
+      />
+    ),
     fiscal: <StepFiscal form={form} set={set} />,
     resumen: <StepResumen form={form} />,
   };

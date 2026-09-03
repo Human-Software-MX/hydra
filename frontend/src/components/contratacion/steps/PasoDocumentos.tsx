@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { Label } from '@/components/ui/label';
 import type { StepProps } from '../hooks/useWizardState';
+import EntregaDocumentos from '../EntregaDocumentos';
 
 const CATALOGO_DOCUMENTOS: { id: string; nombre: string }[] = [
   { id: '1', nombre: 'Certificado de Número Oficial (COPIA)' },
@@ -125,6 +126,13 @@ export default function PasoDocumentos({ data, updateData, config }: StepProps) 
           {entregados.length} documento(s) marcados como recibidos.
         </span>
       </div>
+
+      <EntregaDocumentos
+        solicitudId={data.solicitudId}
+        documentosDelTipo={config?.documentos ?? []}
+        onDocumentoEntregado={agregarRecibido}
+        mensajeSinSolicitud="Este contrato no tiene una solicitud vinculada; los archivos se adjuntan desde la solicitud de servicio."
+      />
     </section>
   );
 }
