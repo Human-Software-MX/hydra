@@ -11,6 +11,7 @@ import {
   ResultadoFactura,
   TarifaCalculo,
 } from './billing-calculator';
+import { filtrarMasEspecificas } from './tarifa-especificidad';
 
 /** Servicios que se facturan sobre el consumo periódico, en orden de aparición en el recibo. */
 const SERVICIOS_FACTURABLES = ['agua', 'saneamiento', 'alcantarillado'];
@@ -43,12 +44,16 @@ export class FacturacionService {
 
   /**
    * Devuelve las tarifas vigentes agrupadas por tipoServicio, filtrando por
-   * administración cuando la tarifa la especifica (las tarifas sin administración
-   * aplican de forma global como fallback).
+   * administración y por clase tarifaria del contrato (las tarifas sin
+   * administración o sin clase aplican de forma global como fallback).
+   *
+   * Por servicio gana la combinación más específica disponible:
+   * (admin, clase) > (admin, sin clase) > (global, clase) > (global, sin clase).
    */
   async tarifasVigentesPorServicio(
     fecha: Date,
     administracionId?: string | null,
+    claseTarifaId?: string | null,
   ): Promise<Record<string, TarifaCalculo[]>> {
     const tarifas = await this.prisma.tarifa.findMany({
       where: {
@@ -59,40 +64,40 @@ export class FacturacionService {
           { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: fecha } }] },
           // Aplican las tarifas de la administración del contrato y las globales (sin administración).
           { OR: [{ administracionId: administracionId ?? null }, { administracionId: null }] },
+          // Idem para la clase tarifaria del contrato (las tarifas sin clase son el fallback).
+          { OR: [{ claseTarifaId: claseTarifaId ?? null }, { claseTarifaId: null }] },
         ],
       },
       orderBy: [{ tipoServicio: 'asc' }, { rangoMinM3: 'asc' }],
     });
 
-    const agrupadas: Record<string, TarifaCalculo[]> = {};
+    type LineaResuelta = TarifaCalculo & { administracionId: string | null; claseTarifaId: string | null };
+    const agrupadas: Record<string, LineaResuelta[]> = {};
     for (const t of tarifas) {
-      const linea: TarifaCalculo & { administracionId: string | null } = {
+      const linea: LineaResuelta = {
         tipoServicio: t.tipoServicio,
         tipoCalculo: t.tipoCalculo,
         rangoMinM3: t.rangoMinM3,
         rangoMaxM3: t.rangoMaxM3,
         precioUnitario: t.precioUnitario ? Number(t.precioUnitario) : null,
         cuotaFija: t.cuotaFija ? Number(t.cuotaFija) : null,
+        precios: Array.isArray(t.precios) ? (t.precios as unknown[]).map((p) => Number(p)) : null,
         ivaPct: Number(t.ivaPct ?? 0),
         administracionId: t.administracionId ?? null,
+        claseTarifaId: t.claseTarifaId ?? null,
       };
-      ((agrupadas as any)[t.tipoServicio] ??= []).push(linea);
+      (agrupadas[t.tipoServicio] ??= []).push(linea);
     }
 
-    // Deduplicación: si un servicio tiene tarifa específica de la administración,
-    // descarta las globales de ese servicio (la específica manda).
-    for (const servicio of Object.keys(agrupadas)) {
-      const lineas = agrupadas[servicio] as Array<TarifaCalculo & { administracionId: string | null }>;
-      const tieneEspecifica = administracionId
-        ? lineas.some((l) => l.administracionId === administracionId)
-        : false;
-      agrupadas[servicio] = (tieneEspecifica
-        ? lineas.filter((l) => l.administracionId === administracionId)
-        : lineas
-      ).map(({ administracionId: _omit, ...rest }) => rest);
+    // Especificidad: por servicio sobreviven sólo las líneas del nivel más específico.
+    const resultado: Record<string, TarifaCalculo[]> = {};
+    for (const [servicio, lineas] of Object.entries(agrupadas)) {
+      resultado[servicio] = filtrarMasEspecificas(lineas, { administracionId, claseTarifaId }).map(
+        ({ administracionId: _admin, claseTarifaId: _clase, ...rest }) => rest,
+      );
     }
 
-    return agrupadas;
+    return resultado;
   }
 
   // ─── Cálculo (dry-run) de un consumo ──────────────────────────────────────
@@ -100,7 +105,16 @@ export class FacturacionService {
   async calcularConsumo(consumoId: string): Promise<FacturaConsumoResultado> {
     const consumo = await this.prisma.consumo.findUnique({
       where: { id: consumoId },
-      include: { contrato: { select: { id: true, nombre: true, zonaId: true } } },
+      include: {
+        contrato: {
+          select: {
+            id: true,
+            nombre: true,
+            zonaId: true,
+            tipoContratacion: { select: { claseTarifaId: true } },
+          },
+        },
+      },
     });
     if (!consumo) throw new NotFoundException('Consumo no encontrado');
     return this.calcularParaConsumo(consumo as any);
@@ -111,11 +125,17 @@ export class FacturacionService {
     contratoId: string;
     periodo: string;
     m3: any;
-    contrato: { id: string; nombre: string; zonaId: string | null };
+    contrato: {
+      id: string;
+      nombre: string;
+      zonaId: string | null;
+      tipoContratacion?: { claseTarifaId: string | null } | null;
+    };
   }): Promise<FacturaConsumoResultado> {
     const fecha = this.finDePeriodo(consumo.periodo);
     const administracionId = await this.administracionDeZona(consumo.contrato.zonaId);
-    const tarifasPorServicio = await this.tarifasVigentesPorServicio(fecha, administracionId);
+    const claseTarifaId = consumo.contrato.tipoContratacion?.claseTarifaId ?? null;
+    const tarifasPorServicio = await this.tarifasVigentesPorServicio(fecha, administracionId, claseTarifaId);
 
     if (!Object.keys(tarifasPorServicio).length) {
       throw new BadRequestException(
@@ -151,7 +171,16 @@ export class FacturacionService {
     const consumo = await this.prisma.consumo.findUnique({
       where: { id: consumoId },
       include: {
-        contrato: { select: { id: true, nombre: true, zonaId: true, indicadorExentarFacturacion: true, estado: true } },
+        contrato: {
+          select: {
+            id: true,
+            nombre: true,
+            zonaId: true,
+            indicadorExentarFacturacion: true,
+            estado: true,
+            tipoContratacion: { select: { claseTarifaId: true } },
+          },
+        },
         timbrado: { select: { id: true } },
       },
     });
@@ -242,7 +271,16 @@ export class FacturacionService {
           ...(params.zonaId && { zonaId: params.zonaId }),
         },
       },
-      include: { contrato: { select: { id: true, nombre: true, zonaId: true } } },
+      include: {
+        contrato: {
+          select: {
+            id: true,
+            nombre: true,
+            zonaId: true,
+            tipoContratacion: { select: { claseTarifaId: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }

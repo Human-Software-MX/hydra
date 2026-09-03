@@ -130,9 +130,76 @@ Los campos de material y metros vienen de `CuantificacionData` con fallback a `S
 
 ---
 
+## 3. Catálogo en base de datos: versionado, Kardex y clasificación fiscal (2026-09)
+
+Fuente de verdad para facturación y para la pantalla `/app/tarifas`. Contrato de API completo en
+`docs/tarifas-kardex-api.md`.
+
+### Modelo
+
+| Tabla | Rol |
+|-------|-----|
+| `categorias_tarifa` | Clasificación principal/fiscal: DOMESTICA (IVA 0 %), COMERCIAL, INDUSTRIAL, PUBLICO, BENEFICENCIA, GANADERO, GENERAL (16 %). |
+| `clases_tarifa` | Tipo de tarifa / variante comercial (DOMÉSTICA MEDIO, DOMÉSTICO ALTO, PÚBLICO OFICIAL, …). `iva_pct` nulo = hereda de la categoría; `sige_tps_id` = `tipo_punto_servicio` del SIGE. |
+| `tarifas` | Una fila por **versión** de precio. Linaje = `codigo` (`EXP-01:agua:DOM_MEDIO`); `(codigo, version)` único; `tarifa_anterior_id` enlaza versiones; vigencia por `vigencia_desde`/`vigencia_hasta`; `iva_pct` = IVA aplicado en esa versión. |
+| `tarifa_movimientos` | Kardex: valores anteriores/nuevos (snapshot), tipo (ALTA, CAMBIO_VALOR, AJUSTE_PORCENTUAL, AJUSTE_MASIVO, CAMBIO_FISCAL), %, vigencia, motivo, usuario, lote. |
+| `actualizaciones_tarifarias` | Cabecera de lote masivo (porcentaje, filtro, total de tarifas). |
+| `tipos_contratacion.clase_tarifa_id` | Qué clase factura cada tipo de contratación → la facturación resuelve la tarifa por administración + clase. |
+
+### Tipos de cálculo
+
+- `tabla`: `precios[m3]` = importe acumulado para 0..200 m³ (hoja «AGUA POTABLE PERIODICAS M3»); para
+  > 200 m³: `cuotaFija + precioUnitario × m3` (fila «> 200»). Los m³ fraccionarios se redondean: fracción > 0.5 sube.
+- `lineal`: `cuotaFija + precioUnitario × cantidad` (hojas FIJAS y POR CONCEPTO FIJO).
+- `escalonado` / `variable` / `fijo`: sin cambios (motor previo).
+
+### Supuestos y decisiones pendientes de confirmar con el dueño del tarifario
+
+- **Fila «> 200 m³» (hojas AGUA POTABLE y AGUA TRATADA):** se interpreta igual que el motor previo del
+  wizard (`frontend/src/lib/tarifas.ts`): `cuotaFija + precioUnitario × m3` sobre TODO el consumo, donde
+  `cuotaFija` = PRECIO BASE de esa fila (coincide con `precios[0]`) y `precioUnitario` = M3 ADICIONAL. Con los
+  datos de feb-2026 esto produce un salto en 200→201 m³ (a la baja en 50 de 153 tablas, p. ej. BENEFICENCIA QRO
+  8,738.50 → 8,691.44; al alza en el resto). La lectura alternativa «excedente» sería
+  `precios[200] + precioUnitario × (m3 − 200)`. Hasta confirmar, se conserva la lectura del motor previo.
+- **IVA 0 % doméstico en CFDI:** `timbrado.service.ts` (preexistente) mapea `ivaPct = 0` a `ObjetoImp = 01`
+  (no objeto). Si el criterio fiscal es «tasa 0 %» (LIVA 2-A, agua para uso doméstico), debe mapearse a
+  `ObjetoImp = 02` con `TasaOCuota = 0.000000`; el `cfdi-builder` ya lo soporta. Decisión del responsable fiscal.
+- **Servicios periódicos adicionales:** `SERVICIOS_FACTURABLES` sigue siendo `agua | saneamiento | alcantarillado`.
+  Los conceptos del Excel (`cargo_medidor`, `*_periodico`, pipas, materiales) se siembran como tarifas
+  consultables/actualizables pero NO entran en la facturación automática hasta decidir cuáles son periódicos.
+- **Zona horaria:** las vigencias se normalizan a medianoche local del servidor y la versión anterior se cierra
+  1 ms antes; el despliegue debe fijar `TZ=America/Mexico_City` para que la frontera coincida con el periodo.
+- **Contratos sin clase:** un contrato cuyo tipo de contratación no tiene `claseTarifaId` solo ve tarifas sin
+  clase (comportamiento previo). El seed enlaza los 172 tipos SIGE; revisar el log «sin resolver» tras cada carga.
+
+### Reglas de versionado
+
+1. Nunca se hace UPDATE de valores sobre una versión: `POST /tarifas/:id/actualizar` (individual, % o valores)
+   o `POST /tarifas/actualizaciones/aplicar` (masiva, con `preview` previo) crean una versión nueva.
+2. La versión anterior se cierra con `vigencia_hasta = nueva vigencia − 1 ms`; facturar un periodo pasado
+   sigue tomando la versión vigente entonces.
+3. Porcentajes: precios a 4 decimales (`redondear4`); importes facturados a 2 (`redondear`). El IVA nunca
+   se ajusta por porcentaje; se cambia desde el configurador fiscal (categoría/clase) y genera versiones
+   `CAMBIO_FISCAL` en las tarifas vigentes afectadas.
+
+### Carga inicial y actualización de datos
+
+```bash
+cd backend
+npm run export:tarifas-periodicas-json -- "../docs/Tarifas_periodicas.xlsx"   # → prisma/data/tarifas-periodicas.json
+npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed-catalogos.ts   # seedTarifasPeriodicas (idempotente)
+```
+
+El seed solo da de alta linajes (`codigo`) inexistentes y catálogos que falten: nunca reescribe versiones ni
+pisa el IVA editado desde la UI. Para publicar una nueva tabla oficial se usa la actualización masiva (o una
+migración de datos explícita), no el re-seed.
+
 ## Tareas pendientes
 
-- [ ] Incrementales automáticos (% o directo) sobre tarifas existentes
-- [ ] Modificaciones masivas por administración desde UI
-- [ ] Vigencias históricas (CSV actual es solo Feb-2026)
-- [ ] Backend: tablas con vigencias en lugar de JSON estático
+- [x] Incrementales automáticos (% o directo) sobre tarifas existentes → `POST /tarifas/:id/actualizar`
+- [x] Modificaciones masivas por administración/categoría/clase/servicio desde UI → actualización masiva con preview
+- [x] Vigencias históricas → versionado por fila + Kardex (`tarifa_movimientos`)
+- [x] Backend: tablas con vigencias en lugar de JSON estático (facturación resuelve por administración + clase)
+- [ ] Migrar el motor offline del wizard (`frontend/src/lib/tarifas.ts` + `tarifas-agua.json`) a `GET /tarifas/vigentes`
+- [ ] Alcantarillado/saneamiento periódicos como % del agua (hoy solo en el motor offline; la BD tiene filas demo)
+- [ ] Vincular `Contrato` directamente a una clase cuando difiera de su tipo de contratación (trámite «Cambio de tarifa»)

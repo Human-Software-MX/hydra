@@ -293,6 +293,12 @@ const mutation = useMutation({ mutationFn: apiCall, onSuccess: () => queryClient
   - Backend: `domicilios.service.ts` filtra colonias por `localidadId` (antes por `municipioId`)
   - Frontend: `domicilios-inegi.ts` — interfaces actualizadas con campos Aquasis
 
+- **Tarifas: versionado, Kardex y clasificación fiscal** (2026-09-03)
+  - Modelo: `CategoriaTarifa` (IVA por defecto; DOMESTICA = 0) → `ClaseTarifa` (variantes, IVA heredado u override, `sigeTpsId`) → `Tarifa` versionada por fila (`codigo` + `version`, `tarifaAnteriorId`, vigencias) + `TarifaMovimiento` (Kardex). `TipoContratacion.claseTarifaId` enlaza contrato → clase.
+  - Datos: `docs/Tarifas_periodicas.xlsx` → `npm run export:tarifas-periodicas-json` → `backend/prisma/data/tarifas-periodicas.json` → `seedTarifasPeriodicas` (idempotente, no reescribe historia).
+  - API y reglas: `docs/tarifas-kardex-api.md`; motor: `docs/motor-tarifas.md` §3. Facturación resuelve tarifas por administración + clase y soporta `tabla`/`lineal`.
+  - UI `/app/tarifas`: vigentes con filtros, actualizar (%/valores), actualización masiva con preview, Kardex, configuración fiscal.
+
 ### 🔧 Pendiente / En progreso
 - Aplicar migración DB en servidor: `requiereInspeccion = false` para tipos INDIVIDUAL
   - Archivo: `backend/prisma/migrations/20260420150000_individual_no_requiere_inspeccion/migration.sql`

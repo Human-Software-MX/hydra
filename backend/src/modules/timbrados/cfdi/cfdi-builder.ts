@@ -127,15 +127,35 @@ export function construirCfdiXml(input: CfdiComprobanteInput): { xml: string; to
     })
     .join('');
 
+  // Traslados a nivel comprobante: un renglón por tasa distinta, con Base = suma de
+  // los importes gravados de esa tasa (no el subtotal: los conceptos no objeto de
+  // impuesto — ObjetoImp '01' — no forman parte de la base gravable).
+  const trasladosPorTasa = new Map<number, { base: number; importe: number }>();
+  for (const c of input.conceptos) {
+    if (c.objetoImp !== '02' || c.ivaTasa === undefined) continue;
+    const acc = trasladosPorTasa.get(c.ivaTasa) ?? { base: 0, importe: 0 };
+    acc.base = redondear2(acc.base + c.importe);
+    acc.importe = redondear2(acc.importe + (c.ivaImporte ?? 0));
+    trasladosPorTasa.set(c.ivaTasa, acc);
+  }
+
   const impuestosXml = hayTraslados
     ? `<cfdi:Impuestos ${attrs({ TotalImpuestosTrasladados: n(totales.totalTraslados) })}>` +
-      `<cfdi:Traslados><cfdi:Traslado ${attrs({
-        Base: n(totales.subtotal),
-        Impuesto: '002',
-        TipoFactor: 'Tasa',
-        TasaOCuota: n(0.16, 6),
-        Importe: n(totales.totalTraslados),
-      })}/></cfdi:Traslados></cfdi:Impuestos>`
+      '<cfdi:Traslados>' +
+      [...trasladosPorTasa.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(
+          ([tasa, { base, importe }]) =>
+            `<cfdi:Traslado ${attrs({
+              Base: n(base),
+              Impuesto: '002',
+              TipoFactor: 'Tasa',
+              TasaOCuota: n(tasa, 6),
+              Importe: n(importe),
+            })}/>`,
+        )
+        .join('') +
+      '</cfdi:Traslados></cfdi:Impuestos>'
     : '';
 
   const comprobanteAttrs = attrs({

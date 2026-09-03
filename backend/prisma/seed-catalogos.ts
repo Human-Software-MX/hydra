@@ -23,6 +23,7 @@ import {
   importCatalogosTiposContratacion,
   linkHydraClausulasToAllTipos,
 } from './catalogos-tipos-contratacion-import';
+import { seedTarifasPeriodicas } from './tarifas-periodicas-import';
 import { resolveDataFile } from './data-dir';
 
 type ActividadSigeRow = { actipolid: number; actividad: string };
@@ -1118,6 +1119,7 @@ export async function seedCatalogos(prisma: PrismaClient): Promise<void> {
   await seedFormasPagoOficinas(prisma);
   await seedSectoresClasesVariables(prisma);
   await importCatalogosTiposContratacion(prisma, { removeLegacyStubTipos: true });
+  await seedTarifasPeriodicas(prisma);
   await linkHydraClausulasToAllTipos(prisma);
   await seedInegiQueretaro(prisma);
   await seedPlantillaHydra(prisma);
