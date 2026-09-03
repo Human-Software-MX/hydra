@@ -53,6 +53,51 @@ export class CatalogosContratacionController {
     return this.service.updateConceptoCobro(id, body);
   }
 
+  // ─── Catálogo de Documentos ───────────────────────────────────────────────
+
+  @Get('documentos')
+  findCatalogoDocumentos(
+    @Query('activo') activo?: string,
+    @Query('clasificacion') clasificacion?: string,
+  ) {
+    return this.service.findCatalogoDocumentos({ activo, clasificacion });
+  }
+
+  @Post('documentos')
+  createCatalogoDocumento(
+    @Body() body: { nombre: string; presentacion?: string; clasificacion?: string },
+  ) {
+    return this.service.createCatalogoDocumento(body);
+  }
+
+  @Patch('documentos/:id')
+  updateCatalogoDocumento(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      nombre?: string;
+      presentacion?: string | null;
+      clasificacion?: string | null;
+      activo?: boolean;
+    },
+  ) {
+    return this.service.updateCatalogoDocumento(id, body);
+  }
+
+  @Post('documentos/asignacion-masiva')
+  asignarDocumentoMasivo(
+    @Body()
+    body: {
+      documentoId: string;
+      tipoContratacionIds?: string[];
+      filtro?: { administracionId?: string; nombreContiene?: string };
+      obligatorio?: boolean;
+      aplicaUso?: string;
+    },
+  ) {
+    return this.service.asignarDocumentoMasivo(body);
+  }
+
   // ─── Cláusulas Contractuales ──────────────────────────────────────────────
 
   @Get('clausulas')

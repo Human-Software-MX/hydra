@@ -37,7 +37,9 @@ export default function PasoDocumentos({ data, updateData, config }: StepProps) 
     if (config?.documentos?.length) {
       return config.documentos.map((d) => ({
         id: d.id,
-        nombre: (d.nombreDocumento ?? '').trim() || d.id,
+        nombre:
+          d.documento?.nombre ??
+          ((d.nombreDocumento ?? '').trim() || d.id),
       }));
     }
     return CATALOGO_DOCUMENTOS;

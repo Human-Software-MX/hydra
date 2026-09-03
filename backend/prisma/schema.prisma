@@ -1524,16 +1524,53 @@ model ClausulaTipoContratacion {
   @@map("clausulas_tipo_contratacion")
 }
 
-model DocumentoRequeridoTipoContratacion {
-  id                 String           @id @default(cuid())
-  tipoContratacionId String           @map("tipo_contratacion_id")
-  nombreDocumento    String           @map("nombre_documento")
-  obligatorio        Boolean          @default(true)
-  descripcion        String?
-  createdAt          DateTime         @default(now()) @map("created_at")
-  tipoContratacion   TipoContratacion @relation(fields: [tipoContratacionId], references: [id], onDelete: Cascade)
+/// Catálogo maestro de documentos que el ciudadano puede entregar en un trámite.
+/// Fuente inicial: hoja «documento» del catálogo SIGE (columna dconid).
+/// La relación con tipos de contratación vive en DocumentoRequeridoTipoContratacion;
+/// SIGE traía esa relación degenerada (todos los tipos × todos los documentos), por lo
+/// que el mapeo real lo cura CEA — este catálogo solo define QUÉ documentos existen.
+model CatalogoDocumento {
+  id            String                               @id @default(cuid())
+  codigoSige    Int?                                 @unique @map("codigo_sige")
+  nombre        String
+  /// Presentación exigida: ORIGINAL | COPIA | ORIGINAL_Y_COPIA (null = sin especificar)
+  presentacion  String?
+  /// Agrupador semántico para armar los dropdowns: COMUN | PERSONA_MORAL |
+  /// REPRESENTACION | CONDOMINAL | HIDRANTE | FACTIBILIDAD | REGULARIZACION | BAJA | OTRO
+  clasificacion String?
+  activo        Boolean                              @default(true)
+  createdAt     DateTime                             @default(now()) @map("created_at")
+  updatedAt     DateTime                             @updatedAt @map("updated_at")
+  requeridos    DocumentoRequeridoTipoContratacion[]
 
+  @@index([clasificacion])
+  @@map("catalogo_documentos")
+}
+
+model DocumentoRequeridoTipoContratacion {
+  id                 String             @id @default(cuid())
+  tipoContratacionId String             @map("tipo_contratacion_id")
+  /// FK al catálogo maestro. Nullable solo por compatibilidad con filas legacy
+  /// capturadas como texto libre; toda fila nueva debe traerla.
+  documentoId        String?            @map("documento_id")
+  /// Texto libre legacy (pre-catálogo). Para filas con documentoId es un override
+  /// opcional de display; si es null se muestra el nombre del catálogo.
+  nombreDocumento    String?            @map("nombre_documento")
+  obligatorio        Boolean            @default(true)
+  /// Rama del árbol de uso en la que aplica este requisito:
+  /// null = siempre | 'domestico' | 'no_domestico'.
+  /// Complementa al uso del propio tipo de contratación para tipos que admiten
+  /// ambos usos o requisitos condicionados.
+  aplicaUso          String?            @map("aplica_uso")
+  descripcion        String?
+  orden              Int                @default(0)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  tipoContratacion   TipoContratacion   @relation(fields: [tipoContratacionId], references: [id], onDelete: Cascade)
+  documento          CatalogoDocumento? @relation(fields: [documentoId], references: [id], onDelete: Restrict)
+
+  @@unique([tipoContratacionId, documentoId])
   @@index([tipoContratacionId])
+  @@index([documentoId])
   @@map("documentos_requeridos_tipo_contratacion")
 }
 
