@@ -10,6 +10,7 @@ import { KpiCard } from '@/components/KpiCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -278,22 +279,25 @@ const Lecturas = () => {
             <div className="bg-white rounded-xl border border-border/50 shadow-sm p-5">
               <h3 className="text-sm font-semibold mb-3">Captura de lectura</h3>
               <div className="space-y-3">
-            <Select
+            <SearchableSelect
               value={selectedRuta}
               onValueChange={(v) => {
                 setSelectedRuta(v);
                 setCaptureContratoId('');
               }}
-            >
-              <SelectTrigger><SelectValue placeholder="Seleccionar ruta" /></SelectTrigger>
-              <SelectContent>{rutasVisibles.map(r => <SelectItem key={r.id} value={r.id}>{getZonaNombre(r.zonaId)} - {r.sector} ({r.lecturista})</SelectItem>)}</SelectContent>
-            </Select>
+              options={rutasVisibles.map(r => ({ value: r.id, label: `${getZonaNombre(r.zonaId)} - ${r.sector} (${r.lecturista})` }))}
+              placeholder="Seleccionar ruta"
+              searchPlaceholder="Buscar ruta…"
+            />
                 {ruta && (
                   <>
-                    <Select value={captureContratoId} onValueChange={setCaptureContratoId}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar contrato" /></SelectTrigger>
-                      <SelectContent>{rutaContratos.map(c => <SelectItem key={c.id} value={c.id}>{c.id} - {c.nombre}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={captureContratoId}
+                      onValueChange={setCaptureContratoId}
+                      options={rutaContratos.map(c => ({ value: c.id, label: `${c.id} - ${c.nombre}` }))}
+                      placeholder="Seleccionar contrato"
+                      searchPlaceholder="Buscar contrato…"
+                    />
                     {lecturaAnteriorParaCaptura != null && (
                       <p className="text-sm text-muted-foreground">Lectura anterior para este contrato: <strong>{lecturaAnteriorParaCaptura} m³</strong></p>
                     )}
@@ -320,12 +324,13 @@ const Lecturas = () => {
                     value={uploadPeriodo}
                     onChange={e => setUploadPeriodo(e.target.value)}
                   />
-                  <Select value={uploadZona} onValueChange={setUploadZona}>
-                    <SelectTrigger><SelectValue placeholder="Zona (opcional)" /></SelectTrigger>
-                    <SelectContent>
-                      {zonasVisibles.map(z => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={uploadZona}
+                    onValueChange={setUploadZona}
+                    options={zonasVisibles.map(z => ({ value: z.id, label: z.nombre }))}
+                    placeholder="Zona (opcional)"
+                    searchPlaceholder="Buscar zona…"
+                  />
                 </div>
 
                 <div
@@ -505,27 +510,30 @@ const Lecturas = () => {
 
         <TabsContent value="historial" className="space-y-4">
           <div className="flex flex-wrap gap-2 items-center">
-            <Select value={filtroRuta} onValueChange={v => { setFiltroRuta(v); setPage(1); }}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Ruta" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las rutas</SelectItem>
-                {rutasVisibles.map(r => <SelectItem key={r.id} value={r.id}>{getZonaNombre(r.zonaId)} - {r.sector}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={filtroZona} onValueChange={v => { setFiltroZona(v); setPage(1); }}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Zona" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {zonas.map(z => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={filtroContrato} onValueChange={v => { setFiltroContrato(v); setPage(1); }}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Contrato" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {contratos.map(c => <SelectItem key={c.id} value={c.id}>{c.id}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={filtroRuta}
+              onValueChange={v => { setFiltroRuta(v); setPage(1); }}
+              options={[{ value: 'all', label: 'Todas las rutas' }, ...rutasVisibles.map(r => ({ value: r.id, label: `${getZonaNombre(r.zonaId)} - ${r.sector}` }))]}
+              placeholder="Ruta"
+              searchPlaceholder="Buscar ruta…"
+              className="w-[160px]"
+            />
+            <SearchableSelect
+              value={filtroZona}
+              onValueChange={v => { setFiltroZona(v); setPage(1); }}
+              options={[{ value: 'all', label: 'Todas' }, ...zonas.map(z => ({ value: z.id, label: z.nombre }))]}
+              placeholder="Zona"
+              searchPlaceholder="Buscar zona…"
+              className="w-[140px]"
+            />
+            <SearchableSelect
+              value={filtroContrato}
+              onValueChange={v => { setFiltroContrato(v); setPage(1); }}
+              options={[{ value: 'all', label: 'Todos' }, ...contratos.map(c => ({ value: c.id, label: c.id }))]}
+              placeholder="Contrato"
+              searchPlaceholder="Buscar contrato…"
+              className="w-[140px]"
+            />
             <Select value={filtroEstado} onValueChange={v => { setFiltroEstado(v); setPage(1); }}>
               <SelectTrigger className="w-[130px]"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>

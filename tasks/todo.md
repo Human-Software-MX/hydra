@@ -396,3 +396,31 @@ Riesgo #1 para el review (logueado en bugs.md): `Dashboard.tsx` agrega listas de
 - Grupos dinámicos desde `groupRoutesBySection`; "General" se renderiza como ítems sueltos (STANDALONE_GROUPS).
 - Estado abierto/cerrado en localStorage clave `hydra.sidebar.openGroups`.
 - Pendiente decidido: botones Soporte/Configuración del bloque inferior sin acción (igual que antes; no hay destino definido).
+
+---
+
+# Selectores de nodos → SearchableSelect (drop-down con búsqueda) — 2026-09-02
+
+Contexto: la petición hablaba de "DripSearch"; no existe en Hydra. Se interpreta como
+"drop-down search" y se reutiliza el patrón existente `components/ui/searchable-select.tsx`.
+"Nodo" = entidad de la red de servicio (zona, sector hidráulico, distrito, ruta,
+punto/construcción, contrato, medidor). No se tocan dropdowns de enums fijos ni catálogos.
+
+- [x] Lecturas.tsx: ruta + contrato (captura), zona (carga masiva), ruta/zona/contrato (filtros historial)
+- [x] Medidores.tsx: zona (filtro), medidor bodega + contrato pendiente + zona (asignar)
+- [x] PreFacturacion.tsx / TimbradoPage.tsx: zona (filtro cabecera)
+- [x] Rutas.tsx: zona (nueva ruta)
+- [x] Tomas.tsx: construcción finalizada (nueva toma)
+- [x] AjustesFacturacion.tsx: contrato (filtro)
+- [x] PuntosServicio.tsx: sector hidráulico (127 opciones) + distrito
+- [x] Limpiar imports de Select que queden sin uso
+- [x] tsc --noEmit + build
+
+## Review
+
+- 17 selectores migrados en 8 archivos; `SearchableSelect` (Command + Popover) sin cambios en el componente compartido.
+- Valores almacenados, sentinelas `'all'`, `onValueChange` con side-effects (reset de contrato/página) y clases de ancho/error preservados.
+- Único cambio visual además del combobox: el filtro de contrato en AjustesFacturacion pierde el icono `Filter` dentro del trigger (SearchableSelect no admite icono); import huérfano eliminado.
+- Excluidos a propósito: dropdowns de Administración (13 opciones fijas, entidad organizativa) y catálogos (calibre, tipo suministro, estructura, tipo corte, enums de estado).
+- Verificado: `tsc --noEmit` OK, `eslint` sin errores (3 warnings preexistentes), `vite build` OK. NO verificado en navegador (backend/Docker apagados).
+- `frontend/node_modules` en el worktree es una junction al checkout principal (ignorada por git).
