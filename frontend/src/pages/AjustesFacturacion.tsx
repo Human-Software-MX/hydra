@@ -1,6 +1,6 @@
 import { Fragment, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Filter, Info, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Info, Search } from 'lucide-react';
 import {
   useData,
   TIPOS_AJUSTE_FACTURACION,
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Dialog,
   DialogContent,
@@ -408,18 +409,14 @@ const AjustesFacturacion = () => {
               </Button>
             ))}
           </div>
-          <Select value={contratoIdFilter || 'all'} onValueChange={(v) => setContratoIdFilter(v === 'all' ? '' : v)}>
-            <SelectTrigger id="ajuste-contrato" className="h-8 text-sm w-40">
-              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="Contrato" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los contratos</SelectItem>
-              {contratos.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.id}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={contratoIdFilter || 'all'}
+            onValueChange={(v) => setContratoIdFilter(v === 'all' ? '' : v)}
+            options={[{ value: 'all', label: 'Todos los contratos' }, ...contratos.map((c) => ({ value: c.id, label: c.id }))]}
+            placeholder="Contrato"
+            searchPlaceholder="Buscar contrato…"
+            className="h-8 text-sm w-40"
+          />
           <Select value={filtroEstado} onValueChange={setFiltroEstado}>
             <SelectTrigger className="h-8 text-sm w-40">
               <SelectValue placeholder="Estado" />
