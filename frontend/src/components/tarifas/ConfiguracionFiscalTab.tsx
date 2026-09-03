@@ -194,7 +194,7 @@ export function ConfiguracionFiscalTab({ useApi }: Props) {
       ))}
 
       <Dialog open={Boolean(cambio)} onOpenChange={(o) => !o && !mutation.isPending && setCambio(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden [&>*]:min-w-0">
           <DialogHeader>
             <DialogTitle>Cambiar configuración fiscal</DialogTitle>
             <DialogDescription>
