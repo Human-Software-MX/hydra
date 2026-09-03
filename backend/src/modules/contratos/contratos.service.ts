@@ -52,12 +52,13 @@ async function loadNombreDocumentosObligatorios(
 ): Promise<string[]> {
   const rows = await db.documentoRequeridoTipoContratacion.findMany({
     where: { tipoContratacionId, obligatorio: true },
-    select: { nombreDocumento: true },
+    select: { nombreDocumento: true, documento: { select: { nombre: true } } },
   });
   return [
     ...new Set(
       rows
-        .map((r) => r.nombreDocumento.trim())
+        // nombreDocumento es texto libre legacy; las filas nuevas traen el nombre vía catálogo
+        .map((r) => (r.documento?.nombre ?? r.nombreDocumento ?? '').trim())
         .filter((n) => n.length > 0),
     ),
   ];
