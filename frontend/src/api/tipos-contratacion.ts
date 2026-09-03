@@ -117,6 +117,8 @@ export function fetchTiposContratacion(params?: {
   page?: number;
   limit?: number;
   administracionId?: string;
+  /** Rama del árbol de uso ('domestico' | 'no_domestico'); el backend filtra por la categoría tarifaria del tipo. */
+  uso?: 'domestico' | 'no_domestico';
 }) {
   const q = new URLSearchParams();
   q.set('page', String(params?.page ?? 1));
@@ -125,6 +127,7 @@ export function fetchTiposContratacion(params?: {
   if (params?.activo === false) q.set('activo', 'false');
   const aid = params?.administracionId?.trim();
   if (aid) q.set('administracionId', aid);
+  if (params?.uso) q.set('uso', params.uso);
   return apiRequest<{ data: TipoContratacion[]; total: number }>(
     `/tipos-contratacion?${q.toString()}`,
   );

@@ -7,8 +7,8 @@ export class CatalogosOperativosController {
   constructor(private readonly service: CatalogosOperativosService) {}
 
   @Get('administraciones')
-  getAdministraciones() {
-    return this.service.findAdministraciones();
+  getAdministraciones(@Query('uso') uso?: string) {
+    return this.service.findAdministraciones({ uso });
   }
 
   // ─── Marcas de Medidor ─────────────────────────────────────────────────────

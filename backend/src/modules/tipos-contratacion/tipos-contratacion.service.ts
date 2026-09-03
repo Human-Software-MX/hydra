@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { CatalogoSatTipo } from '@prisma/client';
+import { CatalogoSatTipo, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 interface CreateTipoContratacionDto {
@@ -47,6 +47,25 @@ function parseAplicaUso(v?: string): string | null {
   throw new BadRequestException(`aplicaUso '${v}' inválido: use 'domestico', 'no_domestico' u omita`);
 }
 
+/** Código de la categoría tarifaria de uso habitacional (IVA 0). */
+const CATEGORIA_DOMESTICA = 'DOMESTICA';
+
+/**
+ * Traduce el uso elegido en la solicitud («¿Uso que desea contratar?») a un filtro
+ * sobre la categoría tarifaria del tipo. undefined = sin filtrar.
+ */
+function usoWhere(uso?: string): Prisma.TipoContratacionWhereInput {
+  const v = uso?.trim().toLowerCase();
+  if (!v) return {};
+  if (v === 'domestico' || v === 'doméstico') {
+    return { claseTarifa: { categoria: { codigo: CATEGORIA_DOMESTICA } } };
+  }
+  if (v === 'no_domestico' || v === 'no-domestico') {
+    return { claseTarifa: { categoria: { codigo: { not: CATEGORIA_DOMESTICA } } } };
+  }
+  throw new BadRequestException(`uso '${uso}' inválido: use 'domestico' o 'no_domestico'`);
+}
+
 @Injectable()
 export class TiposContratacionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -58,24 +77,37 @@ export class TiposContratacionService {
     page?: number;
     limit?: number;
     administracionId?: string;
+    uso?: string;
   }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 50;
     const adminId = params.administracionId?.trim();
     // Tipos sin administración (NULL) son catálogo global y deben ofrecerse en cualquier administración;
     // los que tienen administración restringen a esa sede.
-    const where: Record<string, unknown> = {
+    // Filtro por uso: doméstico = la clase tarifaria del tipo pertenece a la categoría
+    // DOMESTICA (cadena claseTarifa → categoria del seed de tarifas periódicas). El filtro
+    // es estricto: un tipo sin clase tarifaria no puede afirmarse doméstico ni no doméstico,
+    // así que se omite de ambas ramas en lugar de colarse.
+    const where: Prisma.TipoContratacionWhereInput = {
       ...(params.activo !== undefined && { activo: params.activo === 'true' }),
       ...(adminId
         ? {
             OR: [{ administracionId: adminId }, { administracionId: null }],
           }
         : {}),
+      ...usoWhere(params.uso),
     };
     const [data, total] = await Promise.all([
       this.prisma.tipoContratacion.findMany({
         where,
         include: {
+          claseTarifa: {
+            select: {
+              codigo: true,
+              nombre: true,
+              categoria: { select: { codigo: true, nombre: true } },
+            },
+          },
           _count: { select: { contratos: true, conceptos: true, clausulas: true, documentos: true } },
         },
         orderBy: { codigo: 'asc' },

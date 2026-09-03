@@ -150,8 +150,12 @@ export interface AdministracionCatalogo {
   nombre: string;
 }
 
-export const fetchAdministraciones = () =>
-  apiRequest<AdministracionCatalogo[]>('/catalogos-operativos/administraciones');
+export const fetchAdministraciones = (params?: { uso?: 'domestico' | 'no_domestico' }) =>
+  apiRequest<AdministracionCatalogo[]>(
+    params?.uso
+      ? `/catalogos-operativos/administraciones?uso=${params.uso}`
+      : '/catalogos-operativos/administraciones',
+  );
 
 // ── Catálogos Operativos (medidores, pagos, oficinas, contratación) ──────────
 

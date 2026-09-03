@@ -523,7 +523,19 @@ function StepSolicitud({ form, set }: { form: SolicitudState; set: (p: Partial<S
             { value: 'no', label: 'No Doméstico', sub: '(comercial, industrial, otros)' },
           ]}
           value={form.usoDomestico}
-          onChange={(v) => set({ usoDomestico: v as 'si' | 'no', hayInfraCEA: '', esCondominio: '', ...resetCondo })}
+          onChange={(v) =>
+            set({
+              usoDomestico: v as 'si' | 'no',
+              hayInfraCEA: '',
+              esCondominio: '',
+              // La rama de uso decide administraciones y tipos: al cambiarla se
+              // invalida lo elegido en el paso Contratación.
+              adminId: '',
+              tipoContratacionId: '',
+              tipoContratacionCodigo: '',
+              ...resetCondo,
+            })
+          }
         />
       </div>
 
@@ -797,21 +809,26 @@ const OPCIONES_RESERVADAS_SOL: Record<string, { label: string; value: string }[]
 
 function StepContratacion({ form, set }: { form: SolicitudState; set: (p: Partial<SolicitudState>) => void }) {
   const useApi = hasApi();
+  // Rama del árbol de uso elegida en el paso Solicitud: de ella dependen las
+  // administraciones y los tipos de contratación que se ofrecen.
+  const ramaUso: 'domestico' | 'no_domestico' | undefined =
+    form.usoDomestico === 'si' ? 'domestico' : form.usoDomestico === 'no' ? 'no_domestico' : undefined;
   const { data: administraciones = [], isLoading: adminsLoading, isError: adminsError } = useQuery({
-    queryKey: ['catalogos-operativos', 'administraciones'],
-    queryFn: fetchAdministraciones,
+    queryKey: ['catalogos-operativos', 'administraciones', ramaUso ?? 'todas'],
+    queryFn: () => fetchAdministraciones(ramaUso ? { uso: ramaUso } : undefined),
     enabled: useApi,
     staleTime: 60 * 60 * 1000,
   });
 
   const { data: tiposRes, isLoading: tiposLoading, isError: tiposError } = useQuery({
-    queryKey: ['tipos-contratacion', form.adminId, 'solicitud-servicio'],
+    queryKey: ['tipos-contratacion', form.adminId, ramaUso ?? 'todas', 'solicitud-servicio'],
     queryFn: () =>
       fetchTiposContratacion({
         administracionId: form.adminId,
         activo: true,
         page: 1,
         limit: 200,
+        uso: ramaUso,
       }),
     enabled: useApi && !!form.adminId,
   });
