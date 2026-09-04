@@ -121,3 +121,9 @@ Bugs spotted outside the task at hand. Self-contained entries; another agent wit
 - **What**: La misma etiqueta "Concreto hidráulico" tiene clave `concreto_hidraulico` en CuantificacionModal y `concreto` en el catálogo de variables (PasoVariables). Son dos catálogos paralelos para el mismo dominio.
 - **How it fails**: Si una inspección captura `MATERIAL_CALLE = 'concreto'` (clave de PasoVariables) y ese valor llega a CuantificacionModal vía `vc.MATERIAL_CALLE`, el select cae al placeholder y el input read-only muestra la clave cruda en vez de la etiqueta. Preexistente al cambio a SearchableSelect (el Select original se comportaba igual).
 - Status: pending, 2026-09-03
+
+## Valor legado de DIAMETRO_TOMA en seed-catalogos
+- **Where**: `backend/prisma/seed-catalogos.ts:657`
+- **What**: `valoresPosibles` de la variable DIAMETRO_TOMA siembra `'1-1/2"'` mientras la migración estándar y el formulario usan `'1.5"'`. En la cotización de instalación de medidor ambos caen al grupo 1/2-3/4-1, pero el valor es inconsistente entre catálogos.
+- **How it fails**: una BD sembrada desde cero ofrece `1-1/2"` en el dropdown de la variable; el resto del sistema espera `1.5"`. Sin impacto de cálculo hoy (fallback), pero divergencia de datos.
+- Status: pending, 2026-09-03

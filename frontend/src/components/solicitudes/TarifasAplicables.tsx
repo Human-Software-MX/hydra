@@ -8,18 +8,20 @@ import {
   cotizarContratacion,
   type CotizacionContratacionDto,
 } from '@/api/tarifas';
-import { buildTarifaKey } from '@/lib/cotizacion-tarifas';
+import {
+  buildTarifaKey,
+  varianteConexionValida,
+  varianteInstalacionMedidor,
+} from '@/lib/cotizacion-tarifas';
 import type { TipoContratacion } from '@/api/tipos-contratacion';
 
 const fmtMXN = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
-/** Variante de instalación de medidor según el diámetro capturado. */
-function varianteInstalacion(diametro: string): string {
-  const d = diametro.replace(/"/g, '').trim();
-  if (d === '2') return 'Instalación Med 2 pulg';
-  if (d === '3') return 'Instalación Med 3 pulg';
-  if (d === '4') return 'Instalación Med 4 pulg';
-  return 'Instalación Med 1/2, 3/4 y 1 pulg';
+/** P3: un rechazo de cotización solo significa "sin tarifa" cuando el backend lo dice. */
+function motivoDeError(reason: unknown): string {
+  const msg = reason instanceof Error ? reason.message : String(reason ?? '');
+  if (/no hay tarifa|not ?found|404/i.test(msg)) return 'sin tarifa en esta administración';
+  return 'error al cotizar — reintente';
 }
 
 interface ConceptoCotizado {
@@ -88,6 +90,7 @@ export default function TarifasAplicables({ administracionId, tipo, variables }:
       metrosToma,
       metrosDescarga,
       diametroToma,
+      tipo?.id,
     ],
     enabled: Boolean(administracionId && tipo),
     queryFn: async (): Promise<ConceptoCotizado[]> => {
@@ -103,32 +106,54 @@ export default function TarifasAplicables({ administracionId, tipo, variables }:
           params: { administracionId, tipoServicio: 'contratacion_agua', claseTarifaId, cantidad: 0 },
         });
       }
+      const noTarifadas: ConceptoCotizado[] = [];
       if (varianteMateriales) {
-        intentos.push({
-          etiqueta: 'Derechos de conexión — agua',
-          detalle: `${varianteMateriales} · ${metrosToma || 0} m (6 incluidos en la base)`,
-          params: { administracionId, tipoServicio: 'contratacion_derechos_de_conexion_a_red_de_agua', variante: varianteMateriales, cantidad: metrosToma },
-        });
-        intentos.push({
-          etiqueta: 'Derechos de conexión — drenaje',
-          detalle: `${varianteMateriales} · ${metrosDescarga || 0} m`,
-          params: { administracionId, tipoServicio: 'contratacion_derechos_de_conexion_red_de_drenaje', variante: varianteMateriales, cantidad: metrosDescarga },
-        });
+        if (varianteConexionValida(varianteMateriales, 'agua')) {
+          intentos.push({
+            etiqueta: 'Derechos de conexión — agua',
+            detalle: `${varianteMateriales} · ${metrosToma || 0} m (6 incluidos en la base)`,
+            params: { administracionId, tipoServicio: 'contratacion_derechos_de_conexion_a_red_de_agua', variante: varianteMateriales, cantidad: metrosToma },
+          });
+        } else {
+          noTarifadas.push({
+            etiqueta: 'Derechos de conexión — agua',
+            detalle: varianteMateriales,
+            cotizacion: null,
+            error: 'combinación calle/banqueta no tarifada en el catálogo',
+          });
+        }
+        if (varianteConexionValida(varianteMateriales, 'drenaje')) {
+          intentos.push({
+            etiqueta: 'Derechos de conexión — drenaje',
+            detalle: `${varianteMateriales} · ${metrosDescarga || 0} m`,
+            params: { administracionId, tipoServicio: 'contratacion_derechos_de_conexion_red_de_drenaje', variante: varianteMateriales, cantidad: metrosDescarga },
+          });
+        } else {
+          noTarifadas.push({
+            etiqueta: 'Derechos de conexión — drenaje',
+            detalle: varianteMateriales,
+            cotizacion: null,
+            error: 'combinación calle/banqueta no tarifada en el catálogo',
+          });
+        }
       }
       if (diametroToma) {
         intentos.push({
           etiqueta: 'Instalación de medidor',
           detalle: diametroToma,
-          params: { administracionId, tipoServicio: 'contratacion_instalacion_de_medidor', variante: varianteInstalacion(diametroToma), cantidad: 0 },
+          params: { administracionId, tipoServicio: 'contratacion_instalacion_de_medidor', variante: varianteInstalacionMedidor(diametroToma), cantidad: 0 },
         });
       }
       const resultados = await Promise.allSettled(intentos.map((i) => cotizarContratacion(i.params)));
-      return intentos.map((i, idx) => {
-        const r = resultados[idx];
-        return r.status === 'fulfilled'
-          ? { etiqueta: i.etiqueta, detalle: i.detalle, cotizacion: r.value }
-          : { etiqueta: i.etiqueta, detalle: i.detalle, cotizacion: null, error: 'sin tarifa en esta administración' };
-      });
+      return [
+        ...intentos.map((i, idx) => {
+          const r = resultados[idx];
+          return r.status === 'fulfilled'
+            ? { etiqueta: i.etiqueta, detalle: i.detalle, cotizacion: r.value }
+            : { etiqueta: i.etiqueta, detalle: i.detalle, cotizacion: null, error: motivoDeError(r.reason) };
+        }),
+        ...noTarifadas,
+      ];
     },
   });
 
@@ -137,6 +162,7 @@ export default function TarifasAplicables({ administracionId, tipo, variables }:
   const periodica = periodicaQ.data?.[0];
   const conceptos = conceptosQ.data ?? [];
   const totalEstimado = conceptos.reduce((acc, c) => acc + (c.cotizacion?.total ?? 0), 0);
+  const sinTarifa = conceptos.filter((c) => !c.cotizacion).length;
   const clasesOpciones = (categoriasQ.data ?? []).flatMap((cat) =>
     (cat.clases ?? []).map((cl) => ({ value: cl.id, label: `${cl.nombre} (${cat.nombre})` })),
   );
@@ -190,6 +216,10 @@ export default function TarifasAplicables({ administracionId, tipo, variables }:
         </div>
       )}
 
+      {conceptosQ.isLoading && (
+        <p className="text-xs text-muted-foreground">Cotizando conceptos de contratación…</p>
+      )}
+
       {conceptos.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -215,7 +245,11 @@ export default function TarifasAplicables({ administracionId, tipo, variables }:
               </li>
             ))}
             <li className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold">
-              <span className="flex-1">Total estimado de contratación</span>
+              <span className="flex-1">
+                {sinTarifa > 0
+                  ? `Total parcial (${sinTarifa} concepto${sinTarifa > 1 ? 's' : ''} sin tarifa)`
+                  : 'Total estimado de contratación'}
+              </span>
               <span className="tabular-nums">{fmtMXN.format(totalEstimado)}</span>
             </li>
           </ul>
