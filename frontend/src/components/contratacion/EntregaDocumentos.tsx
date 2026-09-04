@@ -183,7 +183,7 @@ export default function EntregaDocumentos({
     const items = archivosPorClave.get(clave) ?? [];
     if (items.length === 0) return null;
     return (
-      <ul className="mt-1.5 space-y-1 pl-7">
+      <ul className="mt-1.5 space-y-1 pl-14">
         {items.map((it) =>
           it.kind === 'subido' ? (
             <li key={it.dto.id} className="flex items-center gap-2 text-xs">
@@ -234,7 +234,7 @@ export default function EntregaDocumentos({
 
       {!usarCatalogoCompleto && (
         <div className="space-y-2 rounded-md border bg-background p-3">
-          {documentosDelTipo.map((d) => {
+          {documentosDelTipo.map((d, idx) => {
             const nombre = nombreDeRequerido(d);
             const clave = d.documentoId ?? nombre;
             const checked = esRecibido(d);
@@ -242,6 +242,9 @@ export default function EntregaDocumentos({
             return (
               <div key={d.id} className="border-b pb-2 last:border-b-0 last:pb-0">
                 <div className="flex items-center gap-2.5">
+                  <span className="w-6 shrink-0 text-right text-xs font-medium tabular-nums text-muted-foreground">
+                    {idx + 1}.
+                  </span>
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-input accent-primary"
