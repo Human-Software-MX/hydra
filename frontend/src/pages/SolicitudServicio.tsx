@@ -816,6 +816,22 @@ function StepContratacion({
   onPendientesChange?: (p: ArchivoPendiente[]) => void;
 }) {
   const useApi = hasApi();
+  // ── Precarga de administración desde el predio (pin del mapa / cascada INEGI) ──
+  // La localidad manda sobre el municipio: Santa Rosa Jáuregui es localidad del
+  // municipio de Querétaro pero tiene administración propia.
+  const predioMpioQ = useQuery({
+    queryKey: ['inegi-mpios-admin', form.predioDir.estadoINEGIId],
+    queryFn: () => fetchInegiMunicipiosCatalogo({ estadoId: form.predioDir.estadoINEGIId, limit: 200 }),
+    enabled: useApi && !form.adminId && Boolean(form.predioDir.estadoINEGIId && form.predioDir.municipioINEGIId),
+    staleTime: 60 * 60 * 1000,
+  });
+  const predioLocQ = useQuery({
+    queryKey: ['inegi-locs-admin', form.predioDir.municipioINEGIId],
+    queryFn: () => fetchInegiLocalidadesCatalogo({ municipioId: form.predioDir.municipioINEGIId, limit: 500 }),
+    enabled: useApi && !form.adminId && Boolean(form.predioDir.municipioINEGIId && form.predioDir.localidadINEGIId),
+    staleTime: 60 * 60 * 1000,
+  });
+
   // Rama del árbol de uso elegida en el paso Solicitud: de ella dependen las
   // administraciones y los tipos de contratación que se ofrecen.
   const ramaUso: 'domestico' | 'no_domestico' | undefined =
@@ -846,6 +862,30 @@ function StepContratacion({
     enabled: useApi,
     staleTime: 60 * 60 * 1000,
   });
+
+  useEffect(() => {
+    if (form.adminId || administraciones.length === 0) return;
+    const normaliza = (x: string) =>
+      x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+    const busca = (nombre?: string) => {
+      if (!nombre) return undefined;
+      const n = normaliza(nombre);
+      return administraciones.find((a) =>
+        a.nombre.split(/[-/]/).some((seg) => {
+          const sn = normaliza(seg);
+          return sn === n || sn.includes(n) || n.includes(sn);
+        }),
+      );
+    };
+    const locNombre = predioLocQ.data?.data?.find((l) => l.id === form.predioDir.localidadINEGIId)?.nombre;
+    const mpioNombre = predioMpioQ.data?.data?.find((m) => m.id === form.predioDir.municipioINEGIId)?.nombre;
+    const admin = busca(locNombre) ?? busca(mpioNombre);
+    if (admin) {
+      set({ adminId: admin.id, tipoContratacionId: '', tipoContratacionCodigo: '' });
+      toast.success(`Administración precargada desde el predio: ${admin.nombre}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [administraciones, predioLocQ.data, predioMpioQ.data]);
 
   const esAdminQueretaro = form.adminId
     ? /quer[eé]taro/i.test(administraciones.find((a) => a.id === form.adminId)?.nombre ?? '')
@@ -1244,10 +1284,26 @@ function StepFiscal({
               </div>
 
               <Separator />
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Domicilio fiscal
-                {locked && <span className="ml-2 font-normal normal-case text-muted-foreground/70">(precargado del propietario)</span>}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Domicilio fiscal
+                  {locked && <span className="ml-2 font-normal normal-case text-muted-foreground/70">(precargado del propietario)</span>}
+                </p>
+                {!locked && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      set({ fiscalDir: { ...form.predioDir } });
+                      toast.success('Domicilio fiscal copiado del predio');
+                    }}
+                  >
+                    Usar dirección del predio
+                  </Button>
+                )}
+              </div>
               <DomicilioPickerForm value={form.fiscalDir} onChange={locked ? () => {} : (v) => set({ fiscalDir: v })} disabled={locked} />
 
               <div className="grid gap-4 sm:grid-cols-2">
