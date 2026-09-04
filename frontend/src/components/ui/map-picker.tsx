@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-import { Loader2, Search, X } from 'lucide-react';
+import { Loader2, LocateFixed, Search, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -130,6 +130,7 @@ export default function MapPicker({
   }, [coords]);
 
   const [buscando, setBuscando] = useState(false);
+  const [ubicando, setUbicando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
 
   const emitir = (c: Coordenadas | null, opts: { recentrar?: boolean; zoom?: number } = {}) => {
@@ -161,6 +162,34 @@ export default function MapPicker({
     emitir(c, { recentrar: true, zoom: GEO_ZOOM_SELECCION });
   };
 
+  /** Coloca el pin en la ubicación actual del dispositivo (GPS/navegador). */
+  const usarMiUbicacion = () => {
+    setErrorBusqueda(null);
+    if (!('geolocation' in navigator)) {
+      setErrorBusqueda('Este navegador no soporta geolocalización.');
+      return;
+    }
+    setUbicando(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUbicando(false);
+        emitir(
+          { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          { recentrar: true, zoom: GEO_ZOOM_SELECCION },
+        );
+      },
+      (err) => {
+        setUbicando(false);
+        setErrorBusqueda(
+          err.code === err.PERMISSION_DENIED
+            ? 'Permiso de ubicación denegado — habilítelo en el navegador o ubique el predio manualmente.'
+            : 'No se pudo obtener la ubicación del dispositivo; ubique el predio manualmente.',
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    );
+  };
+
   const centroInicial: [number, number] = coords
     ? [coords.lat, coords.lng]
     : [GEO_CENTRO_DEFAULT.lat, GEO_CENTRO_DEFAULT.lng];
@@ -171,6 +200,17 @@ export default function MapPicker({
         <Button
           type="button"
           variant="outline"
+          size="sm"
+          disabled={disabled || ubicando}
+          onClick={usarMiUbicacion}
+          title="Colocar el pin en la ubicación actual del dispositivo"
+        >
+          {ubicando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="mr-1.5 h-3.5 w-3.5" />}
+          Usar mi ubicación
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
           size="sm"
           disabled={disabled || buscando || !direccionBusqueda?.trim()}
           onClick={buscarDireccion}
