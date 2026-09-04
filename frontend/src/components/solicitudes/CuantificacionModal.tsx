@@ -265,10 +265,10 @@ export function CuantificacionModal({
   const matCalleDefault    = insp?.materialCalle    ?? String(vc.MATERIAL_CALLE    ?? '');
   const matBanquetaDefault = insp?.materialBanqueta ?? String(vc.MATERIAL_BANQUETA ?? '');
   const mlTomaDefault      = parseFloat(String(
-    insp?.metrosRupturaAguaCalle ?? insp?.metrosRupturaCalle ?? vc.METROS_TOMA ?? '0'
+    insp?.metrosRupturaAguaCalle ?? insp?.metrosLinealesToma ?? insp?.metrosRupturaCalle ?? vc.METROS_TOMA ?? '0'
   )) || 0;
   const mlDescargaDefault  = parseFloat(String(
-    insp?.metrosRupturaDrenajeCalle ?? vc.METROS_DESCARGA ?? '0'
+    insp?.metrosRupturaDrenajeCalle ?? insp?.metrosLinealesDescarga ?? vc.METROS_DESCARGA ?? '0'
   )) || 0;
   const diametroTomaDefault   = insp?.diametroToma ?? String(vc.DIAMETRO_TOMA    ?? '');
   const diametroDescargaDefault = insp?.diametroDescarga ?? String(vc.DIAMETRO_DESCARGA ?? '');
@@ -402,7 +402,7 @@ export function CuantificacionModal({
     // Auto-open edit mode when there's no material data so the user can enter it directly
     setEditandoInspeccion(!matCalleDefault && !matBanquetaDefault);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.id, insp?.materialCalle, insp?.materialBanqueta, insp?.diametroToma]);
+  }, [record?.id, insp?.materialCalle, insp?.materialBanqueta, insp?.diametroToma, insp?.diametroDescarga, insp?.metrosLinealesToma, insp?.metrosLinealesDescarga, insp?.tieneMedidor]);
 
   // Pre-llenar tarifa cuando carga el catálogo
   useEffect(() => {

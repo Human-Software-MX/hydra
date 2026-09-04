@@ -160,13 +160,13 @@ export class SolicitudesService {
     // Best-effort: si Agora falla, la solicitud queda creada y la orden se puede
     // generar después con crearOrdenInspeccionAgora().
     if (estadoInicial === 'inspeccion_pendiente') {
-      try {
-        await this.crearOrdenInspeccionAgora(solicitudCreada.id);
-      } catch (err) {
+      // Fire-and-forget: el alta no debe esperar a Agora (timeout de hasta 10 s).
+      // Si falla, la orden se crea después desde la UI con el botón dedicado.
+      void this.crearOrdenInspeccionAgora(solicitudCreada.id).catch((err) => {
         this.logger.warn(
           `No se pudo crear la orden de inspección en Agora para ${folio}: ${err instanceof Error ? err.message : err}`,
         );
-      }
+      });
     }
 
     return this.prisma.solicitud.findUnique({
@@ -275,18 +275,28 @@ export class SolicitudesService {
     }
     const ticket = await this.agora.getTicketPorDisplayId(insp.agoraOrdenRef);
     const attrs = (ticket?.custom_attributes ?? {}) as Record<string, unknown>;
+    // Agora puede tipar los atributos (string/number/boolean según display_type):
+    // se normaliza todo a string antes de interpretar para no perder valores.
     const str = (k: string): string | undefined => {
       const v = attrs[k];
-      return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+      if (v === null || v === undefined) return undefined;
+      const t = String(v).trim();
+      return t !== '' ? t : undefined;
     };
     const num = (k: string): number | undefined => {
-      const v = parseFloat(String(attrs[k] ?? ''));
+      const t = str(k);
+      if (t === undefined) return undefined;
+      const v = parseFloat(t);
       return Number.isFinite(v) ? v : undefined;
     };
     const bool = (k: string): boolean | undefined => {
-      const v = str(k)?.toLowerCase();
-      if (v === undefined) return undefined;
-      return ['si', 'sí', 'true', '1', 'yes'].includes(v);
+      const v = attrs[k];
+      if (typeof v === 'boolean') return v;
+      const t = str(k)?.toLowerCase();
+      if (t === undefined) return undefined;
+      if (['si', 'sí', 'true', '1', 'yes'].includes(t)) return true;
+      if (['no', 'false', '0'].includes(t)) return false;
+      return undefined;
     };
 
     const realizada = bool('realizada');
@@ -305,10 +315,32 @@ export class SolicitudesService {
       realizada,
       motivoNoRealizada: str('motivo_no_realizada'),
       ...(realizada === true ? { estado: 'completada' } : {}),
-      ...(realizada === false ? { intentos: (insp.intentos ?? 0) + 1 } : {}),
+      // Idempotente: el intento solo cuenta en la TRANSICIÓN a no-realizada;
+      // repetir el sync del mismo intento fallido no infla el contador.
+      ...(realizada === false && insp.realizada !== false
+        ? { intentos: (insp.intentos ?? 0) + 1 }
+        : {}),
     };
     const limpio = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
     const recibidos = Object.keys(limpio).filter((k) => k !== 'estado');
+
+    // TIPO_MEDIDOR no tiene columna en la inspección: vive como variable capturada
+    // de la solicitud (es lo que leen la cuantificación y el wizard).
+    const tipoMedidor = str('tipo_medidor');
+    if (tipoMedidor) {
+      const sol = await this.prisma.solicitud.findUnique({
+        where: { id: solicitudId },
+        select: { formData: true },
+      });
+      const fd = (sol?.formData ?? {}) as Record<string, unknown>;
+      const vc = { ...((fd.variablesCapturadas as Record<string, unknown>) ?? {}), TIPO_MEDIDOR: tipoMedidor };
+      await this.prisma.solicitud.update({
+        where: { id: solicitudId },
+        data: { formData: { ...fd, variablesCapturadas: vc } },
+      });
+      recibidos.push('tipoMedidor');
+    }
+
     if (recibidos.length === 0) {
       return { solicitud: await this.findOne(solicitudId), camposRecibidos: [], agoraOrdenRef: insp.agoraOrdenRef };
     }
