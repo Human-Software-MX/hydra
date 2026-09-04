@@ -171,6 +171,7 @@ export class AgoraService {
         metros_toma: '',
         metros_descarga: '',
         tiene_medidor: '',
+        tipo_medidor: '',
         realizada: '',
         motivo_no_realizada: '',
       },

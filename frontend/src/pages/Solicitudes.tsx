@@ -2132,7 +2132,7 @@ export default function Solicitudes() {
 
       {/* ── Inspection Sheet ──────────────────────────────────────────── */}
       <OrdenInspeccionSheet
-        record={inspRecord}
+        record={inspRecord ? (records.find((r) => r.id === inspRecord.id) ?? inspRecord) : null}
         open={!!inspRecord}
         onClose={() => setInspRecord(null)}
         onAceptar={handleContinuarCuantificacion}
