@@ -1471,6 +1471,10 @@ model ConceptoCobro {
   sigeTconId        Int?                            @unique @map("sige_tcon_id")
   /// Clasificación fiscal SIGE: TASA_16 | TASA_0 | AMBAS (según uso doméstico) | NO_OBJETO
   clasificacionIva  String?                         @map("clasificacion_iva")
+  /// Regla porcentual (junta CEA 02-sep): este concepto se cobra como % de otro
+  /// servicio (p. ej. saneamiento = 12 % del agua). null = no aplica.
+  porcentajeDeServicio String?                      @map("porcentaje_de_servicio")
+  porcentaje           Decimal?                     @db.Decimal(5, 2)
   montoBase         Decimal?                        @map("monto_base") @db.Decimal(10, 2)
   ivaPct            Decimal                         @default(16) @map("iva_pct") @db.Decimal(5, 2)
   formula           String?
@@ -2007,6 +2011,18 @@ model SolicitudInspeccion {
   metrosRupturaDrenajeCalle    String?   @map("metros_ruptura_drenaje_calle")
   observaciones                String?
   evidencias                   Json?
+  // ── Campos formales de la junta CEA 02-sep ────────────────────────────────
+  /// ¿El predio ya tiene medidor? (binario; sustituye al legacy medidorExistente)
+  tieneMedidor                 Boolean?  @map("tiene_medidor")
+  diametroDescarga             String?   @map("diametro_descarga")
+  /// Metros lineales de toma/descarga (los que usan las tarifas de conexión)
+  metrosLinealesToma           Decimal?  @map("metros_lineales_toma") @db.Decimal(8, 2)
+  metrosLinealesDescarga       Decimal?  @map("metros_lineales_descarga") @db.Decimal(8, 2)
+  /// Resultado BINARIO: ¿se realizó la inspección? El "sí" exige datos completos.
+  realizada                    Boolean?
+  motivoNoRealizada            String?   @map("motivo_no_realizada")
+  /// Intentos de visita (regla de 3: al tercero se escala)
+  intentos                     Int       @default(0)
   resultadoEjecucion           String?   @map("resultado_ejecucion")
   resultadoInspeccion          String?   @map("resultado_inspeccion")
   inspectorNumEmpleado         String?   @map("inspector_num_empleado")
