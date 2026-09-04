@@ -68,6 +68,15 @@ export interface ConceptoCobro {
   codigo: string;
   nombre: string;
   tipo: string;
+  /** CONTRATACION | LECTURAS | VARIOS */
+  origen?: string;
+  /**
+   * Regla porcentual: este concepto se cobra como % de otro servicio
+   * (p. ej. saneamiento = 12 % del cargo de 'agua'). null = no aplica.
+   */
+  porcentajeDeServicio?: string | null;
+  /** Porcentaje de la regla (10 = 10 %); Decimal serializado. */
+  porcentaje?: string | number | null;
   montoBase?: string | number | null;
   ivaPct?: string | number | null;
   formula?: string | null;

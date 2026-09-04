@@ -49,6 +49,14 @@ import {
   calcularCargoPeriodo,
   RECARGO_MENSUAL,
 } from '@/lib/tarifas';
+import {
+  calcularCargoAguaPeriodoApi,
+  getReglasPorcentuales,
+  REGLAS_PORCENTUALES_FALLBACK,
+  type ReglasPorcentuales,
+} from '@/lib/cotizacion-motor';
+import { fetchTipoContratacion } from '@/api/tipos-contratacion';
+import { hasApi } from '@/api/client';
 import type { SolicitudRecord, OrdenInspeccionData } from '@/types/solicitudes';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -105,6 +113,11 @@ const TIPO_AGUA_OPTS = [
 
 
 const MXN = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 });
+
+/** 0.10 → "10%" (hasta 2 decimales significativos). */
+function pctLabel(fraccion: number): string {
+  return `${Number((fraccion * 100).toFixed(2))}%`;
+}
 
 
 /** Formatea Date a dd/mm/aaaa con ceros al inicio */
@@ -301,6 +314,42 @@ export function CuantificacionModal({
   const [aplicaSaneamiento, setAplicaSaneamiento]       = useState(true);
   const [editandoInspeccion, setEditandoInspeccion]     = useState(false);
 
+  // ── Motor de tarifas versionado (API) con fallback offline ────────────────
+
+  // Reglas porcentuales alcantarillado/saneamiento desde conceptos-cobro
+  const [reglasPct, setReglasPct] = useState<ReglasPorcentuales>(REGLAS_PORCENTUALES_FALLBACK);
+  useEffect(() => {
+    let cancelado = false;
+    getReglasPorcentuales().then((r) => { if (!cancelado) setReglasPct(r); });
+    return () => { cancelado = true; };
+  }, []);
+
+  // Clase tarifaria del tipo de contratación (necesaria para cotizar agua vía API)
+  const { data: tipoContratacionDetalle } = useQuery({
+    queryKey: ['tipo-contratacion', record?.tipoContratacionId],
+    queryFn: () => fetchTipoContratacion(record!.tipoContratacionId),
+    enabled: open && Boolean(record?.tipoContratacionId) && hasApi(),
+    staleTime: 30 * 60 * 1000,
+  });
+  const claseTarifaId =
+    tipoContratacionDetalle?.claseTarifaId ?? tipoContratacionDetalle?.claseTarifa?.id;
+
+  // Cargo de agua del periodo (todas las unidades, sin IVA) vía motor
+  // versionado; null → se usa el cálculo offline del CSV del bundle.
+  const [cargoAguaApi, setCargoAguaApi] = useState<number | null>(null);
+  useEffect(() => {
+    setCargoAguaApi(null);
+    const m3 = parseFloat(consumoM3) || 0;
+    const u = parseInt(unidades, 10) || 1;
+    const adminId = fd?.adminId;
+    if (!open || !incluirAgua || m3 <= 0 || !adminId || !claseTarifaId) return;
+    let cancelado = false;
+    calcularCargoAguaPeriodoApi(adminId, claseTarifaId, m3 / u)
+      .then((r) => { if (!cancelado && r) setCargoAguaApi(r.agua * u); })
+      .catch(() => { /* fallback offline */ });
+    return () => { cancelado = true; };
+  }, [open, incluirAgua, consumoM3, unidades, fd?.adminId, claseTarifaId]);
+
   const numMeses = useMemo(() => diffMonths(periodoInicio, periodoFin), [periodoInicio, periodoFin]);
 
   // Vista previa del cálculo de agua por mes
@@ -309,16 +358,20 @@ export function CuantificacionModal({
     const m3 = parseFloat(consumoM3) || 0;
     if (m3 <= 0 || !tarifa) return [];
     const u = parseInt(unidades, 10) || 1;
-    const cargo = calcularCargoPeriodo(adminCatalogo, tarifa, m3, u);
-    if (!cargo) return [];
+    // Agua: motor versionado (API) primero; fallback al catálogo CSV offline
+    const cargoOffline = calcularCargoPeriodo(adminCatalogo, tarifa, m3, u);
+    const aguaBase = cargoAguaApi ?? cargoOffline?.agua;
+    if (aguaBase == null) return [];
+    const alcBase = aguaBase * reglasPct.alcantarillado;
+    const sanBase = aguaBase * reglasPct.saneamiento;
 
     const rows: { mes: string; agua: number; alc: number; san: number; recargo: number; total: number }[] = [];
     let saldoVencido = 0;
     for (let i = 0; i < numMeses; i++) {
       const mes = monthLabel(addMonths(periodoInicio, i));
-      const agua = aplicaAgua ? cargo.agua : 0;
-      const alc  = aplicaAlcantarillado ? cargo.alcantarillado : 0;
-      const san  = aplicaSaneamiento ? cargo.saneamiento : 0;
+      const agua = aplicaAgua ? aguaBase : 0;
+      const alc  = aplicaAlcantarillado ? alcBase : 0;
+      const san  = aplicaSaneamiento ? sanBase : 0;
       const servicio = agua + alc + san;
       const recargo  = saldoVencido * RECARGO_MENSUAL;
       const total    = servicio + recargo;
@@ -326,7 +379,7 @@ export function CuantificacionModal({
       saldoVencido += servicio;
     }
     return rows;
-  }, [incluirAgua, consumoM3, unidades, adminCatalogo, tarifa, numMeses, periodoInicio, aplicaAgua, aplicaAlcantarillado, aplicaSaneamiento]);
+  }, [incluirAgua, consumoM3, unidades, adminCatalogo, tarifa, numMeses, periodoInicio, aplicaAgua, aplicaAlcantarillado, aplicaSaneamiento, cargoAguaApi, reglasPct]);
 
   // Re-aplicar defaults cuando cambia el record o cuando llega el detalle con inspección
   useEffect(() => {
@@ -748,14 +801,14 @@ export function CuantificacionModal({
                       checked={aplicaAlcantarillado}
                       onCheckedChange={(v) => setAplicaAlcantarillado(Boolean(v))}
                     />
-                    Alcantarillado (10%)
+                    Alcantarillado ({pctLabel(reglasPct.alcantarillado)})
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-sm">
                     <Checkbox
                       checked={aplicaSaneamiento}
                       onCheckedChange={(v) => setAplicaSaneamiento(Boolean(v))}
                     />
-                    Saneamiento (12%)
+                    Saneamiento ({pctLabel(reglasPct.saneamiento)})
                   </label>
                 </div>
               </div>

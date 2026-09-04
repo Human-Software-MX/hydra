@@ -27,12 +27,21 @@ export type TarifasAguaData = Record<string, Record<string, TarifaEntry>>;
 const DATA = tarifasAgua as TarifasAguaData;
 
 // ── Constantes de porcentaje ───────────────────────────────────────────────────
+// FALLBACK OFFLINE del motor de tarifas: la fuente canónica de estas reglas es
+// el catálogo de conceptos de cobro del backend (`GET /catalogos/conceptos-cobro`,
+// campos `porcentajeDeServicio`/`porcentaje`), leído vía
+// `getReglasPorcentuales()` en `lib/cotizacion-motor.ts`. Estas constantes solo
+// se usan cuando no hay backend o el fetch del catálogo falla.
 
-/** Alcantarillado = X% del cargo de agua (sin IVA) */
+/** Alcantarillado = X% del cargo de agua (sin IVA). Fallback offline del motor. */
 export const ALCANTARILLADO_RATE = 0.10;
 
-/** Saneamiento = X% del cargo de agua (sin IVA) */
+/** Saneamiento = X% del cargo de agua (sin IVA). Fallback offline del motor. */
 export const SANEAMIENTO_RATE = 0.12;
+
+/** Alias explícitos del rol de fallback (mismas constantes). */
+export const FALLBACK_ALCANTARILLADO_RATE = ALCANTARILLADO_RATE;
+export const FALLBACK_SANEAMIENTO_RATE = SANEAMIENTO_RATE;
 
 /** Recargo mensual sobre saldo vencido acumulado */
 export const RECARGO_MENSUAL = 0.01470;

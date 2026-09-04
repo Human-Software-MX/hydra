@@ -69,6 +69,12 @@ import {
   resolveMatCalle,
   resolveMatBanqueta,
 } from '@/lib/cotizacion-tarifas';
+import {
+  calcularDerechosAguaApi,
+  calcularDerechosDrenajeApi,
+  calcularInstalacionMedidorApi,
+} from '@/lib/cotizacion-motor';
+import { hasApi } from '@/api/client';
 import { uploadCotizacionPdf, openCotizacionPdf } from '@/api/solicitudes';
 import { pdf } from '@react-pdf/renderer';
 // PDF document components loaded lazily (dynamic import) to avoid Rollup TDZ init issues
@@ -1175,10 +1181,53 @@ interface ConceptoCotizacion {
   tasa?: number;    // IVA rate (0 = exento, 0.16 = 16%)
 }
 
+/** Resultado de un motor de conexión/medidor (offline o API). */
+interface ResultadoCargo { precioNeto: number; tasa: number }
+
 /**
- * Calcula los conceptos de cotización usando los datos capturados en CuantificacionModal.
- * Materiales y metros lineales se toman de la inspección (si existe).
- * Precios reales del catálogo CSV Feb-2026 via cotizacion-tarifas.ts.
+ * Insumos de la cotización: cuant tiene prioridad (capturados en el form),
+ * fallback a la inspección (si existe).
+ */
+function derivarInsumosCuantificacion(cuant: CuantificacionData, insp?: OrdenInspeccionData) {
+  const matCalle    = cuant.matCalle    || insp?.materialCalle    || '';
+  const matBanqueta = cuant.matBanqueta || insp?.materialBanqueta || '';
+  const mlToma = cuant.mlToma > 0
+    ? cuant.mlToma
+    : parseFloat(insp?.metrosRupturaAguaCalle ?? insp?.metrosRupturaCalle ?? '0') || 0;
+  const mlDescarga = cuant.mlDescarga > 0
+    ? cuant.mlDescarga
+    : parseFloat(insp?.metrosRupturaDrenajeCalle ?? '0') || 0;
+  return { matCalle, matBanqueta, mlToma, mlDescarga };
+}
+
+function conceptoConexion(
+  servicio: 'agua' | 'drenaje',
+  r: ResultadoCargo,
+  matCalle: string,
+  matBanqueta: string,
+  ml: number,
+): ConceptoCotizacion {
+  const matLabel = `${resolveMatCalle(matCalle)}-${resolveMatBanqueta(matBanqueta)}`;
+  return {
+    descripcion: `Derechos de conexión red de ${servicio} (${matLabel}, ${ml} ml)`,
+    cantidad: 1, unidad: 'servicio',
+    precioUnitario: r.precioNeto, subtotal: r.precioNeto, tasa: r.tasa,
+  };
+}
+
+function conceptoMedidor(r: ResultadoCargo, diametroToma: string): ConceptoCotizacion {
+  return {
+    descripcion: `Instalación de medidor ${diametroToma}`,
+    cantidad: 1, unidad: 'pieza',
+    precioUnitario: r.precioNeto, subtotal: r.precioNeto, tasa: r.tasa,
+  };
+}
+
+/**
+ * Calcula los conceptos de cotización usando los datos capturados en
+ * CuantificacionModal con el motor OFFLINE (catálogo CSV Feb-2026 del bundle,
+ * via cotizacion-tarifas.ts). Si un concepto no tiene tarifa, la línea se
+ * omite con un warning — nunca se inventan precios.
  */
 function calcularCotizacionDesdeCuantificacion(
   cuant: CuantificacionData,
@@ -1186,54 +1235,78 @@ function calcularCotizacionDesdeCuantificacion(
 ): ConceptoCotizacion[] {
   const conceptos: ConceptoCotizacion[] = [];
   const admin = cuant.adminNombre || 'QUERÉTARO';
-
-  // Materiales: cuant tiene prioridad (capturados en el form), fallback a inspección
-  const matCalle    = cuant.matCalle    || insp?.materialCalle    || '';
-  const matBanqueta = cuant.matBanqueta || insp?.materialBanqueta || '';
-
-  // Metros: cuant tiene prioridad, fallback a inspección
-  const mlToma = cuant.mlToma > 0
-    ? cuant.mlToma
-    : parseFloat(insp?.metrosRupturaAguaCalle ?? insp?.metrosRupturaCalle ?? '0') || 0;
-  const mlDescarga = cuant.mlDescarga > 0
-    ? cuant.mlDescarga
-    : parseFloat(insp?.metrosRupturaDrenajeCalle ?? '0') || 0;
+  const { matCalle, matBanqueta, mlToma, mlDescarga } = derivarInsumosCuantificacion(cuant, insp);
 
   // ── 1. Derechos de conexión a red de agua ───────────────────────────────────
   if (mlToma > 0 && matCalle) {
     const r = calcularDerechosAgua(admin, matCalle, matBanqueta, mlToma);
-    if (r) {
-      const matLabel = `${resolveMatCalle(matCalle)}-${resolveMatBanqueta(matBanqueta)}`;
-      conceptos.push({
-        descripcion: `Derechos de conexión red de agua (${matLabel}, ${mlToma} ml)`,
-        cantidad: 1, unidad: 'servicio',
-        precioUnitario: r.precioNeto, subtotal: r.precioNeto, tasa: r.tasa,
-      });
-    }
+    if (r) conceptos.push(conceptoConexion('agua', r, matCalle, matBanqueta, mlToma));
+    else console.warn(`[cotización] Sin tarifa offline de conexión de agua (${admin}, ${matCalle}-${matBanqueta}); línea omitida`);
   }
 
   // ── 2. Derechos de conexión a red de drenaje ──────────────────────────────
   if (mlDescarga > 0 && matCalle) {
     const r = calcularDerechosDrenaje(admin, matCalle, matBanqueta, mlDescarga);
-    if (r) {
-      const matLabel = `${resolveMatCalle(matCalle)}-${resolveMatBanqueta(matBanqueta)}`;
-      conceptos.push({
-        descripcion: `Derechos de conexión red de drenaje (${matLabel}, ${mlDescarga} ml)`,
-        cantidad: 1, unidad: 'servicio',
-        precioUnitario: r.precioNeto, subtotal: r.precioNeto, tasa: r.tasa,
-      });
-    }
+    if (r) conceptos.push(conceptoConexion('drenaje', r, matCalle, matBanqueta, mlDescarga));
+    else console.warn(`[cotización] Sin tarifa offline de conexión de drenaje (${admin}, ${matCalle}-${matBanqueta}); línea omitida`);
   }
 
   // ── 3. Instalación de medidor ────────────────────────────────────────────────
   if (cuant.diametroToma) {
     const r = calcularInstalacionMedidor(admin, cuant.diametroToma);
-    const precio = r?.precioNeto ?? 984.11;
-    conceptos.push({
-      descripcion: `Instalación de medidor ${cuant.diametroToma}`,
-      cantidad: 1, unidad: 'pieza',
-      precioUnitario: precio, subtotal: precio, tasa: r?.tasa ?? 0.16,
-    });
+    if (r) conceptos.push(conceptoMedidor(r, cuant.diametroToma));
+    else console.warn(`[cotización] Sin tarifa offline de instalación de medidor (${admin}, ${cuant.diametroToma}); línea omitida`);
+  }
+
+  return conceptos;
+}
+
+/**
+ * Versión API-first: cotiza cada concepto contra el motor de tarifas
+ * versionado del backend (GET /tarifas/contratacion/cotizar) usando el
+ * `administracionId` real de la solicitud; si un concepto falla en el API cae
+ * al motor offline solo para ese concepto. Devuelve `null` cuando no hay
+ * backend o falta el adminId — el caller usa entonces el cálculo offline.
+ */
+async function calcularCotizacionDesdeCuantificacionApi(
+  cuant: CuantificacionData,
+  administracionId: string | undefined,
+  insp?: OrdenInspeccionData,
+): Promise<ConceptoCotizacion[] | null> {
+  if (!administracionId || !hasApi()) return null;
+  const admin = cuant.adminNombre || 'QUERÉTARO';
+  const { matCalle, matBanqueta, mlToma, mlDescarga } = derivarInsumosCuantificacion(cuant, insp);
+
+  const [rAgua, rDrenaje, rMedidor] = await Promise.all([
+    mlToma > 0 && matCalle
+      ? calcularDerechosAguaApi(administracionId, matCalle, matBanqueta, mlToma)
+      : Promise.resolve(null),
+    mlDescarga > 0 && matCalle
+      ? calcularDerechosDrenajeApi(administracionId, matCalle, matBanqueta, mlDescarga)
+      : Promise.resolve(null),
+    cuant.diametroToma
+      ? calcularInstalacionMedidorApi(administracionId, cuant.diametroToma)
+      : Promise.resolve(null),
+  ]);
+
+  const conceptos: ConceptoCotizacion[] = [];
+
+  if (mlToma > 0 && matCalle) {
+    const r = rAgua ?? calcularDerechosAgua(admin, matCalle, matBanqueta, mlToma);
+    if (r) conceptos.push(conceptoConexion('agua', r, matCalle, matBanqueta, mlToma));
+    else console.warn(`[cotización] Sin tarifa de conexión de agua (${administracionId}, ${matCalle}-${matBanqueta}); línea omitida`);
+  }
+
+  if (mlDescarga > 0 && matCalle) {
+    const r = rDrenaje ?? calcularDerechosDrenaje(admin, matCalle, matBanqueta, mlDescarga);
+    if (r) conceptos.push(conceptoConexion('drenaje', r, matCalle, matBanqueta, mlDescarga));
+    else console.warn(`[cotización] Sin tarifa de conexión de drenaje (${administracionId}, ${matCalle}-${matBanqueta}); línea omitida`);
+  }
+
+  if (cuant.diametroToma) {
+    const r = rMedidor ?? calcularInstalacionMedidor(admin, cuant.diametroToma);
+    if (r) conceptos.push(conceptoMedidor(r, cuant.diametroToma));
+    else console.warn(`[cotización] Sin tarifa de instalación de medidor (${administracionId}, ${cuant.diametroToma}); línea omitida`);
   }
 
   return conceptos;
@@ -1269,6 +1342,23 @@ function CotizacionModal({
   const [generandoCobroPdf, setGenerandoCobroPdf] = useState(false);
   const [cobroConfigOpen, setCobroConfigOpen]     = useState(false);
 
+  // Conceptos cotizados contra el motor de tarifas versionado (backend).
+  // null mientras carga o si no aplica; el render usa el cálculo offline
+  // mientras tanto y lo sustituye cuando llega la respuesta del API.
+  const [conceptosApi, setConceptosApi] = useState<ConceptoCotizacion[] | null>(null);
+  useEffect(() => {
+    setConceptosApi(null);
+    if (!open || !record) return;
+    const cuant: CuantificacionData | undefined =
+      cuantificacionData ?? (record.formData as any)?.cuantificacionData;
+    if (!cuant) return;
+    let cancelado = false;
+    calcularCotizacionDesdeCuantificacionApi(cuant, record.formData?.adminId, record.ordenInspeccion)
+      .then((res) => { if (!cancelado && res) setConceptosApi(res); })
+      .catch(() => { /* nunca romper el flujo: se queda el cálculo offline */ });
+    return () => { cancelado = true; };
+  }, [open, record, cuantificacionData]);
+
   if (!record) return null;
 
   // Datos de cuantificación: del prop (recién capturado) o del formData persistido
@@ -1278,10 +1368,13 @@ function CotizacionModal({
   // Inspección real (sin fallback a mock)
   const ordenData = record.ordenInspeccion;
 
-  // Calcular conceptos: si hay datos de cuantificación, usarlos; si no, usar inspección real o mock
-  const conceptos = cuantData
-    ? calcularCotizacionDesdeCuantificacion(cuantData, ordenData)
-    : calcularCotizacion(ordenData ?? MOCK_INSPECCIONES[0]);
+  // Calcular conceptos: primero el motor versionado (API); mientras responde
+  // (o si falla) el motor offline con datos de cuantificación; sin
+  // cuantificación, inspección real o mock (demo).
+  const conceptos = conceptosApi
+    ?? (cuantData
+      ? calcularCotizacionDesdeCuantificacion(cuantData, ordenData)
+      : calcularCotizacion(ordenData ?? MOCK_INSPECCIONES[0]));
 
   const total = conceptos.reduce((s, c) => s + c.subtotal, 0);
   const vigenciaDate = cuantData?.fechaVigencia
