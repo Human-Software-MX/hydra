@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Trash2, Paperclip, Eye, Loader2, Clock, Upload } from 'lucide-react';
+import { FileText, Trash2, Paperclip, Eye, Loader2, Clock, Upload, ScanText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { toast } from '@/components/ui/sonner';
@@ -13,6 +13,7 @@ import {
 } from '@/api/solicitudes';
 import { fetchCatalogoDocumentos } from '@/api/tipos-contratacion';
 import type { DocumentoRequeridoTipoContratacion } from '@/api/tipos-contratacion';
+import { extraerDatosIdentificacion, esImagenParaOcr, type DatosExtraidos } from '@/lib/ocr-documentos';
 
 /** Archivo elegido antes de que la solicitud exista; se sube al guardar. */
 export interface ArchivoPendiente {
@@ -61,6 +62,21 @@ interface Props {
   onPendientesChange?: (pendientes: ArchivoPendiente[]) => void;
   /** Mensaje cuando no hay id ni modo cola (p. ej. wizard sin solicitud vinculada). */
   mensajeSinSolicitud?: string;
+  /**
+   * Si se provee, al adjuntar una imagen a la "Identificación Oficial" se corre
+   * OCR en el navegador (best effort) y se reportan los datos extraídos
+   * (CURP/RFC/nombre) para prellenar el formulario. Nunca bloquea la subida.
+   */
+  onDatosExtraidos?: (datos: DatosExtraidos) => void;
+}
+
+/** ¿La fila corresponde a la identificación oficial del titular? */
+function esIdentificacionOficial(nombre: string): boolean {
+  const n = nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  return n.includes('IDENTIFICACION OFICIAL') && !n.includes('REPRESENTANTE') && !n.includes('TESTIGO');
 }
 
 function formatBytes(n: number): string {
@@ -90,12 +106,36 @@ export default function EntregaDocumentos({
   archivosPendientes,
   onPendientesChange,
   mensajeSinSolicitud,
+  onDatosExtraidos,
 }: Props) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   // destino del próximo archivo: clave del documento al que se adjunta
   const [destino, setDestino] = useState<{ documentoId?: string; nombre: string } | null>(null);
   const [tipoDocSel, setTipoDocSel] = useState('');
+  // OCR de identificación: corre en background al adjuntar; ref para no llamar
+  // un callback obsoleto cuando el reconocimiento termina renders después.
+  const [ocrEnCurso, setOcrEnCurso] = useState(false);
+  const onDatosExtraidosRef = useRef(onDatosExtraidos);
+  useEffect(() => {
+    onDatosExtraidosRef.current = onDatosExtraidos;
+  }, [onDatosExtraidos]);
+
+  /** Lanza OCR best-effort si el destino es la identificación oficial (no bloquea la subida). */
+  const lanzarOcrSiIdentificacion = (doc: { nombre: string }, files: File[]) => {
+    if (!onDatosExtraidosRef.current || !esIdentificacionOficial(doc.nombre)) return;
+    const imagen = files.find((f) => esImagenParaOcr(f));
+    if (!imagen) return;
+    setOcrEnCurso(true);
+    void extraerDatosIdentificacion(imagen)
+      .then((datos) => {
+        if (datos) {
+          toast.success('Datos detectados en la identificación');
+          onDatosExtraidosRef.current?.(datos);
+        }
+      })
+      .finally(() => setOcrEnCurso(false));
+  };
   const conId = Boolean(solicitudId);
   const modoCola = !conId && Boolean(onPendientesChange);
   const puedeAdjuntar = conId || modoCola;
@@ -165,6 +205,7 @@ export default function EntregaDocumentos({
 
   const onArchivosElegidos = (files: File[]) => {
     if (!destino || files.length === 0) return;
+    lanzarOcrSiIdentificacion(destino, files);
     if (conId) {
       subirMut.mutate({ files, doc: destino });
     } else {
@@ -326,6 +367,14 @@ export default function EntregaDocumentos({
             );
           })}
         </div>
+      )}
+
+      {ocrEnCurso && (
+        <p className="text-xs text-muted-foreground">
+          <ScanText className="mr-1 inline h-3 w-3" />
+          <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+          Leyendo documento…
+        </p>
       )}
 
       {modoCola && pendientes.length > 0 && (

@@ -25,6 +25,7 @@ import type { DomicilioFormValue, SolicitudEstado, SolicitudRecord, SolicitudSta
 import { SOLICITUD_STATE_EMPTY } from '@/types/solicitudes';
 import { deriveName, derivePredioResumen, useSolicitudesStore } from '@/hooks/useSolicitudesStore';
 import { formatearCoordenadas } from '@/lib/geo-picker';
+import { patchPropietarioDesdeIdentificacion } from '@/lib/ocr-documentos';
 import {
   usoCfdiMatchesRegimenSeleccionado,
   REGIMEN_FISCAL_OFFLINE,
@@ -1186,6 +1187,14 @@ function StepContratacion({
             }
             archivosPendientes={archivosPendientes}
             onPendientesChange={onPendientesChange}
+            onDatosExtraidos={(d) => {
+              // Prellenado OCR: solo campos vacíos del propietario, nunca pisa lo capturado.
+              const r = patchPropietarioDesdeIdentificacion(form, d);
+              if (r) {
+                set(r.patch);
+                toast.success('Datos prellenados desde la identificación', { description: `Se llenó: ${r.llenado.join(', ')}` });
+              }
+            }}
           />
         )}
       </div>
