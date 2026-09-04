@@ -163,3 +163,18 @@ CEA sigue siendo el único camino.
 - Conceptos: catálogo real (21, con tconid y fiscal) + relación contratación (2,420) + relación
   lecturas (344 con tarifa) → puebla `ConceptoCobro`/`ConceptoCobroTipoContratacion`
 - Cláusulas: 125 + ~5,300 vínculos → puebla `ClausulaContractual`/`ClausulaTipoContratacion`
+
+## 9. Cobertura de los Excel de tarifas (2026-09-03, post PR #66)
+
+**`Tarifas_periodicas.xlsx`** (5 hojas) → **TODO importado por PR #55**: 421 tarifas (tabla 0-200 m³
+y lineales) + 127 correcciones. La hoja `TARIFAS CORRECTORES` (descuento pensionado agua/alc/san
+por tarifa) entró como `CorreccionTarifaria`. ✓ Nada pendiente.
+
+**`Tarifas_contratacion.xlsx`** (4 hojas) → **importado por PR #66**: 1,025 tarifas `seccion=CONTRATACION`
+con `variante` (materiales BANQUETA-CALLE, diámetros/planes de medidor) y `lineal_excedente`
+(base cubre 6 m). No sirve: `Hoja 1` (índice) y la hoja `CONCEPTO FIJO` duplica los derechos de
+conexión de la hoja por longitud (se conservó longitud). 13 filas con precio 0 = placeholders del Excel.
+
+**Aún NO en BD** (sigue hardcodeado en frontend): alcantarillado 10 % / saneamiento 12 % como regla,
+recargo mensual 1.47 %. La cuantificación (CuantificacionModal / lib/cotizacion*.ts) sigue 100 %
+offline con JSON del bundle — migrarla a `GET /tarifas/contratacion/cotizar` es el siguiente paso.
