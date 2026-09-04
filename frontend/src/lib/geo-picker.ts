@@ -109,3 +109,67 @@ export async function geocodificarDireccion(
     return null;
   }
 }
+
+// ── Geocodificación inversa (pin → dirección) ────────────────────────────────
+
+export const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+
+/** Dirección derivada de un punto en el mapa (Nominatim /reverse). */
+export interface DireccionInversa {
+  calle: string;
+  numExterior: string;
+  codigoPostal: string;
+  colonia: string;
+  localidad: string;
+  municipio: string;
+  estado: string;
+}
+
+export function nominatimReverseUrl(c: Coordenadas, email?: string): string {
+  const sp = new URLSearchParams({
+    format: 'jsonv2',
+    lat: String(c.lat),
+    lon: String(c.lng),
+    addressdetails: '1',
+    'accept-language': 'es',
+  });
+  if (email) sp.set('email', email);
+  return `${NOMINATIM_REVERSE_URL}?${sp.toString()}`;
+}
+
+type NominatimAddress = Record<string, string | undefined>;
+
+/** Mapea los campos de Nominatim a nuestros nombres; en MX `city`/`municipality` suele ser el municipio. */
+export function direccionDesdeNominatim(addr: NominatimAddress): DireccionInversa {
+  return {
+    calle: addr.road ?? addr.pedestrian ?? addr.footway ?? addr.path ?? '',
+    numExterior: addr.house_number ?? '',
+    codigoPostal: addr.postcode ?? '',
+    colonia: addr.suburb ?? addr.neighbourhood ?? addr.quarter ?? addr.residential ?? addr.hamlet ?? '',
+    localidad: addr.village ?? addr.town ?? addr.city ?? '',
+    municipio: addr.municipality ?? addr.county ?? addr.city ?? '',
+    estado: addr.state ?? '',
+  };
+}
+
+/**
+ * Dirección a partir de coordenadas. Devuelve null si Nominatim falla — el pin
+ * sigue siendo válido aunque no se pueda prellenar.
+ */
+export async function geocodificarInverso(
+  c: Coordenadas,
+  opts: { email?: string; fetchImpl?: typeof fetch } = {},
+): Promise<DireccionInversa | null> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(nominatimReverseUrl(c, opts.email), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { address?: NominatimAddress };
+    if (!data?.address) return null;
+    return direccionDesdeNominatim(data.address);
+  } catch {
+    return null;
+  }
+}
