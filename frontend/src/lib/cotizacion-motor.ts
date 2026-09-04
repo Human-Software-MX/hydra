@@ -189,14 +189,21 @@ export async function getReglasPorcentuales(): Promise<ReglasPorcentuales> {
 
   reglasPendiente = (async () => {
     try {
-      const conceptos = await fetchConceptosCobro();
+      const conceptos = await fetchConceptosCobro({ activo: true });
       const fraccion = (prefijo: string): number | null => {
-        const concepto = conceptos.find((c) => {
+        // Solo conceptos ACTIVOS cuya regla es explícitamente "% del agua"; se
+        // prefiere el de LECTURAS (facturación periódica) sobre el de CONTRATACION
+        // para que un ajuste parcial de CEA no sea indeterminado.
+        const candidatos = conceptos.filter((c) => {
           if (!normalizarVariante(c.nombre ?? '').startsWith(prefijo)) return false;
-          if (c.origen !== 'LECTURAS' && c.origen !== 'CONTRATACION') return false;
+          if (c.porcentajeDeServicio !== 'agua') return false;
           const n = Number(c.porcentaje);
           return Number.isFinite(n) && n > 0;
         });
+        const concepto =
+          candidatos.find((c) => c.origen === 'LECTURAS') ??
+          candidatos.find((c) => c.origen === 'CONTRATACION') ??
+          candidatos[0];
         return concepto ? Number(concepto.porcentaje) / 100 : null;
       };
       const reglas: ReglasPorcentuales = {

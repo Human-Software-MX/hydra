@@ -935,10 +935,11 @@ function VerSolicitudDialog({
   tipoContratacionNombre?: string;
 }) {
   const ordenData = record?.ordenInspeccion ?? undefined;
-  // Conceptos: primero desde inspección (si existe), luego desde cotizacionItems guardados al aceptar
+  // Conceptos: los cotizacionItems GUARDADOS (precios que el cliente aceptó, ya con
+  // motor de tarifas) mandan; la recomputación offline desde inspección es solo fallback.
   const conceptosFromInsp = ordenData ? calcularCotizacion(ordenData) : [];
   const cotizacionGuardada = record?.formData?.cotizacionItems ?? [];
-  const conceptos = conceptosFromInsp.length > 0 ? conceptosFromInsp : cotizacionGuardada;
+  const conceptos = cotizacionGuardada.length > 0 ? cotizacionGuardada : conceptosFromInsp;
 
   const [generandoCotizPdf, setGenerandoCotizPdf] = useState(false);
   const [generandoCobroPdf, setGenerandoCobroPdf] = useState(false);
@@ -1142,8 +1143,11 @@ function VerSolicitudDialog({
           setGenerandoCobroPdf(true);
           try {
             const { CobroAguaPdfDocument } = await import('@/lib/cobro-agua-pdf');
+            const { getReglasPorcentuales } = await import('@/lib/cotizacion-motor');
+            const reglasPct = await getReglasPorcentuales();
             const blob = await pdf(
               <CobroAguaPdfDocument
+                reglasPct={reglasPct}
                 record={record}
                 administracionCatalogo={cfg.administracion}
                 tipoTarifa={cfg.tipoTarifa}
@@ -1346,6 +1350,9 @@ function CotizacionModal({
   // null mientras carga o si no aplica; el render usa el cálculo offline
   // mientras tanto y lo sustituye cuando llega la respuesta del API.
   const [conceptosApi, setConceptosApi] = useState<ConceptoCotizacion[] | null>(null);
+  // Mientras la cotización del motor está en vuelo, no se puede aceptar: lo que el
+  // cliente acepta debe ser lo que se persiste (evita la carrera aceptar-antes-del-API).
+  const [cotizandoApi, setCotizandoApi] = useState(false);
   useEffect(() => {
     setConceptosApi(null);
     if (!open || !record) return;
@@ -1353,9 +1360,11 @@ function CotizacionModal({
       cuantificacionData ?? (record.formData as any)?.cuantificacionData;
     if (!cuant) return;
     let cancelado = false;
+    setCotizandoApi(true);
     calcularCotizacionDesdeCuantificacionApi(cuant, record.formData?.adminId, record.ordenInspeccion)
       .then((res) => { if (!cancelado && res) setConceptosApi(res); })
-      .catch(() => { /* nunca romper el flujo: se queda el cálculo offline */ });
+      .catch(() => { /* nunca romper el flujo: se queda el cálculo offline */ })
+      .finally(() => { if (!cancelado) setCotizandoApi(false); });
     return () => { cancelado = true; };
   }, [open, record, cuantificacionData]);
 
@@ -1541,12 +1550,12 @@ function CotizacionModal({
           </div>
           <Button
             type="button"
-            disabled={aceptando}
+            disabled={aceptando || cotizandoApi}
             className="bg-emerald-600 text-white hover:bg-emerald-700"
             onClick={handleAceptar}
           >
             <CheckCircle2 className="mr-1.5 h-4 w-4" />
-            {aceptando ? 'Iniciando contrato…' : 'Cliente acepta la cotización'}
+            {aceptando ? 'Iniciando contrato…' : cotizandoApi ? 'Cotizando con tarifas vigentes…' : 'Cliente acepta la cotización'}
           </Button>
         </div>
       </DialogContent>
@@ -1560,8 +1569,11 @@ function CotizacionModal({
           setGenerandoCobroPdf(true);
           try {
             const { CobroAguaPdfDocument } = await import('@/lib/cobro-agua-pdf');
+            const { getReglasPorcentuales } = await import('@/lib/cotizacion-motor');
+            const reglasPct = await getReglasPorcentuales();
             const blob = await pdf(
               <CobroAguaPdfDocument
+                reglasPct={reglasPct}
                 record={record}
                 administracionCatalogo={cfg.administracion}
                 tipoTarifa={cfg.tipoTarifa}

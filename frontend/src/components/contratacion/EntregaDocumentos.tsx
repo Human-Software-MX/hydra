@@ -130,7 +130,6 @@ export default function EntregaDocumentos({
     void extraerDatosIdentificacion(imagen)
       .then((datos) => {
         if (datos) {
-          toast.success('Datos detectados en la identificación');
           onDatosExtraidosRef.current?.(datos);
         }
       })

@@ -59,6 +59,8 @@ export interface CobroAguaPdfProps {
   aplicaAlcantarillado?: boolean;
   aplicaSaneamiento?: boolean;
   filas?: FilaCobro[];    // si se proporcionan, se usan directamente
+  /** Reglas %% de alc/san desde BD (getReglasPorcentuales); fallback 10/12 %% si no llegan. */
+  reglasPct?: { alcantarillado: number; saneamiento: number } | null;
 }
 
 // ── Motor de cálculo ──────────────────────────────────────────────────────────
@@ -89,8 +91,9 @@ function generarFilas(
     // calcularCargoPeriodo divide internamente m3Total / unidades
     const cargo = calcularCargoPeriodo(administracion, tipoTarifa, m3Total, unidades);
     const aguaBase          = cargo?.agua          ?? m3Total * 36.77;
-    const alcantarilladoBase = aguaBase * 0.10;
-    const saneamientoBase   = aguaBase * 0.12;
+    // Reglas % desde BD (junta CEA); los literales quedan solo como fallback offline.
+    const alcantarilladoBase = aguaBase * (reglasPct?.alcantarillado ?? 0.10);
+    const saneamientoBase   = aguaBase * (reglasPct?.saneamiento ?? 0.12);
 
     // Solo sumar los conceptos que aplican
     const agua          = aplicaAgua            ? aguaBase          : 0;
@@ -245,7 +248,8 @@ export function CobroAguaPdfDocument({
   aplicaAlcantarillado = true,
   aplicaSaneamiento = true,
   filas: filasProp,
-}: CobroAguaPdfProps) {
+
+  reglasPct,}: CobroAguaPdfProps) {
   const fd = record.formData;
   const vars = fd.variablesCapturadas ?? {};
   const fechaDoc = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
