@@ -72,7 +72,7 @@
 ## 6. Solicitud — captura
 | # | Acción | Estado |
 |---|--------|--------|
-| 6.1 | Orden: solicitante → predio → tipo de servicio | 🟡 mapa/predio primero ya; reorden completo a validar con usuarios |
+| 6.1 | Orden: solicitante → predio → tipo de servicio | ✅ resuelto por decisión de la propia junta: «tiene mucho sentido como está acomodado… mejor no [cambiarlo]» — se mantiene el orden actual con el mapa primero (hecho) |
 | 6.2 | Mapa en la solicitud (direcciones de Agora) | ✅ mapa primero + pin prellena dirección + "Usar mi ubicación" |
 | 6.3 | Documentos primero + OCR prellenado | 🟡 subida por documento integrada (check→adjuntar, cola, numeración); OCR pendiente |
 | 6.4 | Catálogo de documentos × tipo de contratación en el flujo | ✅ (+ mapeo propuesto) · 👤 obligatoriedad y mapeo final CEA |
