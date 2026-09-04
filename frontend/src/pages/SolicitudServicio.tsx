@@ -439,7 +439,23 @@ function StepPredio({ form, set }: { form: SolicitudState; set: (p: Partial<Soli
   );
 }
 
+/** true si el domicilio no tiene nada capturado (ni cascada INEGI ni calle). */
+function domicilioVacio(d: SolicitudState['propDir']): boolean {
+  return !d.estadoINEGIId && !d.municipioINEGIId && !d.calle?.trim() && !d.codigoPostal?.trim();
+}
+
 function StepPropietario({ form, set }: { form: SolicitudState; set: (p: Partial<SolicitudState>) => void }) {
+  // El caso común en doméstico: el propietario vive en el predio. Si su domicilio
+  // está vacío y el predio ya tiene dirección, se prellena solo (una vez); el
+  // botón permite re-copiarla en cualquier momento.
+  useEffect(() => {
+    if (domicilioVacio(form.propDir) && !domicilioVacio(form.predioDir)) {
+      set({ propDir: { ...form.predioDir } });
+      toast.success('Domicilio del propietario prellenado con la dirección del predio');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -486,7 +502,23 @@ function StepPropietario({ form, set }: { form: SolicitudState; set: (p: Partial
           </div>
 
           <Separator />
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Domicilio del propietario</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Domicilio del propietario</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={domicilioVacio(form.predioDir)}
+              title={domicilioVacio(form.predioDir) ? 'Capture primero la dirección del predio' : 'Copiar la dirección del predio'}
+              onClick={() => {
+                set({ propDir: { ...form.predioDir } });
+                toast.success('Domicilio del propietario copiado del predio');
+              }}
+            >
+              Usar dirección del predio
+            </Button>
+          </div>
           <DomicilioPickerForm value={form.propDir} onChange={(v) => set({ propDir: v })} />
           <div className="grid grid-cols-4 gap-4">
             <Field label="Manzana">
