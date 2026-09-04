@@ -215,6 +215,14 @@ export class SolicitudesService {
       metrosRupturaAguaBanqueta?: string;
       metrosRupturaDrenajeCalle?: string;
       metrosRupturaDrenajeBanqueta?: string;
+      // Campos formales junta CEA 02-sep
+      tieneMedidor?: boolean;
+      diametroDescarga?: string;
+      metrosLinealesToma?: number;
+      metrosLinealesDescarga?: number;
+      realizada?: boolean;
+      motivoNoRealizada?: string;
+      intentos?: number;
       observaciones?: string;
       evidencias?: string[];
       resultadoEjecucion?: string;
