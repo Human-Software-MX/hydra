@@ -1,4 +1,5 @@
-import { IsOptional, IsString, Matches } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
+import { SECCIONES } from '../tarifa-valores';
 
 /**
  * Criterio de selección de tarifas vigentes. Se usa tanto en el listado
@@ -30,6 +31,16 @@ export class FiltroTarifasDto {
   @IsOptional()
   @IsString()
   buscar?: string;
+
+  /** Catálogo: PERIODICA (consumo periódico) | CONTRATACION (cargos únicos). Ausente = ambos. */
+  @IsOptional()
+  @IsIn([...SECCIONES])
+  seccion?: string;
+
+  /** Variante exacta de la tarifa (materiales calle-banqueta, diámetro/plan de medidor…). */
+  @IsOptional()
+  @IsString()
+  variante?: string;
 }
 
 /**

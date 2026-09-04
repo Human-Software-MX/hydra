@@ -1,4 +1,4 @@
-import type { ValoresTarifa } from '@/api/tarifas';
+import type { SeccionTarifa, ValoresTarifa } from '@/api/tarifas';
 
 /** Importe en pesos. Los precios unitarios usan `max: 4` porque el motor guarda 4 decimales. */
 export function fmtMXN(n: number | null | undefined, opts: { max?: number } = {}): string {
@@ -17,6 +17,12 @@ export function fmtMXN(n: number | null | undefined, opts: { max?: number } = {}
  */
 export function fmtPrecio(n: number | null | undefined): string {
   return fmtMXN(n, { max: 4 });
+}
+
+/** Cantidades sin unidad monetaria (m, m³, unidades). */
+export function fmtCantidad(n: number | null | undefined, max = 2): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  return new Intl.NumberFormat('es-MX', { maximumFractionDigits: max }).format(Number(n));
 }
 
 export function fmtPct(n: number | null | undefined, decimals = 2): string {
@@ -87,6 +93,50 @@ export function deltaPct(actual: number | null | undefined, nuevo: number | null
 }
 
 export const IVA_LABEL = (ivaPct: number) => (ivaPct === 0 ? 'Exenta 0%' : `IVA ${ivaPct}%`);
+
+const SECCION_LABEL: Record<string, string> = {
+  PERIODICA: 'Periódicas',
+  CONTRATACION: 'Contratación',
+};
+
+/** Secciones del catálogo, en el orden en que se muestran en el control segmentado. */
+export const SECCIONES: SeccionTarifa[] = ['PERIODICA', 'CONTRATACION'];
+
+/** Sin sección se listan las dos, así que la etiqueta lo dice explícitamente. */
+export const etiquetaSeccion = (seccion?: string | null) =>
+  seccion ? SECCION_LABEL[seccion] ?? seccion : 'Todas las secciones';
+
+export const esContratacion = (seccion?: string | null) => seccion === 'CONTRATACION';
+
+/**
+ * `contratacion_derechos_de_conexion_a_red_de_agua` → `derechos de conexión…` no se puede
+ * reconstruir con acentos, así que solo se quita el prefijo y se separan los guiones bajos.
+ * El nombre legible vive en `concepto`; esto es el respaldo cuando no viene.
+ */
+export function etiquetaTipoServicio(tipoServicio: string): string {
+  const sinPrefijo = tipoServicio.replace(/^contratacion_/, '');
+  return sinPrefijo.replace(/_/g, ' ');
+}
+
+/** Etiqueta de un servicio en los selects: contratación muestra el concepto legible. */
+export function etiquetaServicio(s: {
+  tipoServicio: string;
+  concepto: string | null;
+  seccion?: string | null;
+}): string {
+  if (esContratacion(s.seccion)) return s.concepto ?? etiquetaTipoServicio(s.tipoServicio);
+  return s.concepto ? `${s.tipoServicio} · ${s.concepto}` : s.tipoServicio;
+}
+
+/** Lee un número de `parametros` (JSONB libre) para los textos de ayuda del catálogo. */
+export function paramNumero(
+  parametros: Record<string, unknown> | null | undefined,
+  clave: string,
+): number | null {
+  const valor = parametros?.[clave];
+  const n = typeof valor === 'string' ? Number(valor) : valor;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
 
 const MOVIMIENTO_LABEL: Record<string, string> = {
   ALTA: 'Alta',

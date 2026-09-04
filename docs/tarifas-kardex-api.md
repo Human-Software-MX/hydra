@@ -60,6 +60,10 @@ interface TarifaVigenteDto {
                                      // Denormalizado en `tarifas.valor_referencia` (se escribe al crear cada versión) para listar sin cargar `precios`.
   ivaPct: number; vigenciaDesde: string; vigenciaHasta: string | null; activo: boolean; version: number;
   tarifaAnteriorId: string | null; motivo: string | null; creadoPor: string | null; createdAt: string;
+  seccion: 'PERIODICA' | 'CONTRATACION';   // catálogo al que pertenece
+  variante: string | null;                 // materiales calle-banqueta, diámetro/plan de medidor… (cuando no es una clase)
+  parametros: Record<string, unknown> | null; // consumoAsignadoM3, cantidadIncluida (lineal_excedente), variable, subconcepto
+  ivaNoObjeto: boolean;                    // «No objeto de IVA» (multas, recargos); ivaPct = 0
 }
 
 interface TarifaMovimientoDto {
@@ -88,6 +92,7 @@ interface ActualizacionTarifariaDto {
 interface FiltroTarifas {
   administracionId?: string; categoriaId?: string; claseTarifaId?: string;
   tipoServicio?: string; concepto?: string; buscar?: string;
+  seccion?: 'PERIODICA' | 'CONTRATACION'; variante?: string;
 }
 
 interface PreviewMasivaDto { filtro: FiltroTarifas; porcentaje: number; vigenciaDesde?: string /* YYYY-MM-DD */ }
@@ -99,6 +104,7 @@ interface PreviewMasivaResult {
   tarifas: Array<{
     id: string; codigo: string; nombre: string; administracionNombre: string | null; claseNombre: string | null;
     categoriaNombre: string | null; tipoServicio: string; tipoCalculo: string; ivaPct: number;
+    seccion: string; variante: string | null; ivaNoObjeto: boolean;
     actual: { cuotaFija: number | null; precioUnitario: number | null; valorReferencia: number | null };
     nuevo:  { cuotaFija: number | null; precioUnitario: number | null; valorReferencia: number | null };
   }>;
@@ -118,7 +124,8 @@ interface ActualizarTarifaDto {
 | Método | Ruta | Body / query | Respuesta |
 |---|---|---|---|
 | GET | `/tarifas/vigentes` | `?tipoServicio&administracionId&categoriaId&claseTarifaId&concepto&buscar&fecha` (todos opcionales; `fecha` default hoy) | `TarifaVigenteDto[]` (precios null) |
-| GET | `/tarifas/servicios` | — | `{ tipoServicio: string; concepto: string | null; total: number }[]` (distintos entre vigentes) |
+| GET | `/tarifas/servicios` | — | `{ tipoServicio: string; concepto: string | null; seccion: string; total: number }[]` (distintos entre vigentes) |
+| GET | `/tarifas/contratacion/cotizar` | `?administracionId&tipoServicio&claseTarifaId?&variante?&cantidad` | `{ tarifa: TarifaVigenteDto; cantidad; importe; ivaPct; iva; total; ivaNoObjeto }` (tarifa de contratación vigente; 404 si no hay) |
 | GET | `/tarifas/movimientos` | `?codigo&actualizacionId&tipo&page=1&limit=50` | `{ data: TarifaMovimientoDto[]; total; page; limit }` |
 | GET | `/tarifas/catalogo/categorias` | — | `CategoriaTarifaDto[]` (con `clases`, orden asc) |
 | PATCH | `/tarifas/catalogo/categorias/:id` | `{ nombre?, descripcion?, ivaPct?, activo?, vigenciaDesde?, motivo? }` | `CategoriaTarifaDto`. Si cambia `ivaPct` → nueva versión (CAMBIO_FISCAL) en cada tarifa vigente de las clases **sin override**. |
@@ -162,6 +169,8 @@ correcciones, ajustes, `POST /tarifas/actualizaciones`, `POST /tarifas/actualiza
   `claseTarifaId ∈ {clase del contrato, null}` y por servicio prefiere la combinación más específica:
   (admin, clase) > (admin, sin clase) > (global, clase) > (global, sin clase).
 - La clase del contrato = `contrato.tipoContratacion.claseTarifaId`.
-- `billing-calculator.calcularServicio` soporta `tabla` (m³ redondeados: fracción > 0.5 sube) y `lineal`.
+- `billing-calculator.calcularServicio` soporta `tabla` (m³ redondeados: fracción > 0.5 sube), `lineal` y
+  `lineal_excedente` (`cantidadIncluida`). La facturación periódica filtra `seccion = PERIODICA`.
+- El configurador fiscal (categoría/clase) no propaga a `seccion = CONTRATACION` ni a tarifas `ivaNoObjeto`.
 - CFDI: el traslado a nivel comprobante usa como `Base` la suma de importes gravados y una `TasaOCuota`
   por tasa distinta presente (antes: `Base = subtotal`, tasa fija 0.16).

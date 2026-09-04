@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { IVA_LABEL, etiquetaMovimiento, fmtPct, type EstadoVersion } from './format';
+import { IVA_LABEL, esContratacion, etiquetaMovimiento, etiquetaSeccion, fmtPct, type EstadoVersion } from './format';
 
 type Tono = 'success' | 'info' | 'warning' | 'danger' | 'muted' | 'violet';
 
@@ -41,8 +41,26 @@ export function Pill({
   );
 }
 
-/** Verde cuando la tarifa está exenta; azul con la tasa cuando está gravada. */
-export function IvaBadge({ ivaPct, className }: { ivaPct: number; className?: string }) {
+/**
+ * Verde cuando la tarifa está exenta; azul con la tasa cuando está gravada. Los actos **no
+ * objeto** también facturan al 0 % pero no son una exención, así que llevan pill neutra.
+ */
+export function IvaBadge({
+  ivaPct,
+  ivaNoObjeto,
+  className,
+}: {
+  ivaPct: number;
+  ivaNoObjeto?: boolean;
+  className?: string;
+}) {
+  if (ivaNoObjeto) {
+    return (
+      <Pill tono="muted" className={className}>
+        No objeto
+      </Pill>
+    );
+  }
   return (
     <Pill tono={ivaPct === 0 ? 'success' : 'info'} className={className}>
       {IVA_LABEL(ivaPct)}
@@ -50,9 +68,20 @@ export function IvaBadge({ ivaPct, className }: { ivaPct: number; className?: st
   );
 }
 
+/** Marca las tarifas de pago único; las periódicas no llevan pill (son el caso por defecto). */
+export function SeccionPill({ seccion, className }: { seccion?: string | null; className?: string }) {
+  if (!esContratacion(seccion)) return null;
+  return (
+    <Pill tono="violet" className={className}>
+      {etiquetaSeccion(seccion)}
+    </Pill>
+  );
+}
+
 const CALCULO_LABEL: Record<string, string> = {
   tabla: 'Tabla',
   lineal: 'Lineal',
+  lineal_excedente: 'Lineal (excedente)',
   escalonado: 'Escalonado',
   fijo: 'Fijo',
   variable: 'Variable',

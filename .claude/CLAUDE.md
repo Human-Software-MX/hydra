@@ -298,6 +298,7 @@ const mutation = useMutation({ mutationFn: apiCall, onSuccess: () => queryClient
   - Datos: `docs/Tarifas_periodicas.xlsx` → `npm run export:tarifas-periodicas-json` → `backend/prisma/data/tarifas-periodicas.json` → `seedTarifasPeriodicas` (idempotente, no reescribe historia).
   - API y reglas: `docs/tarifas-kardex-api.md`; motor: `docs/motor-tarifas.md` §3. Facturación resuelve tarifas por administración + clase y soporta `tabla`/`lineal`.
   - UI `/app/tarifas`: vigentes con filtros, actualizar (%/valores), actualización masiva con preview, Kardex, configuración fiscal.
+  - Tarifas de contratación (`docs/Tarifas_contratacion.xlsx`, 2026-09-03): mismo modelo con `seccion = CONTRATACION`, `variante`, `parametros`, `ivaNoObjeto`; `tipoServicio` prefijado `contratacion_`; `GET /tarifas/contratacion/cotizar`. El wizard sigue usando `lib/cotizacion-tarifas.ts` (JSON estático).
 
 ### 🔧 Pendiente / En progreso
 - Aplicar migración DB en servidor: `requiereInspeccion = false` para tipos INDIVIDUAL

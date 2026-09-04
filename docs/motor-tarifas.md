@@ -152,6 +152,27 @@ Fuente de verdad para facturación y para la pantalla `/app/tarifas`. Contrato d
   > 200 m³: `cuotaFija + precioUnitario × m3` (fila «> 200»). Los m³ fraccionarios se redondean: fracción > 0.5 sube.
 - `lineal`: `cuotaFija + precioUnitario × cantidad` (hojas FIJAS y POR CONCEPTO FIJO).
 - `escalonado` / `variable` / `fijo`: sin cambios (motor previo).
+- `lineal_excedente`: `cuotaFija + precioUnitario × max(0, cantidad − parametros.cantidadIncluida)` (derechos de
+  conexión: la base cubre los primeros 6 m).
+
+### Tarifas de contratación (`seccion = CONTRATACION`)
+
+Fuente: `docs/Tarifas_contratacion.xlsx` → `npm run export:tarifas-contratacion-json` →
+`prisma/data/tarifas-contratacion.json` (1 025 tarifas) → `seedTarifasContratacion` (idempotente). Cargos únicos al
+contratar: derechos de conexión (agua/drenaje por materiales calle-banqueta y longitud), derechos de contratación e
+infraestructura, agua/alcantarillado/saneamiento de contratación (con `parametros.consumoAsignadoM3`), medidor e
+instalación (por diámetro y plan de pago), inspecciones, materiales, multas y recargos.
+
+- `tipoServicio` va prefijado `contratacion_<concepto>` para no colisionar con los servicios periódicos y para que
+  la facturación periódica (`SERVICIOS_FACTURABLES`, filtro `seccion = PERIODICA`) nunca los seleccione.
+- La columna TARIFA del Excel es una clase (→ `claseTarifaId`), una combinación de materiales o la variable de
+  diámetro/plan (→ `variante`), o el genérico CONTRATACION.
+- El IVA es **por tarifa** (no se hereda de la clase): p. ej. AGUA de contratación doméstica 0 % pero derechos de
+  conexión 16 %. MULTA y RECARGOS son «No objeto» (`ivaNoObjeto = true`, `ivaPct = 0`). El configurador fiscal por
+  clase/categoría no propaga a esta sección.
+- `GET /tarifas/contratacion/cotizar` resuelve la tarifa vigente por administración + concepto (+ clase/variante) y
+  calcula importe, IVA y total. El motor offline del wizard (`frontend/src/lib/cotizacion-tarifas.ts` +
+  `tarifas-contratacion.json`) sigue vigente; migrarlo a este endpoint queda como siguiente paso.
 
 ### Supuestos y decisiones pendientes de confirmar con el dueño del tarifario
 
@@ -201,5 +222,6 @@ migración de datos explícita), no el re-seed.
 - [x] Vigencias históricas → versionado por fila + Kardex (`tarifa_movimientos`)
 - [x] Backend: tablas con vigencias en lugar de JSON estático (facturación resuelve por administración + clase)
 - [ ] Migrar el motor offline del wizard (`frontend/src/lib/tarifas.ts` + `tarifas-agua.json`) a `GET /tarifas/vigentes`
+- [ ] Migrar la cotización de solicitudes (`frontend/src/lib/cotizacion-tarifas.ts` + `tarifas-contratacion.json`) a `GET /tarifas/contratacion/cotizar`
 - [ ] Alcantarillado/saneamiento periódicos como % del agua (hoy solo en el motor offline; la BD tiene filas demo)
 - [ ] Vincular `Contrato` directamente a una clase cuando difiera de su tipo de contratación (trámite «Cambio de tarifa»)

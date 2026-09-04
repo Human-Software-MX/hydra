@@ -18,8 +18,26 @@ export const TIPOS_MOVIMIENTO = {
 export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[keyof typeof TIPOS_MOVIMIENTO];
 
 /** Tipos de cálculo soportados por el motor (`billing-calculator.ts`). */
-export const TIPOS_CALCULO = ['escalonado', 'variable', 'fijo', 'tabla', 'lineal'] as const;
+export const TIPOS_CALCULO = [
+  'escalonado',
+  'variable',
+  'fijo',
+  'tabla',
+  'lineal',
+  'lineal_excedente',
+] as const;
 export type TipoCalculo = (typeof TIPOS_CALCULO)[number];
+
+/**
+ * Catálogo al que pertenece la tarifa: PERIODICA (consumo periódico, lo que se
+ * factura cada mes) o CONTRATACION (cargos únicos al contratar). Son catálogos
+ * disjuntos: la facturación periódica sólo resuelve PERIODICA y el configurador
+ * fiscal no propaga IVA a CONTRATACION (su tasa es por concepto, no por clase).
+ */
+export const SECCIONES = ['PERIODICA', 'CONTRATACION'] as const;
+export type Seccion = (typeof SECCIONES)[number];
+export const SECCION_PERIODICA: Seccion = 'PERIODICA';
+export const SECCION_CONTRATACION: Seccion = 'CONTRATACION';
 
 /**
  * Valores económicos de una versión de tarifa. Es lo que se copia al Kardex
@@ -111,7 +129,11 @@ export function valorReferencia(valores: ValoresTarifa, m3Referencia = 10): numb
     return valores.precios[idx] ?? null;
   }
   if (valores.tipoCalculo === 'fijo') return valores.cuotaFija;
-  return valores.precioUnitario ?? valores.cuotaFija;
+  // lineal / lineal_excedente / variable: el precio proporcional si existe y no es 0; si no, la base
+  // (p. ej. derechos de contratación: sólo cuota fija; IAP: sólo base).
+  const pu = valores.precioUnitario;
+  if (pu !== null && pu !== 0) return pu;
+  return valores.cuotaFija ?? pu;
 }
 
 /**

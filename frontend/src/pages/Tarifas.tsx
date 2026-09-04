@@ -24,16 +24,17 @@ import { SimuladorTarifas } from '@/components/tarifas/SimuladorTarifas';
 import { TarifaActualizarDialog } from '@/components/tarifas/TarifaActualizarDialog';
 import { TarifaKardexSheet } from '@/components/tarifas/TarifaKardexSheet';
 import { TarifasVigentesTable } from '@/components/tarifas/TarifasVigentesTable';
-import { fmtFecha, fmtPct } from '@/components/tarifas/format';
+import { etiquetaSeccion, fmtFecha, fmtPct } from '@/components/tarifas/format';
 
-const FILTRO_VACIO: FiltroTarifas = {};
+/** La página abre en periódicas: es el catálogo que se consulta a diario. */
+const FILTRO_INICIAL: FiltroTarifas = { seccion: 'PERIODICA' };
 
 const Tarifas = () => {
   const useApi = hasApi();
   const { tarifas: ctxTarifas } = useData();
 
   const [tab, setTab] = useState('vigentes');
-  const [filtro, setFiltro] = useState<FiltroTarifas>(FILTRO_VACIO);
+  const [filtro, setFiltro] = useState<FiltroTarifas>(FILTRO_INICIAL);
   const [masivaAbierta, setMasivaAbierta] = useState(false);
   const [tarifaAActualizar, setTarifaAActualizar] = useState<TarifaVigenteDto | null>(null);
   const [kardex, setKardex] = useState<{ id: string; resumen: TarifaVigenteDto | null } | null>(null);
@@ -47,8 +48,16 @@ const Tarifas = () => {
       claseTarifaId: filtro.claseTarifaId,
       tipoServicio: filtro.tipoServicio,
       concepto: filtro.concepto,
+      seccion: filtro.seccion,
     }),
-    [filtro.administracionId, filtro.categoriaId, filtro.claseTarifaId, filtro.tipoServicio, filtro.concepto],
+    [
+      filtro.administracionId,
+      filtro.categoriaId,
+      filtro.claseTarifaId,
+      filtro.tipoServicio,
+      filtro.concepto,
+      filtro.seccion,
+    ],
   );
 
   const { data: tarifas = [], isLoading: cargandoTarifas } = useQuery({
@@ -82,15 +91,19 @@ const Tarifas = () => {
     enabled: useApi,
   });
 
-  const hayFiltros = Object.values(filtroServidor).some(Boolean);
+  /** La sección es el eje del listado, no un filtro más: no cuenta para "con los filtros aplicados". */
+  const { seccion, ...filtrosDetalle } = filtroServidor;
+  const hayFiltros = Object.values(filtrosDetalle).some(Boolean);
   /** Sin backend la página conserva el conteo del dataset demo (DataContext). */
   const totalVigentes = useApi ? tarifas.length : ctxTarifas.length;
   const exentas = tarifas.filter((t) => t.ivaPct === 0).length;
+  const noObjeto = tarifas.filter((t) => t.ivaNoObjeto).length;
   const pctExentas = tarifas.length > 0 ? Math.round((exentas / tarifas.length) * 100) : 0;
   const totalClases = categorias.reduce((acc, c) => acc + c.clases.length, 0);
   const ultimaAct = actualizaciones[0];
 
-  const limpiarFiltros = () => setFiltro(FILTRO_VACIO);
+  /** Limpiar no cambia de sección: es la vista elegida, no un filtro. */
+  const limpiarFiltros = () => setFiltro((f) => ({ seccion: f.seccion }));
 
   const abrirLote = (actualizacionId: string) => {
     setKardex(null);
@@ -118,12 +131,14 @@ const Tarifas = () => {
         <KpiCard
           label="Tarifas vigentes"
           value={totalVigentes}
-          sub={hayFiltros ? 'Con los filtros aplicados' : 'Versiones vigentes hoy'}
+          sub={`${etiquetaSeccion(seccion)} · ${
+            hayFiltros ? 'con los filtros aplicados' : 'versiones vigentes hoy'
+          }`}
         />
         <KpiCard
           label="Exentas de IVA"
           value={exentas}
-          sub={`${pctExentas} % del catálogo listado`}
+          sub={`${pctExentas} % del catálogo listado${noObjeto > 0 ? ` · ${noObjeto} no objeto` : ''}`}
           accent="success"
         />
         <KpiCard

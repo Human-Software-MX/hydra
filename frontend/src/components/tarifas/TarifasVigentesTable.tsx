@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { IvaBadge, TipoCalculoBadge } from './badges';
-import { fmtFecha, fmtMXN, fmtPrecio } from './format';
+import { IvaBadge, Pill, TipoCalculoBadge } from './badges';
+import { SeccionToggle } from './SeccionToggle';
+import { esContratacion, etiquetaServicio, fmtFecha, fmtMXN, fmtPrecio } from './format';
 
 const TODAS = '__all__';
 
@@ -65,7 +66,16 @@ export function TarifasVigentesTable({
     const q = (filtro.buscar ?? '').trim().toLowerCase();
     const visibles = q
       ? tarifas.filter((t) =>
-          [t.nombre, t.codigo, t.claseNombre, t.categoriaNombre, t.administracionNombre, t.tipoServicio, t.concepto]
+          [
+            t.nombre,
+            t.codigo,
+            t.claseNombre,
+            t.categoriaNombre,
+            t.administracionNombre,
+            t.tipoServicio,
+            t.concepto,
+            t.variante,
+          ]
             .filter(Boolean)
             .join(' ')
             .toLowerCase()
@@ -73,11 +83,22 @@ export function TarifasVigentesTable({
         )
       : tarifas;
     return [...visibles].sort((a, b) => {
-      const clase = (a.claseNombre ?? '').localeCompare(b.claseNombre ?? '', 'es-MX');
+      // Las tarifas de contratación no tienen clase: se agrupan por su concepto legible.
+      const etiqueta = (t: TarifaVigenteDto) => t.claseNombre ?? t.concepto ?? t.nombre;
+      const clase = etiqueta(a).localeCompare(etiqueta(b), 'es-MX');
       if (clase !== 0) return clase;
       return (a.administracionNombre ?? '').localeCompare(b.administracionNombre ?? '', 'es-MX');
     });
   }, [tarifas, filtro.buscar]);
+
+  /** El select de servicio solo lista los de la sección elegida, con su nombre legible. */
+  const opcionesServicio = useMemo(() => {
+    const visibles = filtro.seccion ? servicios.filter((s) => s.seccion === filtro.seccion) : servicios;
+    return visibles.map((s) => ({
+      value: servicioKey(s.tipoServicio, s.concepto),
+      label: etiquetaServicio(s),
+    }));
+  }, [servicios, filtro.seccion]);
 
   const hayFiltros =
     Boolean(filtro.administracionId) ||
@@ -88,6 +109,15 @@ export function TarifasVigentesTable({
 
   return (
     <div className="space-y-3">
+      <SeccionToggle
+        value={filtro.seccion}
+        // El servicio elegido pertenece a la sección anterior, así que se descarta.
+        onChange={(seccion) =>
+          onFiltroChange({ ...filtro, seccion, tipoServicio: undefined, concepto: undefined })
+        }
+        conTodas
+      />
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -158,13 +188,7 @@ export function TarifasVigentesTable({
             const [tipoServicio, concepto] = v.split('|');
             onFiltroChange({ ...filtro, tipoServicio, concepto: concepto || undefined });
           }}
-          options={[
-            { value: TODAS, label: 'Todos los servicios' },
-            ...servicios.map((s) => ({
-              value: servicioKey(s.tipoServicio, s.concepto),
-              label: s.concepto ? `${s.tipoServicio} · ${s.concepto}` : s.tipoServicio,
-            })),
-          ]}
+          options={[{ value: TODAS, label: 'Todos los servicios' }, ...opcionesServicio]}
         />
 
         {hayFiltros && (
@@ -196,7 +220,9 @@ export function TarifasVigentesTable({
               {filas.map((t) => (
                 <tr key={t.id} className="border-t border-border/50 transition-colors hover:bg-muted/30">
                   <td className="min-w-[230px] max-w-[280px] px-3 py-3">
-                    <p className="font-medium leading-tight">{t.claseNombre ?? t.nombre}</p>
+                    <p className="font-medium leading-tight">
+                      {t.claseNombre ?? t.variante ?? (esContratacion(t.seccion) ? 'General' : t.nombre)}
+                    </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       {t.categoriaNombre && (
                         <Badge variant="secondary" className="text-[10px] font-semibold">
@@ -204,12 +230,26 @@ export function TarifasVigentesTable({
                         </Badge>
                       )}
                       <TipoCalculoBadge tipoCalculo={t.tipoCalculo} />
-                      <IvaBadge ivaPct={t.ivaPct} />
+                      <IvaBadge ivaPct={t.ivaPct} ivaNoObjeto={t.ivaNoObjeto} />
                     </div>
                   </td>
-                  <td className="max-w-[200px] px-3 py-3">
-                    <p className="leading-tight">{t.tipoServicio}</p>
-                    {t.concepto && <p className="truncate text-xs text-muted-foreground" title={t.concepto}>{t.concepto}</p>}
+                  <td className="min-w-[170px] max-w-[260px] px-3 py-3">
+                    {esContratacion(t.seccion) ? (
+                      <>
+                        <p className="leading-tight" title={t.concepto ?? t.tipoServicio}>
+                          {t.concepto ?? t.tipoServicio}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="leading-tight">{t.tipoServicio}</p>
+                        {t.concepto && (
+                          <p className="truncate text-xs text-muted-foreground" title={t.concepto}>
+                            {t.concepto}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td className="max-w-[170px] px-3 py-3 text-xs text-muted-foreground">
                     <span className="line-clamp-2" title={t.administracionNombre ?? 'Global'}>
@@ -219,7 +259,9 @@ export function TarifasVigentesTable({
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtPrecio(t.cuotaFija)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtPrecio(t.precioUnitario)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
-                    {t.tipoCalculo === 'tabla' ? fmtMXN(t.valorReferencia) : '—'}
+                    {t.tipoCalculo === 'tabla' && !esContratacion(t.seccion)
+                      ? fmtMXN(t.valorReferencia)
+                      : '—'}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
                     <p className="leading-tight">{fmtFecha(t.vigenciaDesde)}</p>

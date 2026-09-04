@@ -15,8 +15,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { EstadoVersionBadge, IvaBadge, TipoCalculoBadge, TipoMovimientoBadge } from './badges';
-import { estadoVersion, fmtFecha, fmtFechaHora, fmtMXN, fmtPrecio } from './format';
+import { EstadoVersionBadge, IvaBadge, Pill, SeccionPill, TipoCalculoBadge, TipoMovimientoBadge } from './badges';
+import { esContratacion, estadoVersion, etiquetaServicio, fmtFecha, fmtFechaHora, fmtMXN, fmtPrecio } from './format';
 
 interface CambioFila {
   label: string;
@@ -32,6 +32,8 @@ function valorReferenciaTabla(v: ValoresTarifa | null | undefined): number | nul
 
 /** Filas "anterior → nuevo" de un movimiento; solo las que realmente cambiaron. */
 function cambiosDeMovimiento(m: TarifaMovimientoDto): CambioFila[] {
+  /** Solo las tarifas de tabla tienen importe de referencia a 10 m³. */
+  const esTabla = m.valoresNuevos.tipoCalculo === 'tabla' || m.valoresAnteriores?.tipoCalculo === 'tabla';
   const antes: ValoresTarifa | null = m.valoresAnteriores;
   const ahora = m.valoresNuevos;
   const filas: CambioFila[] = [];
@@ -47,7 +49,9 @@ function cambiosDeMovimiento(m: TarifaMovimientoDto): CambioFila[] {
   };
   agrega('Precio base', antes?.cuotaFija, ahora.cuotaFija);
   agrega('Precio m³', antes?.precioUnitario, ahora.precioUnitario);
-  agrega('Ref. 10 m³', valorReferenciaTabla(antes), valorReferenciaTabla(ahora), (n) => fmtMXN(n));
+  if (esTabla) {
+    agrega('Ref. 10 m³', valorReferenciaTabla(antes), valorReferenciaTabla(ahora), (n) => fmtMXN(n));
+  }
   if (antes && antes.ivaPct !== ahora.ivaPct) {
     filas.push({ label: 'IVA', anterior: `${antes.ivaPct}%`, nuevo: `${ahora.ivaPct}%` });
   }
@@ -86,20 +90,21 @@ export function TarifaKardexSheet({ tarifaId, tarifaResumen, open, onOpenChange,
 
         {cabecera && (
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{cabecera.claseNombre ?? '—'}</span>
+            <span className="font-medium text-foreground">
+              {cabecera.claseNombre ?? (esContratacion(cabecera.seccion) ? 'Sin clase' : '—')}
+            </span>
             {cabecera.categoriaNombre && (
               <Badge variant="secondary" className="text-[10px] font-semibold">
                 {cabecera.categoriaNombre}
               </Badge>
             )}
+            <SeccionPill seccion={cabecera.seccion} />
+            {cabecera.variante && <Pill tono="muted">{cabecera.variante}</Pill>}
             <span>·</span>
             <span>{cabecera.administracionNombre ?? 'Global'}</span>
             <span>·</span>
-            <span>
-              {cabecera.tipoServicio}
-              {cabecera.concepto ? ` · ${cabecera.concepto}` : ''}
-            </span>
-            <IvaBadge ivaPct={cabecera.ivaPct} />
+            <span>{etiquetaServicio(cabecera)}</span>
+            <IvaBadge ivaPct={cabecera.ivaPct} ivaNoObjeto={cabecera.ivaNoObjeto} />
             <TipoCalculoBadge tipoCalculo={cabecera.tipoCalculo} />
             <span>Vigente desde {fmtFecha(cabecera.vigenciaDesde)}</span>
           </div>

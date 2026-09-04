@@ -11,6 +11,7 @@ import {
   ActualizacionTarifariaDto,
   CategoriaTarifaDto,
   ClaseTarifaDto,
+  CotizacionContratacionDto,
   FiltroTarifas,
   KardexDto,
   mapaAdministraciones,
@@ -28,12 +29,22 @@ import {
   normalizarVigencia,
   redondear2,
   redondear4,
+  SECCION_CONTRATACION,
+  SECCION_PERIODICA,
   snapshotValores,
   TIPOS_MOVIMIENTO,
   TipoMovimiento,
   ValoresTarifa,
   valorReferencia,
 } from './tarifa-valores';
+import {
+  calcularServicio,
+  cantidadIncluidaDe,
+  redondear,
+  TarifaCalculo,
+  tasaIva,
+} from '../facturacion/billing-calculator';
+import { filtrarMasEspecificas } from '../facturacion/tarifa-especificidad';
 import { ActualizarTarifaDto } from './dto/actualizar-tarifa.dto';
 import { AplicarMasivaDto, PreviewMasivaDto } from './dto/actualizacion-masiva.dto';
 import { UpdateCategoriaTarifaDto, UpdateClaseTarifaDto } from './dto/catalogo-fiscal.dto';
@@ -67,6 +78,8 @@ export interface CambiosVersion {
   precioUnitario?: number;
   precios?: number[];
   ivaPct?: number;
+  /** Tratamiento «No objeto de IVA»: si es `true` fuerza `ivaPct = 0`. */
+  ivaNoObjeto?: boolean;
   vigenciaDesde?: string | Date | null;
   motivo: string;
   /** Si se omite se deduce a partir de los cambios. */
@@ -110,19 +123,114 @@ export class TarifaVersionesService {
     );
   }
 
-  /** Servicios/conceptos distintos presentes entre las tarifas vigentes hoy. */
-  async listarServicios(): Promise<Array<{ tipoServicio: string; concepto: string | null; total: number }>> {
+  /** Servicios/conceptos distintos presentes entre las tarifas vigentes hoy, por catálogo. */
+  async listarServicios(
+    filtro: FiltroTarifas = {},
+  ): Promise<Array<{ tipoServicio: string; concepto: string | null; seccion: string; total: number }>> {
     const filas = await this.prisma.tarifa.groupBy({
-      by: ['tipoServicio', 'concepto'],
-      where: this.whereVigentes({}, new Date()),
+      by: ['tipoServicio', 'concepto', 'seccion'],
+      where: this.whereVigentes(filtro, new Date()),
       _count: { _all: true },
     });
     return filas
-      .map((f) => ({ tipoServicio: f.tipoServicio, concepto: f.concepto, total: f._count._all }))
+      .map((f) => ({
+        tipoServicio: f.tipoServicio,
+        concepto: f.concepto,
+        seccion: f.seccion,
+        total: f._count._all,
+      }))
       .sort(
         (a, b) =>
-          a.tipoServicio.localeCompare(b.tipoServicio) || (a.concepto ?? '').localeCompare(b.concepto ?? ''),
+          a.tipoServicio.localeCompare(b.tipoServicio) ||
+          (a.concepto ?? '').localeCompare(b.concepto ?? '') ||
+          a.seccion.localeCompare(b.seccion),
       );
+  }
+
+  // ─── Cotización de cargos de contratación ─────────────────────────────────
+
+  /**
+   * `GET /tarifas/contratacion/cotizar` — resuelve la tarifa de contratación
+   * vigente hoy para (administración, servicio[, clase][, variante]) y calcula
+   * el cargo único para `cantidad` unidades.
+   *
+   * Usa la MISMA preferencia por especificidad que la facturación periódica
+   * ((admin, clase) > (admin, sin clase) > (global, clase) > (global, sin clase))
+   * y el mismo motor de cálculo: la cotización que ve el cliente y el cargo que
+   * se factura al contratar no pueden diferir. No escribe nada.
+   */
+  async cotizarContratacion(params: {
+    administracionId: string;
+    tipoServicio: string;
+    claseTarifaId?: string;
+    variante?: string;
+    cantidad?: number;
+  }): Promise<CotizacionContratacionDto> {
+    const fecha = new Date();
+    const cantidad = params.cantidad ?? 0;
+    const and: Prisma.TarifaWhereInput[] = [
+      { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: fecha } }] },
+      // Las tarifas sin administración son el fallback global.
+      { OR: [{ administracionId: params.administracionId }, { administracionId: null }] },
+    ];
+    if (params.claseTarifaId) {
+      and.push({ OR: [{ claseTarifaId: params.claseTarifaId }, { claseTarifaId: null }] });
+    }
+
+    const candidatas = await this.prisma.tarifa.findMany({
+      where: {
+        seccion: SECCION_CONTRATACION,
+        activo: true,
+        tipoServicio: { equals: params.tipoServicio, mode: 'insensitive' },
+        vigenciaDesde: { lte: fecha },
+        ...(params.variante && { variante: params.variante }),
+        AND: and,
+      },
+      include: INCLUDE_CLASE,
+      omit: SIN_PRECIOS,
+      // La versión vigente más reciente del linaje primero.
+      orderBy: [{ vigenciaDesde: 'desc' }, { version: 'desc' }],
+    });
+    const [tarifa] = filtrarMasEspecificas(candidatas, {
+      administracionId: params.administracionId,
+      claseTarifaId: params.claseTarifaId ?? null,
+    });
+    if (!tarifa) {
+      throw new NotFoundException(
+        `No hay tarifa de contratación vigente para ${params.tipoServicio}` +
+          ` (administración ${params.administracionId}` +
+          `${params.claseTarifaId ? `, clase ${params.claseTarifaId}` : ''}` +
+          `${params.variante ? `, variante ${params.variante}` : ''})`,
+      );
+    }
+
+    const calculo: TarifaCalculo = {
+      tipoServicio: tarifa.tipoServicio,
+      tipoCalculo: tarifa.tipoCalculo,
+      rangoMinM3: tarifa.rangoMinM3,
+      rangoMaxM3: tarifa.rangoMaxM3,
+      precioUnitario: tarifa.precioUnitario === null ? null : Number(tarifa.precioUnitario),
+      cuotaFija: tarifa.cuotaFija === null ? null : Number(tarifa.cuotaFija),
+      cantidadIncluida: cantidadIncluidaDe(tarifa.parametros),
+      ivaNoObjeto: tarifa.ivaNoObjeto,
+      ivaPct: Number(tarifa.ivaPct ?? 0),
+    };
+    const lineas = calcularServicio(tarifa.tipoServicio, [calculo], cantidad);
+    const importe = redondear(lineas.reduce((acc, l) => acc + l.importe, 0));
+    const iva = redondear(lineas.reduce((acc, l) => acc + l.iva, 0));
+    const admins = await this.nombresAdministracion();
+
+    return {
+      tarifa: toTarifaDto(tarifa, {
+        administracionNombre: this.nombreAdmin(admins, tarifa.administracionId),
+      }),
+      cantidad,
+      importe,
+      ivaPct: tasaIva(calculo),
+      iva,
+      total: redondear(importe + iva),
+      ivaNoObjeto: tarifa.ivaNoObjeto,
+    };
   }
 
   /** Kardex paginado (todos los linajes o uno solo). */
@@ -130,6 +238,7 @@ export class TarifaVersionesService {
     codigo?: string;
     actualizacionId?: string;
     tipo?: string;
+    seccion?: string;
     page?: number;
     limit?: number;
   }): Promise<{ data: TarifaMovimientoDto[]; total: number; page: number; limit: number }> {
@@ -139,6 +248,8 @@ export class TarifaVersionesService {
       ...(params.codigo && { codigo: params.codigo }),
       ...(params.actualizacionId && { actualizacionId: params.actualizacionId }),
       ...(params.tipo && { tipo: params.tipo }),
+      // El Kardex de un catálogo: la sección vive en la tarifa, no en el movimiento.
+      ...(params.seccion && { tarifa: { seccion: params.seccion } }),
     };
     const [movimientos, total, admins] = await Promise.all([
       this.prisma.tarifaMovimiento.findMany({
@@ -309,6 +420,12 @@ export class TarifaVersionesService {
           tipoContratacionCodigo: actual.tipoContratacionCodigo,
           claseTarifaId: actual.claseTarifaId,
           concepto: actual.concepto,
+          // Clasificación y parámetros del concepto: son propiedades del linaje,
+          // no valores económicos, así que se arrastran a cada nueva versión.
+          seccion: actual.seccion,
+          variante: actual.variante,
+          parametros: actual.parametros ?? Prisma.DbNull,
+          ivaNoObjeto: cambios.ivaNoObjeto ?? actual.ivaNoObjeto,
           rangoMinM3: nuevos.rangoMinM3,
           rangoMaxM3: nuevos.rangoMaxM3,
           cuotaFija: nuevos.cuotaFija,
@@ -376,8 +493,10 @@ export class TarifaVersionesService {
     if (dto.porcentaje != null && tieneValores) {
       throw new BadRequestException('Indique porcentaje O valores directos (cuotaFija/precioUnitario/precios), no ambos');
     }
-    if (dto.porcentaje == null && !tieneValores && dto.ivaPct === undefined) {
-      throw new BadRequestException('No hay cambios: indique porcentaje, valores directos o ivaPct');
+    if (dto.porcentaje == null && !tieneValores && dto.ivaPct === undefined && dto.ivaNoObjeto === undefined) {
+      throw new BadRequestException(
+        'No hay cambios: indique porcentaje, valores directos, ivaPct o ivaNoObjeto',
+      );
     }
     if (dto.porcentaje != null) this.validarPorcentaje(dto.porcentaje);
 
@@ -389,6 +508,7 @@ export class TarifaVersionesService {
         precioUnitario: dto.precioUnitario,
         precios: dto.precios,
         ivaPct: dto.ivaPct,
+        ivaNoObjeto: dto.ivaNoObjeto,
         vigenciaDesde: dto.vigenciaDesde,
         motivo: dto.motivo,
       },
@@ -493,7 +613,11 @@ export class TarifaVersionesService {
           claseNombre: t.claseTarifa?.nombre ?? null,
           categoriaNombre: t.claseTarifa?.categoria?.nombre ?? null,
           tipoServicio: t.tipoServicio,
+          concepto: t.concepto,
           tipoCalculo: t.tipoCalculo,
+          seccion: t.seccion,
+          variante: t.variante,
+          ivaNoObjeto: t.ivaNoObjeto,
           ivaPct: actual.ivaPct,
           actual: {
             cuotaFija: actual.cuotaFija,
@@ -717,6 +841,11 @@ export class TarifaVersionesService {
       where: {
         claseTarifaId: { in: claseIds },
         activo: true,
+        // El IVA de las tarifas de contratación es por concepto (AGUA (CONTRATACIÓN)
+        // doméstica 0 %, derechos 16 %), no se hereda de la clase: quedan fuera.
+        seccion: SECCION_PERIODICA,
+        // «No objeto de IVA» (multas, recargos) no cambia por configuración fiscal.
+        ivaNoObjeto: false,
         vigenciaDesde: { lte: referencia },
         tarifaSiguiente: { is: null },
         OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: referencia } }],
@@ -768,6 +897,8 @@ export class TarifaVersionesService {
       ...(filtro.administracionId && { administracionId: filtro.administracionId }),
       ...(filtro.claseTarifaId && { claseTarifaId: filtro.claseTarifaId }),
       ...(filtro.categoriaId && { claseTarifa: { categoriaId: filtro.categoriaId } }),
+      ...(filtro.seccion && { seccion: filtro.seccion }),
+      ...(filtro.variante && { variante: filtro.variante }),
       AND: and,
     };
   }
@@ -776,7 +907,8 @@ export class TarifaVersionesService {
   private async totalesPorClase(): Promise<Map<string, number>> {
     const filas = await this.prisma.tarifa.groupBy({
       by: ['claseTarifaId'],
-      where: { ...this.whereVigentes({}, new Date()), tarifaSiguiente: { is: null } },
+      // Sólo las tarifas a las que el configurador fiscal realmente propaga (periódicas y objeto de IVA).
+      where: { ...this.whereVigentes({ seccion: 'PERIODICA' }, new Date()), tarifaSiguiente: { is: null }, ivaNoObjeto: false },
       _count: { _all: true },
     });
     const totales = new Map<string, number>();
@@ -800,6 +932,8 @@ export class TarifaVersionesService {
       nuevos = { ...nuevos, precios: cambios.precios.map(redondear4) };
     }
     if (cambios.ivaPct !== undefined) nuevos = { ...nuevos, ivaPct: redondear2(cambios.ivaPct) };
+    // «No objeto de IVA» (multas, recargos): no hay traslado que calcular.
+    if (cambios.ivaNoObjeto === true) nuevos = { ...nuevos, ivaPct: 0 };
     return nuevos;
   }
 
@@ -814,7 +948,8 @@ export class TarifaVersionesService {
       anteriores.cuotaFija === nuevos.cuotaFija &&
       anteriores.precioUnitario === nuevos.precioUnitario &&
       JSON.stringify(anteriores.precios) === JSON.stringify(nuevos.precios);
-    if (mismosValores && anteriores.ivaPct !== nuevos.ivaPct) return TIPOS_MOVIMIENTO.CAMBIO_FISCAL;
+    const cambioFiscal = anteriores.ivaPct !== nuevos.ivaPct || cambios.ivaNoObjeto !== undefined;
+    if (mismosValores && cambioFiscal) return TIPOS_MOVIMIENTO.CAMBIO_FISCAL;
     return TIPOS_MOVIMIENTO.CAMBIO_VALOR;
   }
 

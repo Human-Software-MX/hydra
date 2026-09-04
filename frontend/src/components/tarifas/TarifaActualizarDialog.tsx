@@ -20,8 +20,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { IvaBadge, TipoCalculoBadge } from './badges';
-import { aplicarPct, deltaPct, fmtMXN, fmtPct, fmtPrecio, hoyISO } from './format';
+import { IvaBadge, Pill, SeccionPill, TipoCalculoBadge } from './badges';
+import {
+  aplicarPct,
+  deltaPct,
+  esContratacion,
+  etiquetaServicio,
+  fmtCantidad,
+  fmtMXN,
+  fmtPct,
+  fmtPrecio,
+  hoyISO,
+  paramNumero,
+} from './format';
 
 type Modo = 'porcentaje' | 'valores';
 
@@ -51,6 +62,15 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const esTabla = tarifa?.tipoCalculo === 'tabla';
+  const contratacion = esContratacion(tarifa?.seccion);
+  /** En contratación el segundo importe es el precio proporcional (por metro o unidad), no por m³. */
+  const labelUnitario = contratacion ? 'Precio proporcional' : 'Precio m³';
+  /** `lineal_excedente`: la cuota base cubre N unidades y el resto se cobra al proporcional. */
+  const cantidadIncluida =
+    tarifa?.tipoCalculo === 'lineal_excedente'
+      ? paramNumero(tarifa?.parametros, 'cantidadIncluida')
+      : null;
+  const consumoAsignado = paramNumero(tarifa?.parametros, 'consumoAsignadoM3');
 
   useEffect(() => {
     if (!open || !tarifa) return;
@@ -81,7 +101,7 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
     const filas: FilaPreview[] = [
       { label: 'Precio base', actual: tarifa.cuotaFija, nuevo: factor(tarifa.cuotaFija), formato: fmtPrecio },
       {
-        label: 'Precio m³',
+        label: labelUnitario,
         actual: tarifa.precioUnitario,
         nuevo: factor(tarifa.precioUnitario),
         formato: fmtPrecio,
@@ -96,7 +116,7 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
       });
     }
     return filas.filter((f) => f.actual != null);
-  }, [tarifa, pctValido, pctNum, esTabla]);
+  }, [tarifa, pctValido, pctNum, esTabla, labelUnitario]);
 
   const mutation = useMutation({
     mutationFn: (dto: ActualizarTarifaDto) => actualizarTarifa(tarifa!.id, dto),
@@ -147,9 +167,13 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
           <DialogTitle>Actualizar tarifa</DialogTitle>
           <DialogDescription>
             {tarifa
-              ? `${tarifa.claseNombre ?? tarifa.nombre} · ${tarifa.tipoServicio}${
-                  tarifa.concepto ? ` · ${tarifa.concepto}` : ''
-                } · ${tarifa.administracionNombre ?? 'Global'}`
+              ? [
+                  tarifa.claseNombre ?? tarifa.variante ?? (esContratacion(tarifa.seccion) ? 'General' : tarifa.nombre),
+                  etiquetaServicio(tarifa),
+                  tarifa.administracionNombre ?? 'Global',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : 'Se crea una versión nueva y la actual queda en el histórico.'}
           </DialogDescription>
         </DialogHeader>
@@ -157,10 +181,24 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
         {tarifa && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <SeccionPill seccion={tarifa.seccion} />
+              {tarifa.variante && <Pill tono="muted">{tarifa.variante}</Pill>}
               <TipoCalculoBadge tipoCalculo={tarifa.tipoCalculo} />
-              <IvaBadge ivaPct={tarifa.ivaPct} />
+              <IvaBadge ivaPct={tarifa.ivaPct} ivaNoObjeto={tarifa.ivaNoObjeto} />
               <span>Versión actual v{tarifa.version}</span>
             </div>
+
+            {(cantidadIncluida != null || consumoAsignado != null) && (
+              <div className="space-y-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {cantidadIncluida != null && (
+                  <p>
+                    La base cubre {fmtCantidad(cantidadIncluida)} m; el excedente se cobra a precio
+                    proporcional.
+                  </p>
+                )}
+                {consumoAsignado != null && <p>Consumo asignado: {fmtCantidad(consumoAsignado)} m³.</p>}
+              </div>
+            )}
 
             <div className="inline-flex rounded-md border p-0.5">
               {(['porcentaje', 'valores'] as Modo[]).map((m) => (
@@ -278,7 +316,7 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="tarifa-unitario">Precio m³</Label>
+                    <Label htmlFor="tarifa-unitario">{labelUnitario}</Label>
                     <Input
                       id="tarifa-unitario"
                       type="number"
@@ -289,10 +327,17 @@ export function TarifaActualizarDialog({ tarifa, open, onOpenChange }: Props) {
                     />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  La tabla de precios por m³ no se edita a mano: se actualiza en bloque desde el modo
-                  porcentaje.
-                </p>
+                {esTabla ? (
+                  <p className="text-xs text-muted-foreground">
+                    La tabla de precios por m³ no se edita a mano: se actualiza en bloque desde el modo
+                    porcentaje.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Se crea una versión nueva con los importes indicados; los que dejes sin cambiar se
+                    conservan.
+                  </p>
+                )}
               </div>
             )}
 
