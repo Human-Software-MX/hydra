@@ -9,11 +9,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { FacturacionService } from '../facturacion/facturacion.service';
 import {
   calcularFactura,
+  cantidadIncluidaDe,
+  importeLinealExcedente,
   m3Facturables,
   redondear,
   TarifaCalculo,
 } from '../facturacion/billing-calculator';
 import { filtrarMasEspecificas } from '../facturacion/tarifa-especificidad';
+import { SECCION_PERIODICA } from './tarifa-valores';
 import { SimularImpactoDto, CambioTarifaSimulacionDto } from './dto/simular-impacto.dto';
 import { CreateTarifaDto } from './dto/create-tarifa.dto';
 import { UpdateTarifaMetadatosDto } from './dto/update-tarifa-metadatos.dto';
@@ -92,6 +95,9 @@ export class TarifasService {
       where: {
         tipoServicio: { equals: tipoServicio, mode: 'insensitive' },
         activo: true,
+        // Los cargos únicos de contratación se cotizan por
+        // `GET /tarifas/contratacion/cotizar`, no por consumo.
+        seccion: SECCION_PERIODICA,
         vigenciaDesde: { lte: fecha },
         AND: and,
       },
@@ -225,10 +231,37 @@ export class TarifasService {
           precio: Number(t.precioUnitario ?? 0),
           subtotal: sub,
         });
+        continue;
+      }
+      if (t.tipoCalculo === 'lineal_excedente') {
+        // Mismo criterio que billing-calculator: la cuota base cubre
+        // `parametros.cantidadIncluida` unidades y el resto va a proporcional.
+        const incluida = cantidadIncluidaDe(t.parametros);
+        const sub = importeLinealExcedente(
+          {
+            tipoServicio: t.tipoServicio,
+            tipoCalculo: t.tipoCalculo,
+            rangoMinM3: t.rangoMinM3,
+            rangoMaxM3: t.rangoMaxM3,
+            precioUnitario: t.precioUnitario === null ? null : Number(t.precioUnitario),
+            cuotaFija: t.cuotaFija === null ? null : Number(t.cuotaFija),
+            cantidadIncluida: incluida,
+            ivaPct: Number(t.ivaPct ?? 0),
+          },
+          consumoM3,
+        );
+        subtotal += sub;
+        desglose.push({
+          rango: `lineal excedente sobre ${incluida}`,
+          m3: consumoM3,
+          precio: Number(t.precioUnitario ?? 0),
+          subtotal: sub,
+        });
       }
     }
 
-    const ivaPct = Number(tarifas[0]?.ivaPct ?? 16) / 100;
+    // «No objeto de IVA» (multas, recargos): sin traslado aunque la fila traiga tasa.
+    const ivaPct = tarifas[0]?.ivaNoObjeto ? 0 : Number(tarifas[0]?.ivaPct ?? 16) / 100;
     const iva = subtotal * ivaPct;
     return { consumoM3, subtotal, iva, total: subtotal + iva, desglose };
   }

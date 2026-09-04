@@ -1585,7 +1585,7 @@ model Tarifa {
   codigo                 String
   nombre                 String
   tipoServicio           String    @map("tipo_servicio") // agua | saneamiento | alcantarillado | agua_tratada | <concepto fijo>
-  tipoCalculo            String    @map("tipo_calculo") // escalonado | fijo | variable | tabla | lineal
+  tipoCalculo            String    @map("tipo_calculo") // escalonado | fijo | variable | tabla | lineal | lineal_excedente
   administracionId       String?   @map("administracion_id")
   tipoContratacionCodigo String?   @map("tipo_contratacion_codigo")
   claseTarifaId          String?   @map("clase_tarifa_id")
@@ -1596,6 +1596,10 @@ model Tarifa {
   cuotaFija              Decimal?  @map("cuota_fija") @db.Decimal(12, 4)
   precios                Json? // tipoCalculo=tabla: importe acumulado por m³ [0..rangoMaxM3]
   valorReferencia        Decimal?  @map("valor_referencia") @db.Decimal(12, 4) // denormalizado: tabla → precios[10]; fijo → cuotaFija; resto → precioUnitario
+  seccion                String    @default("PERIODICA") // PERIODICA (consumo periódico) | CONTRATACION (cargos únicos al contratar)
+  variante               String? // variable de la tarifa cuando no es una clase: materiales (CONCRETO-CONCRETO), diámetro/medidor…
+  parametros             Json? // parámetros del concepto: consumoAsignadoM3, cantidadIncluida (lineal_excedente), variable, subconcepto
+  ivaNoObjeto            Boolean   @default(false) @map("iva_no_objeto") // tratamiento fiscal «No objeto de IVA» (multas, recargos); ivaPct = 0
   ivaPct                 Decimal   @default(16) @map("iva_pct") @db.Decimal(5, 2)
   vigenciaDesde          DateTime  @map("vigencia_desde")
   vigenciaHasta          DateTime? @map("vigencia_hasta")
@@ -1618,6 +1622,7 @@ model Tarifa {
   @@index([administracionId])
   @@index([tipoContratacionCodigo])
   @@index([claseTarifaId])
+  @@index([seccion])
   @@map("tarifas")
 }
 

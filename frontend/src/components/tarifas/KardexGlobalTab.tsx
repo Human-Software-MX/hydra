@@ -5,7 +5,7 @@ import { fetchMovimientosTarifa } from '@/api/tarifas';
 import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { TipoMovimientoBadge } from './badges';
+import { SeccionPill, TipoMovimientoBadge } from './badges';
 import { TIPOS_MOVIMIENTO, etiquetaMovimiento, fmtFechaHora, fmtMXN, fmtPct, valorReferenciaDe } from './format';
 
 const TODOS = '__all__';
@@ -90,8 +90,9 @@ export function KardexGlobalTab({ useApi, onVerKardex }: Props) {
                       <span className="line-clamp-2" title={m.tarifaNombre}>
                         {m.tarifaNombre}
                       </span>
+                      <SeccionPill seccion={m.seccion} className="mt-1" />
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{m.claseNombre ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{m.claseNombre ?? m.variante ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{m.administracionNombre ?? 'Global'}</td>
                     <td className="px-4 py-3 tabular-nums">{m.porcentaje != null ? fmtPct(m.porcentaje) : '—'}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums">

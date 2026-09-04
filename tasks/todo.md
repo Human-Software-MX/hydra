@@ -1,3 +1,32 @@
+# Plan — Tarifas de contratación en el catálogo versionado (2026-09-03, iteración 2)
+
+Fuente: `docs/Tarifas_contratacion.xlsx` (3 hojas: CONCEPTO FIJO 765 filas, VARIABLES longitud 247, VARIABLES diámetro 143; 13 admins).
+
+## Hallazgos
+- La columna TARIFA está sobrecargada: nombre de clase (DOMÉSTICA MEDIO…), combinación de materiales
+  (CONCRETO-CONCRETO…) o el genérico CONTRATACION. Las hojas de variables añaden VARIABLE (diámetro/longitud).
+- La TASA varía dentro de una misma clase según el concepto (AGUA (CONTRATACIÓN) doméstica 0 %, derechos 16 %)
+  y existe el tratamiento «No Objeto» (MULTA, RECARGOS). → IVA por tarifa (ya soportado) + flag `ivaNoObjeto`.
+- Las 130 filas de DERECHOS DE CONEXIÓN A RED DE AGUA de CONCEPTO FIJO duplican la hoja de longitud (idénticas).
+- Longitud: base cubre 6 m; excedente × proporcional → nuevo `tipoCalculo = lineal_excedente` (cantidadIncluida).
+- Consumidor actual: motor offline `frontend/src/lib/cotizacion-tarifas.ts` + `tarifas-contratacion.json` (sin cambios).
+
+## Decisiones
+- Mismo modelo `Tarifa` versionado; nuevas columnas `seccion` (PERIODICA | CONTRATACION), `variante`,
+  `parametros` (JSON: consumoAsignadoM3, cantidadIncluida, variable, subconcepto) e `iva_no_objeto`.
+- Linaje: `${admin}:${slug(concepto sin "(CONTRATACIÓN)")}:${clase | slug(variante) | GENERAL}`.
+- Import/seed idempotente `seedTarifasContratacion` (JSON versionado), misma política que periódicas.
+- UI: filtro de sección, variante visible, badge «No objeto»; simulador solo periódicas.
+
+## Tareas
+- [ ] T1 Schema + migración `tarifas_contratacion_seccion_variante`
+- [ ] T2 Export Excel→JSON + seed
+- [ ] T3 Backend: DTO/filtros (seccion, variante, parametros, ivaNoObjeto), `lineal_excedente`, tests
+- [ ] T4 Frontend: filtro sección, variante, No objeto, simulador
+- [ ] T5 Verificación (gates, BD temporal, e2e, UI) + docs + PR
+
+---
+
 # Plan — Tarifas: histórico (Kardex), clasificación y configuración fiscal (2026-09-03)
 
 Ticket: evolucionar `/app/tarifas` con histórico completo, actualizaciones porcentuales

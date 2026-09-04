@@ -24,8 +24,19 @@ import {
 } from '@/components/ui/dialog';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/components/ui/use-toast';
-import { IvaBadge } from './badges';
-import { fmtFecha, fmtMXN, fmtPct, fmtPrecio, hoyISO } from './format';
+import { IvaBadge, Pill } from './badges';
+import { SeccionToggle } from './SeccionToggle';
+import {
+  esContratacion,
+  etiquetaSeccion,
+  etiquetaServicio,
+  etiquetaTipoServicio,
+  fmtFecha,
+  fmtMXN,
+  fmtPct,
+  fmtPrecio,
+  hoyISO,
+} from './format';
 
 const TODAS = '__all__';
 
@@ -34,11 +45,11 @@ const servicioKey = (tipoServicio: string, concepto: string | null | undefined) 
 
 /** Quita cadenas vacías: el backend interpreta la ausencia de clave como "todas". */
 function limpiarFiltro(f: FiltroTarifas): FiltroTarifas {
-  const out: FiltroTarifas = {};
+  const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(f)) {
-    if (typeof v === 'string' && v.trim() !== '') out[k as keyof FiltroTarifas] = v.trim();
+    if (typeof v === 'string' && v.trim() !== '') out[k] = v.trim();
   }
-  return out;
+  return out as FiltroTarifas;
 }
 
 interface Props {
@@ -93,6 +104,15 @@ export function ActualizacionMasivaDialog({
     const todas = categorias.flatMap((c) => c.clases);
     return filtro.categoriaId ? todas.filter((cl) => cl.categoriaId === filtro.categoriaId) : todas;
   }, [categorias, filtro.categoriaId]);
+
+  /** El lote hereda la sección de la página; el select solo ofrece los servicios de esa sección. */
+  const opcionesServicio = useMemo(() => {
+    const visibles = filtro.seccion ? servicios.filter((s) => s.seccion === filtro.seccion) : servicios;
+    return visibles.map((s) => ({
+      value: servicioKey(s.tipoServicio, s.concepto),
+      label: etiquetaServicio(s),
+    }));
+  }, [servicios, filtro.seccion]);
 
   const pctNum = Number(porcentaje);
   /** El backend acepta [-90, 500] y rechaza 0. */
@@ -161,6 +181,25 @@ export function ActualizacionMasivaDialog({
 
         {paso === 1 ? (
           <div className="space-y-4">
+            <div>
+              <Label>Sección</Label>
+              <div className="mt-1">
+                <SeccionToggle
+                  value={filtro.seccion}
+                  onChange={(seccion) =>
+                    setFiltro({ ...filtro, seccion, tipoServicio: undefined, concepto: undefined })
+                  }
+                  conTodas
+                  ariaLabel="Sección de las tarifas a actualizar"
+                />
+              </div>
+              {!filtro.seccion && (
+                <p className="mt-1.5 text-xs text-amber-700">
+                  Se incluirán tarifas periódicas y de contratación.
+                </p>
+              )}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>Administración</Label>
@@ -223,13 +262,7 @@ export function ActualizacionMasivaDialog({
                     const [tipoServicio, concepto] = v.split('|');
                     setFiltro({ ...filtro, tipoServicio, concepto: concepto || undefined });
                   }}
-                  options={[
-                    { value: TODAS, label: 'Todos los servicios' },
-                    ...servicios.map((s) => ({
-                      value: servicioKey(s.tipoServicio, s.concepto),
-                      label: s.concepto ? `${s.tipoServicio} · ${s.concepto}` : s.tipoServicio,
-                    })),
-                  ]}
+                  options={[{ value: TODAS, label: 'Todos los servicios' }, ...opcionesServicio]}
                 />
               </div>
             </div>
@@ -288,7 +321,11 @@ export function ActualizacionMasivaDialog({
               !filtro.claseTarifaId &&
               !filtro.tipoServicio && (
                 <p className="text-xs text-muted-foreground">
-                  Sin filtros, el porcentaje se aplica a todas las tarifas vigentes.
+                  {filtro.seccion
+                    ? `Sin más filtros, el porcentaje se aplica a todas las tarifas vigentes de la sección ${etiquetaSeccion(
+                        filtro.seccion,
+                      ).toLowerCase()}.`
+                    : 'Sin filtros, el porcentaje se aplica a todas las tarifas vigentes.'}
                 </p>
               )}
 
@@ -305,7 +342,16 @@ export function ActualizacionMasivaDialog({
               Se actualizarán{' '}
               <span className="font-semibold">{resultado?.total ?? 0} tarifa{resultado?.total === 1 ? '' : 's'}</span>{' '}
               en <span className="font-semibold">{fmtPct(resultado?.porcentaje ?? pctNum)}</span> con vigencia{' '}
-              <span className="font-semibold">{fmtFecha(resultado?.vigenciaDesde ?? vigenciaDesde)}</span>.
+              <span className="font-semibold">{fmtFecha(resultado?.vigenciaDesde ?? vigenciaDesde)}</span>
+              {filtro.seccion && (
+                <>
+                  {' en '}
+                  <Pill tono="violet" className="align-middle">
+                    {etiquetaSeccion(filtro.seccion)}
+                  </Pill>
+                </>
+              )}
+              .
             </p>
 
             {(resultado?.excluidosProgramados ?? 0) > 0 && (
@@ -374,18 +420,20 @@ export function ActualizacionMasivaDialog({
                         <p className="max-w-[170px] truncate font-medium" title={t.claseNombre ?? t.nombre}>
                           {t.claseNombre ?? t.nombre}
                         </p>
-                        {t.categoriaNombre && (
+                        {t.categoriaNombre ? (
                           <p className="text-[11px] text-muted-foreground">{t.categoriaNombre}</p>
+                        ) : (
+                          t.variante && <p className="text-[11px] text-muted-foreground">{t.variante}</p>
                         )}
                       </td>
                       <td className="max-w-[120px] truncate px-2.5 py-2" title={t.tipoServicio}>
-                        {t.tipoServicio}
+                        {esContratacion(t.seccion) ? (t.concepto ?? etiquetaTipoServicio(t.tipoServicio)) : t.tipoServicio}
                       </td>
                       <td className="max-w-[140px] px-2.5 py-2 text-[11px] leading-tight text-muted-foreground">
                         {t.administracionNombre ?? 'Global'}
                       </td>
                       <td className="px-2.5 py-2">
-                        <IvaBadge ivaPct={t.ivaPct} />
+                        <IvaBadge ivaPct={t.ivaPct} ivaNoObjeto={t.ivaNoObjeto} />
                       </td>
                       <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
                         {fmtPrecio(t.actual.cuotaFija)}{' '}
@@ -398,9 +446,15 @@ export function ActualizacionMasivaDialog({
                         <span className="font-semibold text-[#003366]">{fmtPrecio(t.nuevo.precioUnitario)}</span>
                       </td>
                       <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
-                        {fmtMXN(t.actual.valorReferencia)}{' '}
-                        <span className="text-muted-foreground">→</span>{' '}
-                        <span className="font-semibold text-[#003366]">{fmtMXN(t.nuevo.valorReferencia)}</span>
+                        {esContratacion(t.seccion) ? (
+                          '—'
+                        ) : (
+                          <>
+                            {fmtMXN(t.actual.valorReferencia)}{' '}
+                            <span className="text-muted-foreground">→</span>{' '}
+                            <span className="font-semibold text-[#003366]">{fmtMXN(t.nuevo.valorReferencia)}</span>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}

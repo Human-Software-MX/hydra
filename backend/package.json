@@ -25,6 +25,7 @@
     "import:catalogos-tipos": "ts-node scripts/import-catalogos-tipos-contratacion.ts",
     "export:catalogos-tipos-sige-json": "ts-node scripts/export-catalogos-tipos-sige-json.ts",
     "export:tarifas-periodicas-json": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/export-tarifas-periodicas-json.ts",
+    "export:tarifas-contratacion-json": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/export-tarifas-contratacion-json.ts",
     "import:distritos-punto-servicio": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-distritos-punto-servicio.ts",
     "migrate:resolve-failed": "prisma migrate resolve --rolled-back \"20260302000000_add_sige_hydra\"",
     "migrate:fix-p3009": "prisma db execute --schema prisma/schema.prisma --file scripts/fix-failed-migration.sql && npm run migrate:resolve-failed && prisma migrate deploy",

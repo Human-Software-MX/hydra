@@ -103,6 +103,57 @@ assert('lineal 8 m³', lineasLineal.reduce((s, l) => s + l.importe, 0), 130); //
 assert('lineal 8 m³ IVA 16 %', lineasLineal.reduce((s, l) => s + l.iva, 0), 20.8);
 assert('lineal 0 m³ (sólo cuota fija)', calcularServicio('agua', aguaTratadaLineal, 0).reduce((s, l) => s + l.importe, 0), 30);
 
+// ── Tarifa lineal con excedente (Tarifas_contratacion.xlsx, hoja «longitud») ──
+// La cuota base cubre los primeros 6 m; el resto se cobra a precio proporcional.
+const derechosConexion: TarifaCalculo[] = [
+  {
+    tipoServicio: 'contratacion_derechos_de_conexion_red_de_drenaje',
+    tipoCalculo: 'lineal_excedente',
+    rangoMinM3: null,
+    rangoMaxM3: null,
+    precioUnitario: 1872.2814,
+    cuotaFija: 17092.6118,
+    cantidadIncluida: 6,
+    precios: null,
+    ivaPct: 16,
+  },
+];
+const importeExcedente = (m: number) =>
+  calcularServicio('contratacion_derechos_de_conexion_red_de_drenaje', derechosConexion, m).reduce(
+    (s, l) => s + l.importe,
+    0,
+  );
+assert('lineal_excedente 4 m (dentro de la base)', importeExcedente(4), 17092.61);
+assert('lineal_excedente 6 m (frontera exacta)', importeExcedente(6), 17092.61);
+assert('lineal_excedente 8 m (2 m de excedente)', importeExcedente(8), 20837.17); // 17092.6118 + 2*1872.2814
+assert(
+  'lineal_excedente 8 m IVA 16 %',
+  calcularServicio('contratacion_derechos_de_conexion_red_de_drenaje', derechosConexion, 8).reduce(
+    (s, l) => s + l.iva,
+    0,
+  ),
+  3333.95,
+);
+
+// ── «No objeto de IVA» (multas, recargos): importe sin traslado ──
+const multa: TarifaCalculo[] = [
+  {
+    tipoServicio: 'contratacion_multa',
+    tipoCalculo: 'lineal',
+    rangoMinM3: null,
+    rangoMaxM3: null,
+    precioUnitario: 0,
+    cuotaFija: 2834,
+    precios: null,
+    ivaNoObjeto: true,
+    ivaPct: 16, // se ignora: el concepto no es objeto de IVA
+  },
+];
+const lineasMulta = calcularServicio('contratacion_multa', multa, 0);
+assert('multa importe', lineasMulta.reduce((s, l) => s + l.importe, 0), 2834);
+assert('multa IVA (no objeto)', lineasMulta.reduce((s, l) => s + l.iva, 0), 0);
+assert('multa tasa reportada', lineasMulta[0].ivaPct, 0);
+
 // ── Redondeo ──
 assert('redondeo 12.005', redondear(12.005), 12.01);
 assert('redondeo 0.1+0.2', redondear(0.1 + 0.2), 0.3);

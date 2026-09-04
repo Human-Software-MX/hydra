@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsNumber,
   IsString,
   Matches,
@@ -58,6 +59,16 @@ export class ActualizarTarifaDto {
   @Min(0)
   @Max(100)
   ivaPct?: number;
+
+  /**
+   * Tratamiento «No objeto de IVA» (multas, recargos). Con `true` el servicio
+   * fuerza `ivaPct = 0` (aunque el body traiga otro valor) y, si los valores
+   * económicos no cambian, el movimiento se clasifica como CAMBIO_FISCAL: es
+   * configuración fiscal, no un valor económico. Puede viajar solo.
+   */
+  @ValidateIf((o) => o.ivaNoObjeto !== undefined)
+  @IsBoolean()
+  ivaNoObjeto?: boolean;
 
   /** YYYY-MM-DD; default hoy. Debe ser ≥ vigenciaDesde de la versión actual. */
   @ValidateIf((o) => o.vigenciaDesde !== undefined)

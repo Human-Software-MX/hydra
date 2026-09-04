@@ -18,6 +18,7 @@ import { ActualizarTarifaDto } from './dto/actualizar-tarifa.dto';
 import { CreateTarifaDto } from './dto/create-tarifa.dto';
 import { UpdateTarifaMetadatosDto } from './dto/update-tarifa-metadatos.dto';
 import { CalcularMontoQueryDto } from './dto/calcular-monto.dto';
+import { CotizarContratacionQueryDto } from './dto/cotizar-contratacion.dto';
 import { AplicarMasivaDto, PreviewMasivaDto } from './dto/actualizacion-masiva.dto';
 import { UpdateCategoriaTarifaDto, UpdateClaseTarifaDto } from './dto/catalogo-fiscal.dto';
 import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
@@ -50,10 +51,20 @@ export class TarifasController {
     return this.versiones.listarVigentes(filtro, fecha);
   }
 
-  /** Servicios / conceptos distintos entre las tarifas vigentes. */
+  /** Servicios / conceptos distintos entre las tarifas vigentes (por catálogo). */
   @Get('servicios')
   findServicios() {
     return this.versiones.listarServicios();
+  }
+
+  /**
+   * Cotiza un cargo único de contratación con la tarifa vigente resuelta.
+   * Se declara antes de `GET :id` (y de las rutas de un solo segmento) para
+   * dejar explícito el orden de resolución de rutas de Nest.
+   */
+  @Get('contratacion/cotizar')
+  cotizarContratacion(@Query() query: CotizarContratacionQueryDto) {
+    return this.versiones.cotizarContratacion(query);
   }
 
   /** Kardex global paginado. */
@@ -62,10 +73,11 @@ export class TarifasController {
     @Query('codigo') codigo?: string,
     @Query('actualizacionId') actualizacionId?: string,
     @Query('tipo') tipo?: string,
+    @Query('seccion') seccion?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
   ) {
-    return this.versiones.listarMovimientos({ codigo, actualizacionId, tipo, page, limit });
+    return this.versiones.listarMovimientos({ codigo, actualizacionId, tipo, seccion, page, limit });
   }
 
   /**

@@ -7,11 +7,13 @@ import { SupraOutboxService } from '../supra/supra-outbox.service';
 import { minorToPesos, supraRef } from '../supra/supra.config';
 import {
   calcularFactura,
+  cantidadIncluidaDe,
   redondear,
   ResultadoFactura,
   TarifaCalculo,
 } from './billing-calculator';
 import { filtrarMasEspecificas } from './tarifa-especificidad';
+import { SECCION_PERIODICA } from '../tarifas/tarifa-valores';
 
 /** Servicios que se facturan sobre el consumo periódico, en orden de aparición en el recibo. */
 const SERVICIOS_FACTURABLES = ['agua', 'saneamiento', 'alcantarillado'];
@@ -59,6 +61,9 @@ export class FacturacionService {
       where: {
         activo: true,
         tipoServicio: { in: SERVICIOS_FACTURABLES },
+        // Las tarifas de contratación son cargos únicos al contratar: nunca
+        // entran en la facturación del consumo periódico.
+        seccion: SECCION_PERIODICA,
         vigenciaDesde: { lte: fecha },
         AND: [
           { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: fecha } }] },
@@ -82,6 +87,8 @@ export class FacturacionService {
         precioUnitario: t.precioUnitario ? Number(t.precioUnitario) : null,
         cuotaFija: t.cuotaFija ? Number(t.cuotaFija) : null,
         precios: Array.isArray(t.precios) ? (t.precios as unknown[]).map((p) => Number(p)) : null,
+        cantidadIncluida: cantidadIncluidaDe(t.parametros),
+        ivaNoObjeto: t.ivaNoObjeto,
         ivaPct: Number(t.ivaPct ?? 0),
         administracionId: t.administracionId ?? null,
         claseTarifaId: t.claseTarifaId ?? null,

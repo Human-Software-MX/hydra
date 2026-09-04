@@ -5,7 +5,7 @@
  * los DTOs del contrato (`docs/tarifas-kardex-api.md`) con números y fechas ISO.
  * Sin dependencias de Nest/Prisma para poder verificarse de forma aislada.
  */
-import { snapshotValores, valorReferencia, ValoresTarifa } from './tarifa-valores';
+import { SECCION_PERIODICA, snapshotValores, valorReferencia, ValoresTarifa } from './tarifa-valores';
 
 // ─── Filas de entrada (estructurales, compatibles con los tipos de Prisma) ────
 
@@ -26,6 +26,14 @@ export interface TarifaFila {
   precios?: unknown;
   /** Columna denormalizada (`tarifas.valor_referencia`); permite listar sin cargar `precios`. */
   valorReferencia?: unknown;
+  /** Catálogo de la tarifa: PERIODICA | CONTRATACION (ausente = PERIODICA). */
+  seccion?: string;
+  /** Variante cuando la columna TARIFA del Excel no es una clase (materiales, diámetro, plan de medidor). */
+  variante?: string | null;
+  /** `consumoAsignadoM3`, `cantidadIncluida` (lineal_excedente), `variable`, `subconcepto`. */
+  parametros?: unknown;
+  /** «No objeto de IVA» (multas, recargos): el traslado es 0. */
+  ivaNoObjeto?: boolean;
   ivaPct: unknown;
   vigenciaDesde: Date;
   vigenciaHasta: Date | null;
@@ -64,6 +72,8 @@ export interface MovimientoFila {
     version: number;
     tipoServicio: string;
     administracionId: string | null;
+    seccion?: string;
+    variante?: string | null;
     claseTarifa?: { nombre: string } | null;
   };
 }
@@ -115,6 +125,11 @@ export interface TarifaVigenteDto {
   motivo: string | null;
   creadoPor: string | null;
   createdAt: string;
+  /** Catálogo al que pertenece: PERIODICA (consumo) | CONTRATACION (cargos únicos). */
+  seccion: string;
+  variante: string | null;
+  parametros: Record<string, unknown> | null;
+  ivaNoObjeto: boolean;
 }
 
 export interface TarifaMovimientoDto {
@@ -137,6 +152,8 @@ export interface TarifaMovimientoDto {
   claseNombre: string | null;
   administracionNombre: string | null;
   tipoServicio: string;
+  seccion: string;
+  variante: string | null;
 }
 
 export interface CategoriaTarifaDto {
@@ -172,6 +189,9 @@ export interface FiltroTarifas {
   tipoServicio?: string;
   concepto?: string;
   buscar?: string;
+  /** PERIODICA | CONTRATACION; ausente = ambos catálogos. */
+  seccion?: string;
+  variante?: string;
 }
 
 export interface ActualizacionTarifariaDto {
@@ -187,6 +207,21 @@ export interface ActualizacionTarifariaDto {
   aplicadoPor: string | null;
   createdAt: string;
   movimientos?: TarifaMovimientoDto[];
+}
+
+/**
+ * Cotización de un cargo único de contratación (`GET /tarifas/contratacion/cotizar`):
+ * la tarifa vigente resuelta más el importe calculado para la cantidad pedida.
+ */
+export interface CotizacionContratacionDto {
+  tarifa: TarifaVigenteDto;
+  /** Unidades cotizadas (metros de toma/descarga, piezas…); 0 = sólo la cuota base. */
+  cantidad: number;
+  importe: number;
+  ivaPct: number;
+  iva: number;
+  total: number;
+  ivaNoObjeto: boolean;
 }
 
 export interface KardexDto {
@@ -253,6 +288,10 @@ export function toTarifaDto(
     motivo: t.motivo,
     creadoPor: t.creadoPor,
     createdAt: t.createdAt.toISOString(),
+    seccion: t.seccion ?? SECCION_PERIODICA,
+    variante: t.variante ?? null,
+    parametros: (t.parametros as Record<string, unknown> | null) ?? null,
+    ivaNoObjeto: t.ivaNoObjeto ?? false,
   };
 }
 
@@ -277,6 +316,8 @@ export function toMovimientoDto(m: MovimientoFila, administracionNombre?: string
     claseNombre: m.tarifa.claseTarifa?.nombre ?? null,
     administracionNombre: administracionNombre ?? null,
     tipoServicio: m.tarifa.tipoServicio,
+    seccion: m.tarifa.seccion ?? SECCION_PERIODICA,
+    variante: m.tarifa.variante ?? null,
   };
 }
 

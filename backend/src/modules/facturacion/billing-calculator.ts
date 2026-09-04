@@ -12,17 +12,24 @@
  *  - tabla:      importe acumulado leído de `precios[m³]` (m³ redondeados) hasta
  *                rangoMaxM3; por encima, cuotaFija + precioUnitario × m³.
  *  - lineal:     cuotaFija + precioUnitario × consumo.
+ *  - lineal_excedente: cuotaFija (cubre `cantidadIncluida` unidades) +
+ *                precioUnitario × excedente. Usado por las tarifas de
+ *                contratación por longitud (la base cubre los primeros 6 m).
  */
 
 export interface TarifaCalculo {
   tipoServicio: string;
-  tipoCalculo: 'escalonado' | 'variable' | 'fijo' | 'tabla' | 'lineal' | string;
+  tipoCalculo: 'escalonado' | 'variable' | 'fijo' | 'tabla' | 'lineal' | 'lineal_excedente' | string;
   rangoMinM3: number | null;
   rangoMaxM3: number | null;
   precioUnitario: number | null;
   cuotaFija: number | null;
   /** tipoCalculo=tabla: importe acumulado por m³ (índice = m³, 0..rangoMaxM3). */
   precios?: number[] | null;
+  /** tipoCalculo=lineal_excedente: unidades ya cubiertas por la cuota base (`parametros.cantidadIncluida`). */
+  cantidadIncluida?: number | null;
+  /** «No objeto de IVA» (multas, recargos): el traslado es 0 sea cual sea `ivaPct`. */
+  ivaNoObjeto?: boolean;
   ivaPct: number;
 }
 
@@ -64,6 +71,31 @@ export function m3Facturables(consumoM3: number): number {
   return consumoM3 - piso > 0.5 ? piso + 1 : piso;
 }
 
+/**
+ * Tasa de IVA aplicable: las tarifas «No objeto de IVA» (multas, recargos) no
+ * trasladan impuesto aunque la fila traiga otro `ivaPct`.
+ */
+export function tasaIva(t: Pick<TarifaCalculo, 'ivaPct' | 'ivaNoObjeto'>): number {
+  return t.ivaNoObjeto ? 0 : Number(t.ivaPct ?? 0);
+}
+
+/**
+ * Unidades incluidas en la cuota base de una tarifa `lineal_excedente`, leídas
+ * de `Tarifa.parametros.cantidadIncluida` (0 si no viene: todo es excedente).
+ */
+export function cantidadIncluidaDe(parametros: unknown): number {
+  const v = (parametros as { cantidadIncluida?: unknown } | null)?.cantidadIncluida;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** `lineal_excedente`: la cuota base cubre `cantidadIncluida`; el resto va a precio proporcional. */
+export function importeLinealExcedente(t: TarifaCalculo, cantidad: number): number {
+  const incluida = t.cantidadIncluida ?? 0;
+  const excedente = Math.max(0, cantidad - incluida);
+  return Number(t.cuotaFija ?? 0) + Number(t.precioUnitario ?? 0) * excedente;
+}
+
 const nombreServicio = (tipoServicio: string): string => {
   const map: Record<string, string> = {
     agua: 'Servicio de agua potable',
@@ -96,8 +128,8 @@ export function calcularServicio(
       m3: 0,
       precioUnitario: importe,
       importe,
-      ivaPct: Number(t.ivaPct ?? 0),
-      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+      ivaPct: tasaIva(t),
+      iva: redondear(importe * (tasaIva(t) / 100)),
     });
   }
 
@@ -120,8 +152,8 @@ export function calcularServicio(
       m3: redondear(m3EnRango),
       precioUnitario: precio,
       importe,
-      ivaPct: Number(t.ivaPct ?? 0),
-      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+      ivaPct: tasaIva(t),
+      iva: redondear(importe * (tasaIva(t) / 100)),
     });
   }
 
@@ -140,8 +172,8 @@ export function calcularServicio(
       m3,
       precioUnitario: m3 > 0 ? redondear4(importe / m3) : importe,
       importe,
-      ivaPct: Number(t.ivaPct ?? 0),
-      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+      ivaPct: tasaIva(t),
+      iva: redondear(importe * (tasaIva(t) / 100)),
     });
   }
 
@@ -156,8 +188,25 @@ export function calcularServicio(
       m3: redondear(consumoM3),
       precioUnitario: precio,
       importe,
-      ivaPct: Number(t.ivaPct ?? 0),
-      iva: redondear(importe * (Number(t.ivaPct ?? 0) / 100)),
+      ivaPct: tasaIva(t),
+      iva: redondear(importe * (tasaIva(t) / 100)),
+    });
+  }
+
+  // Lineal con excedente: la cuota base cubre `cantidadIncluida` unidades.
+  for (const t of tarifas.filter((x) => x.tipoCalculo === 'lineal_excedente')) {
+    const incluida = t.cantidadIncluida ?? 0;
+    const precio = Number(t.precioUnitario ?? 0);
+    const importe = redondear(importeLinealExcedente(t, consumoM3));
+    if (importe === 0) continue;
+    lineas.push({
+      tipoServicio,
+      concepto: `${nombre} — cargo base (incluye ${incluida}) + excedente`,
+      m3: redondear(consumoM3),
+      precioUnitario: precio,
+      importe,
+      ivaPct: tasaIva(t),
+      iva: redondear(importe * (tasaIva(t) / 100)),
     });
   }
 

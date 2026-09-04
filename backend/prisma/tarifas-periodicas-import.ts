@@ -215,7 +215,7 @@ export function defaultTarifasPeriodicasJsonPath(): string {
 
 const adminIndex = new Map(FALLBACK_ADMINISTRACIONES.map((a) => [normalizarNombreTarifa(a.nombre), a.id]));
 
-function resolverAdministracionId(nombre: unknown, advertencias: string[]): string | null {
+export function resolverAdministracionId(nombre: unknown, advertencias: string[]): string | null {
   const id = adminIndex.get(normalizarNombreTarifa(nombre));
   if (!id) {
     const aviso = `Administración no reconocida en Excel: "${String(nombre)}"`;
@@ -235,7 +235,7 @@ export function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function tasaAPct(v: unknown): number {
+export function tasaAPct(v: unknown): number {
   const t = toNum(v);
   // TASA viene como fracción (0.16). Si alguien captura 16 se respeta como porcentaje.
   return t <= 1 ? Math.round(t * 10000) / 100 : t;
@@ -246,11 +246,11 @@ const etiquetaServicio: Record<string, string> = {
   agua_tratada_via_red: 'Agua tratada vía red',
 };
 
-function matrix(ws: XLSX.WorkSheet): unknown[][] {
+export function matrix(ws: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown[][];
 }
 
-function findHeaderRow(m: unknown[][], primeraColumna: string): number {
+export function findHeaderRow(m: unknown[][], primeraColumna: string): number {
   const idx = m.findIndex((r) => r && normalizarNombreTarifa(r[0]) === primeraColumna);
   if (idx === -1) throw new Error(`No se encontró encabezado "${primeraColumna}"`);
   return idx;

@@ -42,6 +42,12 @@ export interface CategoriaTarifaDto {
 
 // ── Tarifas (una fila por versión) ───────────────────────────────────────────
 
+/**
+ * Sección del catálogo: las periódicas se facturan por consumo/periodo y las de
+ * contratación se cobran una sola vez al dar de alta el servicio.
+ */
+export type SeccionTarifa = 'PERIODICA' | 'CONTRATACION';
+
 export interface TarifaVigenteDto {
   id: string;
   codigo: string;
@@ -49,6 +55,13 @@ export interface TarifaVigenteDto {
   tipoServicio: string;
   concepto: string | null;
   tipoCalculo: string;
+  seccion: SeccionTarifa | string;
+  /** Variante del concepto de contratación (diámetro, material…); null en las periódicas. */
+  variante: string | null;
+  /** Parámetros del cálculo (`cantidadIncluida`, `consumoAsignadoM3`…). */
+  parametros: Record<string, unknown> | null;
+  /** Acto no objeto de IVA: se factura con IVA 0 pero no es una exención. */
+  ivaNoObjeto: boolean;
   administracionId: string | null;
   administracionNombre: string | null;
   claseTarifaId: string | null;
@@ -97,6 +110,8 @@ export interface TarifaMovimientoDto {
   claseNombre: string | null;
   administracionNombre: string | null;
   tipoServicio: string;
+  seccion: SeccionTarifa | string;
+  variante: string | null;
 }
 
 export interface KardexDto {
@@ -115,12 +130,15 @@ export interface FiltroTarifas {
   claseTarifaId?: string;
   tipoServicio?: string;
   concepto?: string;
+  seccion?: SeccionTarifa;
+  variante?: string;
   buscar?: string;
 }
 
 export interface ServicioTarifaDto {
   tipoServicio: string;
   concepto: string | null;
+  seccion: SeccionTarifa | string;
   total: number;
 }
 
@@ -179,6 +197,8 @@ export interface ActualizarTarifaDto {
   precios?: number[];
   /** Cambio fiscal; puede ir solo → movimiento CAMBIO_FISCAL. */
   ivaPct?: number;
+  /** Marca el concepto como no objeto de IVA (fuerza IVA 0) → movimiento CAMBIO_FISCAL. */
+  ivaNoObjeto?: boolean;
   /** YYYY-MM-DD; default hoy. */
   vigenciaDesde?: string;
   motivo: string;
@@ -204,8 +224,12 @@ export interface PreviewMasivaTarifa {
   claseNombre: string | null;
   categoriaNombre: string | null;
   tipoServicio: string;
+  concepto: string | null;
   tipoCalculo: string;
+  seccion: SeccionTarifa | string;
+  variante: string | null;
   ivaPct: number;
+  ivaNoObjeto: boolean;
   actual: { cuotaFija: number | null; precioUnitario: number | null; valorReferencia: number | null };
   nuevo: { cuotaFija: number | null; precioUnitario: number | null; valorReferencia: number | null };
 }
@@ -224,6 +248,17 @@ export interface PreviewMasivaResult {
   /** Tarifas con una versión programada a futuro: el lote no las toca. */
   excluidosProgramados?: number;
   excluidos?: PreviewMasivaExcluido[];
+}
+
+/** Resultado de `GET /tarifas/contratacion/cotizar`. */
+export interface CotizacionContratacionDto {
+  tarifa: TarifaVigenteDto;
+  cantidad: number;
+  importe: number;
+  ivaPct: number;
+  iva: number;
+  total: number;
+  ivaNoObjeto: boolean;
 }
 
 export interface UpdateCategoriaTarifaDto {
@@ -278,6 +313,8 @@ export function fetchTarifasVigentes(
       categoriaId: filtro.categoriaId,
       claseTarifaId: filtro.claseTarifaId,
       concepto: filtro.concepto,
+      seccion: filtro.seccion,
+      variante: filtro.variante,
       buscar: filtro.buscar,
       fecha: filtro.fecha,
     })}`,
@@ -291,6 +328,7 @@ export const fetchMovimientosTarifa = (params?: {
   codigo?: string;
   actualizacionId?: string;
   tipo?: string;
+  seccion?: SeccionTarifa;
   page?: number;
   limit?: number;
 }) => apiRequest<MovimientosPage>(`/tarifas/movimientos${toQuery({ ...params })}`);
@@ -325,6 +363,27 @@ export const calcularMonto = (
       consumoM3,
       administracionId: opts.administracionId,
       claseTarifaId: opts.claseTarifaId,
+    })}`,
+  );
+
+/**
+ * Cotiza un concepto de contratación (pago único). Sin `claseTarifaId`/`variante` el backend
+ * resuelve la única tarifa del concepto en la administración; si hay varias hay que precisarla.
+ */
+export const cotizarContratacion = (params: {
+  administracionId: string;
+  tipoServicio: string;
+  cantidad: number;
+  claseTarifaId?: string;
+  variante?: string;
+}) =>
+  apiRequest<CotizacionContratacionDto>(
+    `/tarifas/contratacion/cotizar${toQuery({
+      administracionId: params.administracionId,
+      tipoServicio: params.tipoServicio,
+      cantidad: params.cantidad,
+      claseTarifaId: params.claseTarifaId,
+      variante: params.variante,
     })}`,
   );
 
