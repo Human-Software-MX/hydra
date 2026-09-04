@@ -114,28 +114,34 @@ type TesseractWorker = { recognize: (img: File) => Promise<{ data: { text: strin
 export async function extraerDatosIdentificacion(file: File): Promise<DatosExtraidos | null> {
   if (!esImagenParaOcr(file)) return null;
   let worker: TesseractWorker | null = null;
+  let terminado = false;
+  const terminar = () => {
+    if (worker && !terminado) {
+      terminado = true;
+      void worker.terminate().catch(() => {});
+    }
+  };
+  const tarea = (async () => {
+    const { createWorker } = await import('tesseract.js');
+    try {
+      worker = (await createWorker('spa')) as TesseractWorker;
+    } catch {
+      // La descarga del traineddata 'spa' puede fallar (red/CDN); 'eng'
+      // sigue leyendo mayúsculas, CURP y RFC razonablemente bien.
+      worker = (await createWorker('eng')) as TesseractWorker;
+    }
+    const { data } = await worker.recognize(file);
+    return parsearTextoIdentificacion(data.text);
+  })();
+  // Si el timeout gana la carrera, la tarea sigue viva: terminar el worker
+  // cuando la tarea concluya (tarde) para no dejar wasm residente.
+  void tarea.then(terminar, terminar);
   try {
-    const datos = await conTimeout(
-      (async () => {
-        const { createWorker } = await import('tesseract.js');
-        try {
-          worker = (await createWorker('spa')) as TesseractWorker;
-        } catch {
-          // La descarga del traineddata 'spa' puede fallar (red/CDN); 'eng'
-          // sigue leyendo mayúsculas, CURP y RFC razonablemente bien.
-          worker = (await createWorker('eng')) as TesseractWorker;
-        }
-        const { data } = await worker.recognize(file);
-        return parsearTextoIdentificacion(data.text);
-      })(),
-      TIMEOUT_OCR_MS,
-      'OCR identificación',
-    );
-    return datos;
+    return await conTimeout(tarea, TIMEOUT_OCR_MS, 'OCR identificación');
   } catch {
     return null;
   } finally {
-    if (worker) void (worker as TesseractWorker).terminate().catch(() => {});
+    terminar();
   }
 }
 

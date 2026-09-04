@@ -93,8 +93,12 @@ export interface ClausulaContractual {
   activo: boolean;
 }
 
-export const fetchConceptosCobro = () =>
-  apiRequest<ConceptoCobro[]>('/catalogos/conceptos-cobro');
+export const fetchConceptosCobro = (params?: { activo?: boolean }) =>
+  apiRequest<ConceptoCobro[]>(
+    params?.activo !== undefined
+      ? `/catalogos/conceptos-cobro?activo=${params.activo}`
+      : '/catalogos/conceptos-cobro',
+  );
 
 export const fetchClausulas = () =>
   apiRequest<ClausulaContractual[]>('/catalogos/clausulas');

@@ -19,7 +19,7 @@
 | 1.3 | Historial inmutable (refacturar con tarifa de entonces) | ✅ versionado + Kardex |
 | 1.4 | Incremento masivo (N tarifas × N admins, hoy 4 días) | ✅ actualización masiva con preview |
 | 1.5 | Exigir documento soporte (memo Finanzas / vocal) al cambiar | ⏳ 👤 (definir cuál documento con Jessica) |
-| 1.6 | Saneamiento/alcantarillado como % del agua, no tarifa | 🟡 conceptos con clasificación en BD; el 10/12 % sigue hardcodeado en frontend |
+| 1.6 | Saneamiento/alcantarillado como % del agua, no tarifa | ✅ regla en BD (`porcentaje_de_servicio`+`porcentaje`, sembrada 10/12 y editable por CEA); cuantificación, modal y PDF de cobro la leen dinámicamente con fallback offline. Facturación periódica la consumirá después (documentado en motor-tarifas.md) |
 | 1.7 | IVA determinístico (doméstico 0, resto 16, no capturable) | ✅ CategoriaTarifa + clasificación fiscal por concepto (AMBAS / NO_OBJETO) |
 | 1.8 | Tarifas por administración | ✅ (13 admins, 1,570 tarifas en BD) |
 | 1.9 | Precios fijos aparte (reconexión, recargos) | ✅ |
@@ -30,7 +30,7 @@
 ## 2. Cuantificación / Cotización
 | # | Acción | Estado |
 |---|--------|--------|
-| 2.1 | Todos los conceptos en la cuantificación (derechos, medidor…) | 🟡 relación real tipo→concepto en BD (2,764) + cotización viva en solicitud; el CuantificacionModal formal sigue con motor offline |
+| 2.1 | Todos los conceptos en la cuantificación (derechos, medidor…) | ✅ cotización formal API-first contra el motor versionado (fallback offline por concepto); precio hardcodeado 984.11 eliminado; sin carrera al aceptar (botón bloqueado mientras cotiza); lo que se acepta es lo que se persiste y lo que muestra Ver solicitud |
 | 2.2 | Conceptos editables (agregar/quitar en cotización) | ⏳ |
 | 2.3 | Precargar cuantificación desde inspección | ✅ (modal precarga; variables de inspección solo-lectura en solicitud) |
 | 2.4 | Recálculo por antigüedad (meses extra + tarifas nuevas) | ⏳ |
@@ -42,7 +42,7 @@
 ## 3. Inspección
 | # | Acción | Estado |
 |---|--------|--------|
-| 3.1 | Campos: ¿tiene medidor? S/N, diámetros, materiales calle/banqueta | 🟡 se capturan en el modal de inspección/cuantificación; falta formalizarlos en SolicitudInspeccion (schema) |
+| 3.1 | Campos: ¿tiene medidor? S/N, diámetros, materiales calle/banqueta | ✅ formalizados en schema/BD (tieneMedidor bool, diámetro descarga, metros lineales, realizada, motivo, intentos) + DTO con whitelist; ⏳ la captura del inspector en UI va con el bloque 4 (Monitor/órdenes) |
 | 3.2 | Precarga inteligente por zona (doméstico = ½") | ⏳ |
 | 3.3 | Resultado binario (¿se realizó? sí/no) + intentos | ⏳ |
 | 3.4 | Datos llegan solos vía órdenes/Agora (cero recaptura) | ⏳ |
@@ -74,14 +74,14 @@
 |---|--------|--------|
 | 6.1 | Orden: solicitante → predio → tipo de servicio | ✅ resuelto por decisión de la propia junta: «tiene mucho sentido como está acomodado… mejor no [cambiarlo]» — se mantiene el orden actual con el mapa primero (hecho) |
 | 6.2 | Mapa en la solicitud (direcciones de Agora) | ✅ mapa primero + pin prellena dirección + "Usar mi ubicación" |
-| 6.3 | Documentos primero + OCR prellenado | 🟡 subida por documento integrada (check→adjuntar, cola, numeración); OCR pendiente |
+| 6.3 | Documentos primero + OCR prellenado | ✅ OCR local (tesseract.js) al adjuntar la Identificación: extrae CURP/RFC/nombre y prellena SOLO campos vacíos del propietario; 7 tests |
 | 6.4 | Catálogo de documentos × tipo de contratación en el flujo | ✅ (+ mapeo propuesto) · 👤 obligatoriedad y mapeo final CEA |
 | 6.5 | Validar el reorden con usuarios finales | 👤 |
 
 ## 7. Facturación
 | # | Acción | Estado |
 |---|--------|--------|
-| 7.1 | Afinar módulo de facturación | 🟡 motor por sección PERIODICA (otro dev) avanzado |
+| 7.1 | Afinar módulo de facturación | 🟡 motor por sección PERIODICA operando (otro dev); siguiente paso documentado: consumir la regla % san/alc de BD (motor-tarifas.md) |
 | 7.2 | Depende de 1.6/1.7 | 🟡 |
 
 ## 8. Sentinel (paralelo)

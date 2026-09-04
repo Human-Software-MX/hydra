@@ -264,10 +264,31 @@ export class SolicitudesService {
       });
     }
 
+    // Whitelist: el controller recibe body sin validar; una clave desconocida en el
+    // spread produciría PrismaClientValidationError 500. Solo pasan campos del DTO.
+    const CAMPOS_INSPECCION = [
+      'estado', 'fechaInspeccion', 'numeroOficial', 'tipoUso', 'giro', 'areaTerreno',
+      'condicionToma', 'condicionesPredio', 'infraHidraulicaExterna', 'infraSanitaria',
+      'materialCalle', 'materialBanqueta', 'metrosRupturaAguaCalle', 'metrosRupturaAguaBanqueta',
+      'metrosRupturaDrenajeCalle', 'metrosRupturaDrenajeBanqueta',
+      'tieneMedidor', 'diametroDescarga', 'metrosLinealesToma', 'metrosLinealesDescarga',
+      'realizada', 'motivoNoRealizada', 'intentos',
+      'observaciones', 'evidencias', 'resultadoEjecucion', 'resultadoInspeccion',
+      'inspectorNumEmpleado', 'inspectorNombre', 'firmaInspector', 'inspectoresAdicionales',
+      'inicio', 'fin', 'tipoOrdenCorrecto',
+      'inspector', 'diametroToma', 'tomaExistente', 'diametroTomaExistente',
+      'estadoTomaExistente', 'medidorExistente', 'numMedidorExistente',
+      'metrosRupturaCalle', 'metrosRupturaBanqueta', 'existeRed', 'distanciaRed',
+      'presionRed', 'tipoMaterialRed', 'profundidadRed',
+    ] as const;
+    const limpio = Object.fromEntries(
+      CAMPOS_INSPECCION.filter((k) => (data as Record<string, unknown>)[k] !== undefined)
+        .map((k) => [k, (data as Record<string, unknown>)[k]]),
+    );
     await this.prisma.solicitudInspeccion.upsert({
       where: { solicitudId },
-      create: { solicitudId, estado: data.estado ?? 'completada', ...data },
-      update: data,
+      create: { solicitudId, estado: data.estado ?? 'completada', ...limpio },
+      update: limpio,
     });
 
     return this.prisma.solicitud.findUnique({
