@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
@@ -15,6 +15,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import MapPicker from '@/components/ui/map-picker';
+import { geocodificarInverso, coordenadasDesde, type Coordenadas } from '@/lib/geo-picker';
+import { toast } from '@/components/ui/sonner';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export interface DomicilioFormValue {
@@ -54,8 +56,36 @@ const EMPTY: DomicilioFormValue = {
 
 export const DOMICILIO_FORM_EMPTY = EMPTY;
 
+const NOMINATIM_EMAIL = 'soporte@humansoftware.mx';
+
+/** Normaliza para casar nombres de Nominatim contra el catálogo INEGI. */
+function normNombre(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchPorNombre<T extends { id: string; nombre: string }>(
+  rows: T[] | undefined,
+  nombre: string,
+): T | undefined {
+  if (!rows?.length || !nombre) return undefined;
+  const n = normNombre(nombre);
+  return (
+    rows.find((r) => normNombre(r.nombre) === n) ??
+    rows.find((r) => normNombre(r.nombre).includes(n) || n.includes(normNombre(r.nombre)))
+  );
+}
+
 export default function DomicilioPickerForm({ value, onChange, disabled = false, conMapa = false }: Props) {
   const set = (patch: Partial<DomicilioFormValue>) => onChange({ ...value, ...patch });
+  // valor más reciente para el flujo async del prellenado (evita cierres obsoletos)
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const [prellenando, setPrellenando] = useState(false);
 
   // ── Catálogos cascading ────────────────────────────────────────────────
   const { data: estados = [], isLoading: loadingEstados } = useQuery({
@@ -116,8 +146,83 @@ export default function DomicilioPickerForm({ value, onChange, disabled = false,
       .join(', ');
   }, [conMapa, value, colRes, locRes, mpioRes, estados]);
 
+  /**
+   * Pin en el mapa → dirección: geocodifica en reversa y prellena todo lo que se
+   * pueda resolver (calle, número, CP y la cascada INEGI por nombre). Los campos
+   * que Nominatim no trae conservan lo capturado.
+   */
+  const handleMapa = async (c: Coordenadas | null) => {
+    set({ gpsLat: c?.lat ?? null, gpsLng: c?.lng ?? null });
+    if (!c || disabled) return;
+    setPrellenando(true);
+    try {
+      const dir = await geocodificarInverso(c, { email: NOMINATIM_EMAIL });
+      if (!dir) return;
+      const base = valueRef.current;
+      const patch: Partial<DomicilioFormValue> = {
+        gpsLat: c.lat,
+        gpsLng: c.lng,
+        calle: dir.calle || base.calle,
+        numExterior: dir.numExterior || base.numExterior,
+        codigoPostal: dir.codigoPostal || base.codigoPostal,
+      };
+
+      // Cascada INEGI por nombre (mejor esfuerzo): estado → municipio → localidad → colonia
+      const estado = matchPorNombre(estados, dir.estado);
+      if (estado) {
+        patch.estadoINEGIId = estado.id;
+        const mpios = await fetchInegiMunicipiosCatalogo({ estadoId: estado.id, limit: 200 });
+        const mpio = matchPorNombre(mpios.data, dir.municipio) ?? matchPorNombre(mpios.data, dir.localidad);
+        if (mpio) {
+          patch.municipioINEGIId = mpio.id;
+          const locs = await fetchInegiLocalidadesCatalogo({ municipioId: mpio.id, limit: 500 });
+          const loc = matchPorNombre(locs.data, dir.localidad) ?? matchPorNombre(locs.data, dir.municipio);
+          if (loc) {
+            patch.localidadINEGIId = loc.id;
+            const cols = await fetchInegiColoniasCatalogo({ localidadId: loc.id, limit: 500 });
+            const col =
+              matchPorNombre(cols.data, dir.colonia) ??
+              (dir.codigoPostal
+                ? cols.data?.find((x) => (x as { codigoPostal?: string }).codigoPostal === dir.codigoPostal)
+                : undefined);
+            if (col) patch.coloniaINEGIId = col.id;
+          }
+        }
+      }
+
+      onChange({ ...valueRef.current, ...patch });
+      const partes = [dir.calle, dir.colonia, dir.municipio].filter(Boolean);
+      if (partes.length > 0) toast.success(`Dirección prellenada: ${partes.join(', ')}`);
+    } finally {
+      setPrellenando(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+      {/* Mapa primero: colocar el pin prellena la dirección de abajo */}
+      {conMapa && (
+        <div className="col-span-2 space-y-1">
+          <Label>Ubicación del predio en el mapa</Label>
+          <p className="text-xs text-muted-foreground">
+            Coloque el pin (clic o arrastre) y la dirección se prellenará automáticamente; después
+            solo valide o complete los campos.
+          </p>
+          <MapPicker
+            lat={value.gpsLat}
+            lng={value.gpsLng}
+            disabled={disabled}
+            direccionBusqueda={direccionBusqueda}
+            onChange={(c) => void handleMapa(c)}
+          />
+          {prellenando && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Prellenando dirección desde el pin…
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Estado */}
       <div className="space-y-1">
         <Label>Estado <span className="text-destructive">*</span></Label>
@@ -263,19 +368,6 @@ export default function DomicilioPickerForm({ value, onChange, disabled = false,
         />
       </div>
 
-      {/* Ubicación exacta en mapa — full width */}
-      {conMapa && (
-        <div className="col-span-2 space-y-1 pt-1">
-          <Label>Ubicación exacta en el mapa</Label>
-          <MapPicker
-            lat={value.gpsLat}
-            lng={value.gpsLng}
-            disabled={disabled}
-            direccionBusqueda={direccionBusqueda}
-            onChange={(c) => set({ gpsLat: c?.lat ?? null, gpsLng: c?.lng ?? null })}
-          />
-        </div>
-      )}
     </div>
   );
 }
