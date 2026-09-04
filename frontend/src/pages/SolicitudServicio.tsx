@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/sonner';
 import DomicilioPickerForm from '@/components/contratacion/DomicilioPickerForm';
 import EntregaDocumentos, { subirArchivosPendientes, type ArchivoPendiente } from '@/components/contratacion/EntregaDocumentos';
+import TarifasAplicables from '@/components/solicitudes/TarifasAplicables';
 import { fetchAdministraciones, fetchDistritos, fetchActividades, type DistritoCatalogo, type CatalogoActividad } from '@/api/catalogos';
 import { fetchTiposContratacion, fetchTipoContratacionConfiguracion, type TipoContratacion } from '@/api/tipos-contratacion';
 import { hasApi } from '@/api/contratos';
@@ -1058,6 +1059,15 @@ function StepContratacion({
           )}
         </div>
       </div>
+
+      {/* Tarifas aplicables (motor versionado; se derivan del tipo + variables) */}
+      {form.adminId && selectedTipo && (
+        <TarifasAplicables
+          administracionId={form.adminId}
+          tipo={selectedTipo}
+          variables={form.variablesCapturadas}
+        />
+      )}
 
       {/* Documentos Presentados */}
       <div className="space-y-3">
