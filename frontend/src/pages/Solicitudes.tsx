@@ -10,6 +10,8 @@ import {
   upsertInspeccion,
   type SolicitudDto,
   type SolicitudInspeccionDto,
+  crearOrdenInspeccionAgora,
+  syncInspeccionAgora,
 } from '@/api/solicitudes';
 import { fetchTiposContratacion } from '@/api/tipos-contratacion';
 import {
@@ -98,6 +100,14 @@ function inspDtoToOrden(insp: SolicitudInspeccionDto): OrdenInspeccionData {
     infraHidraulicaExterna: (insp.infraHidraulicaExterna as 'si' | 'no' | '') ?? '',
     infraSanitaria: (insp.infraSanitaria as 'si' | 'no' | '') ?? '',
     materialCalle: insp.materialCalle ?? undefined,
+    tieneMedidor: insp.tieneMedidor ?? undefined,
+    diametroDescarga: insp.diametroDescarga ?? undefined,
+    metrosLinealesToma: insp.metrosLinealesToma ?? undefined,
+    metrosLinealesDescarga: insp.metrosLinealesDescarga ?? undefined,
+    realizada: insp.realizada ?? undefined,
+    motivoNoRealizada: insp.motivoNoRealizada ?? undefined,
+    intentos: insp.intentos ?? undefined,
+    agoraOrdenRef: insp.agoraOrdenRef ?? undefined,
     materialBanqueta: insp.materialBanqueta ?? undefined,
     metrosRupturaAguaBanqueta: insp.metrosRupturaAguaBanqueta ?? undefined,
     metrosRupturaAguaCalle: insp.metrosRupturaAguaCalle ?? undefined,
@@ -310,6 +320,9 @@ const MOCK_INSPECCIONES: OrdenInspeccionData[] = [
     infraSanitaria: 'si',
     materialCalle: 'concreto_asfaltico',
     materialBanqueta: 'concreto',
+    diametroToma: '1/2\"',
+    diametroDescarga: '1/2\"',
+    tieneMedidor: false,
     metrosRupturaAguaBanqueta: '3',
     metrosRupturaAguaCalle: '2',
     metrosRupturaDrenajeBanqueta: '3',
@@ -337,6 +350,9 @@ const MOCK_INSPECCIONES: OrdenInspeccionData[] = [
     infraSanitaria: 'si',
     materialCalle: 'empedrado',
     materialBanqueta: 'concreto',
+    diametroToma: '1/2\"',
+    diametroDescarga: '1/2\"',
+    tieneMedidor: false,
     metrosRupturaAguaBanqueta: '2',
     metrosRupturaAguaCalle: '0',
     metrosRupturaDrenajeBanqueta: '2',
@@ -364,6 +380,9 @@ const MOCK_INSPECCIONES: OrdenInspeccionData[] = [
     infraSanitaria: 'si',
     materialCalle: 'concreto_hidraulico',
     materialBanqueta: 'concreto_hidraulico',
+    diametroToma: '1/2\"',
+    diametroDescarga: '1/2\"',
+    tieneMedidor: false,
     metrosRupturaAguaBanqueta: '4',
     metrosRupturaAguaCalle: '5',
     metrosRupturaDrenajeBanqueta: '4',
@@ -441,6 +460,32 @@ function OrdenInspeccionSheet({
       toast.success('Datos de campo guardados');
     },
     onError: () => toast.error('Error al guardar datos de campo'),
+  });
+
+  // ── Orden de inspección en AgoraCore (junta: los datos llegan por la orden) ──
+  const crearOrdenMut = useMutation({
+    mutationFn: () => crearOrdenInspeccionAgora(record!.id),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      toast.success(
+        r.mock
+          ? 'Orden de inspección creada (modo demo, sin Agora configurado)'
+          : `Orden de inspección creada en Agora (${r.agoraOrdenRef ?? 's/ref'})`,
+      );
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'No se pudo crear la orden en Agora'),
+  });
+  const syncAgoraMut = useMutation({
+    mutationFn: () => syncInspeccionAgora(record!.id),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
+      toast.success(
+        r.camposRecibidos.length > 0
+          ? `Datos recibidos de Agora: ${r.camposRecibidos.join(', ')}`
+          : 'La orden en Agora aún no tiene datos capturados',
+      );
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'No se pudo sincronizar con Agora'),
   });
 
   if (!record) return null;
@@ -650,6 +695,43 @@ function OrdenInspeccionSheet({
                 <div><span className="text-muted-foreground text-xs">Drenaje calle: </span>{fMlDrenajeCalle ? `${fMlDrenajeCalle} ml` : <span className="text-muted-foreground italic">—</span>}</div>
                 <div><span className="text-muted-foreground text-xs">Drenaje banqueta: </span>{fMlDrenajeBanqueta ? `${fMlDrenajeBanqueta} ml` : <span className="text-muted-foreground italic">—</span>}</div>
               </div>
+            )}
+          </div>
+
+          {/* Orden de inspección en AgoraCore */}
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Orden en Agora:
+            </span>
+            {orden?.agoraOrdenRef ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-xs text-primary">
+                #{orden.agoraOrdenRef}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">sin orden creada</span>
+            )}
+            {orden?.agoraOrdenRef ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={syncAgoraMut.isPending}
+                onClick={() => syncAgoraMut.mutate()}
+              >
+                {syncAgoraMut.isPending ? 'Sincronizando…' : 'Traer datos de Agora'}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={crearOrdenMut.isPending}
+                onClick={() => crearOrdenMut.mutate()}
+              >
+                {crearOrdenMut.isPending ? 'Creando…' : 'Crear orden en Agora'}
+              </Button>
             )}
           </div>
 

@@ -134,6 +134,8 @@ export interface CrearTicketDto {
    * se envía cuando quien llama lo proporciona explícitamente.
    */
   ceaContractNumber?: string;
+  /** Atributos extra que viajan en custom_attributes (p. ej. orden de inspección). */
+  customAttributes?: Record<string, unknown>;
 }
 
 export interface AgoraTicketPayload {
@@ -148,7 +150,7 @@ export function construirPayloadTicket(
   dto: CrearTicketDto,
   cfg: Pick<AgoraConfig, 'defaultCategoryId' | 'defaultSubcategoryId'>,
 ): AgoraTicketPayload {
-  const customAttributes: Record<string, unknown> = { origen: 'hydra' };
+  const customAttributes: Record<string, unknown> = { origen: 'hydra', ...(dto.customAttributes ?? {}) };
   if (dto.contratoId) customAttributes.hydra_contrato_id = dto.contratoId;
   if (dto.tramiteId) customAttributes.hydra_tramite_id = dto.tramiteId;
   if (dto.quejaId) customAttributes.hydra_queja_id = dto.quejaId;

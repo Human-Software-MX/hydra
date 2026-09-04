@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AgoraService } from '../agora/agora.service';
 import { DomiciliosService, type CreateDomicilioDto } from '../domicilios/domicilios.service';
 import { PuntosServicioService } from '../puntos-servicio/puntos-servicio.service';
 import { coordenadasPredio } from './predio-geo';
@@ -39,7 +40,8 @@ export class SolicitudesService {
     private readonly prisma: PrismaService,
     private readonly domiciliosService: DomiciliosService,
     private readonly puntosServicioService: PuntosServicioService,
-  ) {}
+  
+    private readonly agora: AgoraService,) {}
 
   /**
    * `formData.predioDir` (CEA-FUS01) → DTO de domicilio para crear el punto de servicio del predio.
@@ -135,7 +137,7 @@ export class SolicitudesService {
       }
     }
 
-    return this.prisma.solicitud.create({
+    const solicitudCreada = await this.prisma.solicitud.create({
       data: {
         folio,
         propTipoPersona: dto.propTipoPersona,
@@ -150,6 +152,25 @@ export class SolicitudesService {
         estado: estadoInicial,
         formData: dto.formData,
       },
+      include: { inspeccion: true },
+    });
+
+    // Junta CEA 02-sep: al iniciar la solicitud se crea la ORDEN DE INSPECCIÓN y
+    // viaja por Agora; los datos que levanta el inspector regresan por sync.
+    // Best-effort: si Agora falla, la solicitud queda creada y la orden se puede
+    // generar después con crearOrdenInspeccionAgora().
+    if (estadoInicial === 'inspeccion_pendiente') {
+      try {
+        await this.crearOrdenInspeccionAgora(solicitudCreada.id);
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo crear la orden de inspección en Agora para ${folio}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    return this.prisma.solicitud.findUnique({
+      where: { id: solicitudCreada.id },
       include: { inspeccion: true },
     });
   }
@@ -196,6 +217,105 @@ export class SolicitudesService {
   }
 
   // ── Inspection upsert ──────────────────────────────────────────────────────
+  /** Variables de inspección del tipo (lo que la orden pide levantar en campo). */
+  private async camposInspeccionDelTipo(tipoContratacionId?: string | null): Promise<string[]> {
+    if (!tipoContratacionId) return [];
+    const vars = await this.prisma.variableTipoContratacion.findMany({
+      where: { tipoContratacionId },
+      include: { tipoVariable: { select: { codigo: true, nombre: true } } },
+      orderBy: { orden: 'asc' },
+    });
+    const DE_INSPECCION = new Set([
+      'DIAMETRO_TOMA', 'DIAMETRO_DESCARGA', 'MATERIAL_CALLE', 'MATERIAL_BANQUETA',
+      'METROS_TOMA', 'METROS_DESCARGA', 'TIPO_MEDIDOR', 'PROFUNDIDAD_TOMA',
+      'MATERIAL_TUBERIA', 'DISTANCIA_RED', 'PRESION_DISPONIBLE',
+    ]);
+    return vars
+      .filter((v) => DE_INSPECCION.has(v.tipoVariable.codigo))
+      .map((v) => v.tipoVariable.nombre);
+  }
+
+  /** Crea (o re-crea) la orden de inspección en Agora y guarda su referencia. */
+  async crearOrdenInspeccionAgora(solicitudId: string) {
+    const solicitud = await this.findOne(solicitudId);
+    const campos = await this.camposInspeccionDelTipo(solicitud.tipoContratacionId);
+    const tipo = solicitud.tipoContratacionId
+      ? await this.prisma.tipoContratacion.findUnique({
+          where: { id: solicitud.tipoContratacionId },
+          select: { nombre: true },
+        })
+      : null;
+    const orden = await this.agora.crearOrdenInspeccion({
+      solicitudId: solicitud.id,
+      folio: solicitud.folio,
+      domicilio: solicitud.predioResumen ?? '',
+      tipoContratacion: tipo?.nombre ?? '',
+      camposRequeridos: campos,
+      creadoPor: 'hydra',
+    });
+    const ref = orden.displayId ?? orden.ref;
+    await this.prisma.solicitudInspeccion.upsert({
+      where: { solicitudId },
+      create: { solicitudId, estado: 'orden_creada', agoraOrdenRef: ref },
+      update: { agoraOrdenRef: ref },
+    });
+    return { agoraOrdenRef: ref, mock: orden.mock };
+  }
+
+  /**
+   * Trae de Agora los datos que levantó el inspector (custom_attributes de la
+   * orden) y los persiste en la inspección — cero recaptura. Si el inspector
+   * marcó realizada=si, la inspección queda completada y la solicitud pasa a
+   * cotización (misma regla que la captura manual).
+   */
+  async syncInspeccionDesdeAgora(solicitudId: string) {
+    const insp = await this.prisma.solicitudInspeccion.findUnique({ where: { solicitudId } });
+    if (!insp?.agoraOrdenRef) {
+      throw new NotFoundException('La solicitud no tiene orden de inspección en Agora');
+    }
+    const ticket = await this.agora.getTicketPorDisplayId(insp.agoraOrdenRef);
+    const attrs = (ticket?.custom_attributes ?? {}) as Record<string, unknown>;
+    const str = (k: string): string | undefined => {
+      const v = attrs[k];
+      return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+    };
+    const num = (k: string): number | undefined => {
+      const v = parseFloat(String(attrs[k] ?? ''));
+      return Number.isFinite(v) ? v : undefined;
+    };
+    const bool = (k: string): boolean | undefined => {
+      const v = str(k)?.toLowerCase();
+      if (v === undefined) return undefined;
+      return ['si', 'sí', 'true', '1', 'yes'].includes(v);
+    };
+
+    const realizada = bool('realizada');
+    const data = {
+      materialCalle: str('material_calle'),
+      materialBanqueta: str('material_banqueta'),
+      diametroToma: str('diametro_toma'),
+      diametroDescarga: str('diametro_descarga'),
+      metrosLinealesToma: num('metros_toma'),
+      metrosLinealesDescarga: num('metros_descarga'),
+      // Legacy: la cuantificación actual lee metrosRuptura*; se espejan.
+      metrosRupturaAguaCalle: str('metros_toma'),
+      metrosRupturaDrenajeCalle: str('metros_descarga'),
+      tieneMedidor: bool('tiene_medidor'),
+      medidorExistente: bool('tiene_medidor') === undefined ? undefined : bool('tiene_medidor') ? 'si' : 'no',
+      realizada,
+      motivoNoRealizada: str('motivo_no_realizada'),
+      ...(realizada === true ? { estado: 'completada' } : {}),
+      ...(realizada === false ? { intentos: (insp.intentos ?? 0) + 1 } : {}),
+    };
+    const limpio = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+    const recibidos = Object.keys(limpio).filter((k) => k !== 'estado');
+    if (recibidos.length === 0) {
+      return { solicitud: await this.findOne(solicitudId), camposRecibidos: [], agoraOrdenRef: insp.agoraOrdenRef };
+    }
+    const solicitud = await this.upsertInspeccion(solicitudId, limpio as Parameters<SolicitudesService['upsertInspeccion']>[1]);
+    return { solicitud, camposRecibidos: recibidos, agoraOrdenRef: insp.agoraOrdenRef };
+  }
+
   async upsertInspeccion(
     solicitudId: string,
     data: {
