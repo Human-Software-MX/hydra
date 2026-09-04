@@ -134,3 +134,32 @@ Consecuencias:
 3. **Confirmar la naturaleza de cada uno de los 25 conceptos** — cuáles son cobro, cuáles requisito
    documental (`CARTA DE FACTIBILIDAD` parece requisito, no cobro) y cuáles orden de trabajo
    (`INSTALACIÓN DE MEDIDOR`). El dropdown correcto depende de esa clasificación.
+
+## 8. Análisis del xlsx completo (2026-09-03, 12 hojas)
+
+Fuente: `~/Desktop/Catálogos de tipos contratacion.xlsx`. Hojas ya conocidas: tipos (×2), administracion,
+clase_contratacion, tipo_punto_serv, estructura_tecnica, concepto_contratacion, documento. **Hallazgos nuevos:**
+
+### La relación documento↔tipo NO existe tampoco en el xlsx
+La hoja `documento` (4,080 filas) es el mismo producto cartesiano: 1 solo set de 24 documentos para
+los 170 tipos. Confirmado: esa relación no existe en ninguna fuente SIGE → la propuesta + validación
+CEA sigue siendo el único camino.
+
+### Hojas nuevas con información REAL
+1. **`clausulas`** (5,309 filas): 125 cláusulas distintas CON TEXTO completo, 21–32 por tipo,
+   7 sets distintos → relación real tipo↔cláusula. El schema ya tiene `ClausulaContractual` +
+   `ClausulaTipoContratacion`: importable ya. Arma el contrato impreso por tipo.
+2. **`concepto_lecturas`** (344 filas): conceptos PERIÓDICOS (facturación por lecturas) por tipo:
+   - 100 tipos: AGUA + SANEAMIENTO (sin alcantarillado — zonas sin red, consistente con la junta)
+   - 35 tipos: AGUA + ALCANTARILLADO + SANEAMIENTO · 32: solo AGUA · especiales: pipas/pozo/agua tratada
+   - AGUA lleva su **tarifa asignada** (14 tarifas = enlaza con ClaseTarifa/tcttpsid)
+3. **`Cat conceptos contrat`** (21 conceptos, `tconid` SIGE): **clasificación fiscal real por concepto**:
+   - AGUA, ALCANTARILLADO, SANEAMIENTO, DERECHOS DE CONTRATACIÓN: ambas tasas (16 y 0) → depende del uso
+   - MULTA y RECARGOS: **No Objeto** de IVA (ni 16 ni 0 — fuera del objeto del impuesto)
+   - resto: solo 16 %
+4. `tipo_documento`: plantillas de impresión OM/sms/email (ContratoSuministro…) — no es catálogo ciudadano.
+
+### Import pendiente que esto habilita
+- Conceptos: catálogo real (21, con tconid y fiscal) + relación contratación (2,420) + relación
+  lecturas (344 con tarifa) → puebla `ConceptoCobro`/`ConceptoCobroTipoContratacion`
+- Cláusulas: 125 + ~5,300 vínculos → puebla `ClausulaContractual`/`ClausulaTipoContratacion`
