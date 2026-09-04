@@ -271,7 +271,7 @@ export function CuantificacionModal({
     insp?.metrosRupturaDrenajeCalle ?? vc.METROS_DESCARGA ?? '0'
   )) || 0;
   const diametroTomaDefault   = insp?.diametroToma ?? String(vc.DIAMETRO_TOMA    ?? '');
-  const diametroDescargaDefault =                      String(vc.DIAMETRO_DESCARGA ?? '');
+  const diametroDescargaDefault = insp?.diametroDescarga ?? String(vc.DIAMETRO_DESCARGA ?? '');
 
   // ── Estado del formulario ──────────────────────────────────────────────────
 

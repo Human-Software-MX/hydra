@@ -196,6 +196,16 @@ export interface OrdenInspeccionData {
   inicio?: string;
   fin?: string;
   tipoOrdenCorrecto?: 'si' | 'no' | '';
+  // ── Campos formales (junta CEA 02-sep) ───────────────────────────────────
+  tieneMedidor?: boolean;
+  diametroDescarga?: string;
+  metrosLinealesToma?: number | string;
+  metrosLinealesDescarga?: number | string;
+  realizada?: boolean;
+  motivoNoRealizada?: string;
+  intentos?: number;
+  /** display_id de la orden de inspección en AgoraCore */
+  agoraOrdenRef?: string;
   // ── Legacy (kept for cotización engine backward compat) ──────────────────
   inspector?: string;
   diametroToma?: string;

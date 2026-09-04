@@ -30,6 +30,14 @@ export interface SolicitudInspeccionDto {
   inspectorNombre: string | null;
   firmaInspector: string | null;
   inspectoresAdicionales: Array<{ noEmpleado: string; nombre: string; firma?: string }> | null;
+  tieneMedidor?: boolean | null;
+  diametroDescarga?: string | null;
+  metrosLinealesToma?: number | string | null;
+  metrosLinealesDescarga?: number | string | null;
+  realizada?: boolean | null;
+  motivoNoRealizada?: string | null;
+  intentos?: number | null;
+  agoraOrdenRef?: string | null;
   inicio: string | null;
   fin: string | null;
   tipoOrdenCorrecto: string | null;
@@ -185,6 +193,18 @@ function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('ctcf_access_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+export const crearOrdenInspeccionAgora = (solicitudId: string) =>
+  apiRequest<{ agoraOrdenRef: string | null; mock: boolean }>(
+    `/solicitudes/${solicitudId}/inspeccion/orden-agora`,
+    { method: 'POST' },
+  );
+
+export const syncInspeccionAgora = (solicitudId: string) =>
+  apiRequest<{ solicitud: unknown; camposRecibidos: string[]; agoraOrdenRef: string }>(
+    `/solicitudes/${solicitudId}/inspeccion/sync-agora`,
+    { method: 'POST' },
+  );
 
 export const fetchSolicitudDocumentos = (solicitudId: string) =>
   apiRequest<SolicitudDocumentoDto[]>(`/solicitudes/${solicitudId}/documentos`);

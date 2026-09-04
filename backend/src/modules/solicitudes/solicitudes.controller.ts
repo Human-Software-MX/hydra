@@ -70,6 +70,20 @@ export class SolicitudesController {
     return this.service.updateFormData(id, body);
   }
 
+  /** Crea (o re-crea) la orden de inspección en AgoraCore para esta solicitud. */
+  @Post(':id/inspeccion/orden-agora')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  crearOrdenAgora(@Param('id') id: string) {
+    return this.service.crearOrdenInspeccionAgora(id);
+  }
+
+  /** Trae de Agora los datos levantados por el inspector y los persiste. */
+  @Post(':id/inspeccion/sync-agora')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
+  syncInspeccionAgora(@Param('id') id: string) {
+    return this.service.syncInspeccionDesdeAgora(id);
+  }
+
   @Post(':id/inspeccion')
   @Roles('SUPER_ADMIN', 'ADMIN', 'OPERADOR')
   upsertInspeccion(@Param('id') id: string, @Body() body: any) {

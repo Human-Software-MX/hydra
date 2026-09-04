@@ -134,6 +134,82 @@ export class AgoraService {
     return ticket;
   }
 
+  /**
+   * Crea en Agora la ORDEN DE INSPECCIÓN de una solicitud (junta CEA 02-sep:
+   * la información de la inspección llega por el servicio que lleva la orden).
+   * Los campos a levantar viajan como custom_attributes vacíos que el inspector
+   * llena en Agora; Hydra los recibe con syncInspeccionDesdeAgora.
+   * Devuelve el display_id (clave de lookup de la API de Agora) o null en mock.
+   */
+  async crearOrdenInspeccion(params: {
+    solicitudId: string;
+    folio: string;
+    domicilio: string;
+    tipoContratacion: string;
+    camposRequeridos: string[];
+    creadoPor: string;
+  }): Promise<{ displayId: string | null; ref: string | null; mock: boolean }> {
+    const dto: CrearTicketDto = {
+      titulo: `Orden de inspección — ${params.folio}`,
+      descripcion:
+        `Inspección de campo para la solicitud ${params.folio}.\n` +
+        `Domicilio: ${params.domicilio}\n` +
+        `Tipo de contratación: ${params.tipoContratacion}\n` +
+        `Datos a levantar: ${params.camposRequeridos.join(', ') || '—'}`,
+      prioridad: 'Media',
+      creadoPor: params.creadoPor,
+      customAttributes: {
+        hydra_tipo: 'orden_inspeccion',
+        hydra_solicitud_id: params.solicitudId,
+        hydra_folio: params.folio,
+        inspeccion_campos: params.camposRequeridos.join(','),
+        // Placeholders que llena el inspector en Agora:
+        material_calle: '',
+        material_banqueta: '',
+        diametro_toma: '',
+        diametro_descarga: '',
+        metros_toma: '',
+        metros_descarga: '',
+        tiene_medidor: '',
+        realizada: '',
+        motivo_no_realizada: '',
+      },
+    };
+
+    if (!this.isConfigured()) {
+      const ticket = await this.createTicket(dto);
+      return { displayId: null, ref: (ticket as { agoraRef?: string }).agoraRef ?? null, mock: true };
+    }
+
+    const payload = construirPayloadTicket(dto, this.config);
+    const respuesta = await this.request<AgoraTicketResponse>('POST', this.ticketsPath, payload);
+    await this.prisma.agoraTicket.create({
+      data: {
+        agoraRef: refDeRespuesta(respuesta),
+        titulo: dto.titulo,
+        descripcion: dto.descripcion,
+        estado: mapEstadoFromAgora(respuesta?.status) ?? 'Abierto',
+        prioridad: dto.prioridad ?? 'Media',
+        creadoPor: dto.creadoPor,
+        datosEnvio: payload as object,
+        respuesta: (respuesta ?? {}) as object,
+      },
+    });
+    return {
+      displayId: displayIdDeRespuesta(respuesta),
+      ref: refDeRespuesta(respuesta),
+      mock: false,
+    };
+  }
+
+  /** Lee un ticket de Agora por display_id (la clave que usa su API de lookup). */
+  async getTicketPorDisplayId(displayId: string): Promise<AgoraTicketResponse> {
+    if (!this.isConfigured()) {
+      throw new BadGatewayException('Agora no está configurado (AGORA_API_URL/TOKEN/ACCOUNT_ID)');
+    }
+    return this.request<AgoraTicketResponse>('GET', `${this.ticketsPath}/${encodeURIComponent(displayId)}`);
+  }
+
   async findOne(id: string) {
     const ticket = await this.prisma.agoraTicket.findUnique({ where: { id } });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');

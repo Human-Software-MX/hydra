@@ -2023,6 +2023,8 @@ model SolicitudInspeccion {
   motivoNoRealizada            String?   @map("motivo_no_realizada")
   /// Intentos de visita (regla de 3: al tercero se escala)
   intentos                     Int       @default(0)
+  /// display_id del ticket/orden de inspección en AgoraCore (lookup de la API)
+  agoraOrdenRef                String?   @map("agora_orden_ref")
   resultadoEjecucion           String?   @map("resultado_ejecucion")
   resultadoInspeccion          String?   @map("resultado_inspeccion")
   inspectorNumEmpleado         String?   @map("inspector_num_empleado")
