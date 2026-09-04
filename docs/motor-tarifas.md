@@ -225,3 +225,12 @@ migración de datos explícita), no el re-seed.
 - [ ] Migrar la cotización de solicitudes (`frontend/src/lib/cotizacion-tarifas.ts` + `tarifas-contratacion.json`) a `GET /tarifas/contratacion/cotizar`
 - [ ] Alcantarillado/saneamiento periódicos como % del agua (hoy solo en el motor offline; la BD tiene filas demo)
 - [ ] Vincular `Contrato` directamente a una clase cuando difiera de su tipo de contratación (trámite «Cambio de tarifa»)
+
+### Saneamiento / alcantarillado periódicos (regla % en BD, pendiente de consumir)
+
+Desde la migración `20260904060000`, la regla de la junta CEA 02-sep vive en BD:
+`conceptos_cobro.porcentaje_de_servicio = 'agua'` + `porcentaje` (alcantarillado 10 %,
+saneamiento 12 %). La facturación periódica hoy solo factura `agua` (no hay filas de
+tarifa para san/alc porque *no son tarifas*): el siguiente paso del motor es leer esta
+regla y agregar las dos líneas como % del importe de agua del periodo, respetando qué
+servicios factura cada tipo (`conceptos_cobro_tipo_contratacion`, origen LECTURAS).
