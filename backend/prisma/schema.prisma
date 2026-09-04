@@ -1467,6 +1467,10 @@ model ConceptoCobro {
   nombre            String
   tipo              String // fijo | variable | porcentual
   origen            String                          @default("CONTRATACION") // CONTRATACION | LECTURAS | VARIOS
+  /// Id del concepto en SIGE (tconid de «Cat conceptos contrat»)
+  sigeTconId        Int?                            @unique @map("sige_tcon_id")
+  /// Clasificación fiscal SIGE: TASA_16 | TASA_0 | AMBAS (según uso doméstico) | NO_OBJETO
+  clasificacionIva  String?                         @map("clasificacion_iva")
   montoBase         Decimal?                        @map("monto_base") @db.Decimal(10, 2)
   ivaPct            Decimal                         @default(16) @map("iva_pct") @db.Decimal(5, 2)
   formula           String?
