@@ -770,6 +770,26 @@ function StepSolicitud({ form, set }: { form: SolicitudState; set: (p: Partial<S
 
 // ── Opciones para variables reservadas (igual que PasoVariables) ─────────────
 const DIAMETROS_SOL = ["1/2\"", "3/4\"", "1\"", "1.5\"", "2\"", "3\"", "4\""];
+/**
+ * Variables que captura el INSPECTOR en campo (junta CEA 02-sep: «la inspección
+ * tiene que traer material de banqueta y calle… no lo tenía que capturar el usuario»).
+ * En la solicitud no se piden: se ocultan con una nota, y si ya traen valor
+ * (solicitud post-inspección) se muestran solo lectura.
+ */
+const VARIABLES_DE_INSPECCION = new Set([
+  'DIAMETRO_TOMA',
+  'DIAMETRO_DESCARGA',
+  'MATERIAL_CALLE',
+  'MATERIAL_BANQUETA',
+  'METROS_TOMA',
+  'METROS_DESCARGA',
+  'TIPO_MEDIDOR',
+  'PROFUNDIDAD_TOMA',
+  'MATERIAL_TUBERIA',
+  'DISTANCIA_RED',
+  'PRESION_DISPONIBLE',
+]);
+
 const OPCIONES_RESERVADAS_SOL: Record<string, { label: string; value: string }[]> = {
   DIAMETRO_TOMA:     DIAMETROS_SOL.map((d) => ({ value: d, label: d })),
   DIAMETRO_DESCARGA: DIAMETROS_SOL.map((d) => ({ value: d, label: d })),
@@ -999,10 +1019,45 @@ function StepContratacion({
           {configLoading ? (
             <p className="text-xs text-muted-foreground">Cargando variables…</p>
           ) : variables.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {variables
-                .slice()
-                .sort((a, b) => a.orden - b.orden)
+            (() => {
+              const ordenadas = variables.slice().sort((a, b) => a.orden - b.orden);
+              const deInspeccion = ordenadas.filter((v) =>
+                VARIABLES_DE_INSPECCION.has((v.tipoVariable.codigo ?? '').toUpperCase()),
+              );
+              const editables = ordenadas.filter(
+                (v) => !VARIABLES_DE_INSPECCION.has((v.tipoVariable.codigo ?? '').toUpperCase()),
+              );
+              const conValor = deInspeccion.filter(
+                (v) => form.variablesCapturadas[v.tipoVariable.codigo] != null &&
+                  String(form.variablesCapturadas[v.tipoVariable.codigo]).length > 0,
+              );
+              return (
+                <div className="space-y-4">
+                  {deInspeccion.length > 0 && (
+                    <p className="rounded-md border border-dashed bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                      {deInspeccion.length} dato(s) técnicos (diámetros, materiales, metros…) se
+                      capturan en la <span className="font-medium">inspección</span> y se integran
+                      automáticamente a la cuantificación — no es necesario llenarlos aquí.
+                    </p>
+                  )}
+                  {conValor.length > 0 && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {conValor.map((v) => (
+                        <div key={v.id} className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-1.5 text-sm">
+                          <span className="text-muted-foreground">{v.tipoVariable.nombre}</span>
+                          <span className="font-medium">
+                            {String(form.variablesCapturadas[v.tipoVariable.codigo])}
+                            <span className="ml-1.5 text-[10px] font-normal uppercase text-muted-foreground">inspección</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {editables.length === 0 && conValor.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Sin variables por capturar en la solicitud.</p>
+                  ) : null}
+                  <div className="grid gap-4 sm:grid-cols-2">
+              {editables
                 .map((v) => {
                   const tv = v.tipoVariable;
                   const codigo = (tv.codigo ?? '').toUpperCase();
@@ -1089,7 +1144,10 @@ function StepContratacion({
                     </div>
                   );
                 })}
-            </div>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <p className="text-sm text-muted-foreground">
               {form.tipoContratacionId
