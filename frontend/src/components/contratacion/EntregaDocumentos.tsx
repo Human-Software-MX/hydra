@@ -262,7 +262,8 @@ export default function EntregaDocumentos({
                       variant="outline"
                       size="sm"
                       className="h-7 gap-1.5 px-2 text-xs"
-                      disabled={subirMut.isPending}
+                      disabled={!checked || subirMut.isPending}
+                      title={checked ? 'Adjuntar archivo(s)' : 'Marque el documento como recibido para poder adjuntar'}
                       onClick={() => abrirSelectorPara({ documentoId: d.documentoId ?? undefined, nombre })}
                     >
                       {subirMut.isPending && destino?.nombre === nombre ? (
