@@ -181,6 +181,15 @@ export class TiposContratacionService {
     const tipo = await this.prisma.tipoContratacion.findFirst({
       where: { OR: [{ id }, { codigo: id }] },
       include: {
+        claseTarifa: {
+          select: {
+            id: true,
+            codigo: true,
+            nombre: true,
+            ivaPct: true,
+            categoria: { select: { id: true, codigo: true, nombre: true, ivaPct: true } },
+          },
+        },
         conceptos: {
           include: { conceptoCobro: true },
           orderBy: { orden: 'asc' },

@@ -177,13 +177,12 @@ export class TarifaVersionesService {
       and.push({ OR: [{ claseTarifaId: params.claseTarifaId }, { claseTarifaId: null }] });
     }
 
-    const candidatas = await this.prisma.tarifa.findMany({
+    const todas = await this.prisma.tarifa.findMany({
       where: {
         seccion: SECCION_CONTRATACION,
         activo: true,
         tipoServicio: { equals: params.tipoServicio, mode: 'insensitive' },
         vigenciaDesde: { lte: fecha },
-        ...(params.variante && { variante: params.variante }),
         AND: and,
       },
       include: INCLUDE_CLASE,
@@ -191,6 +190,11 @@ export class TarifaVersionesService {
       // La versión vigente más reciente del linaje primero.
       orderBy: [{ vigenciaDesde: 'desc' }, { version: 'desc' }],
     });
+    // La variante se compara sin acentos ni mayúsculas: el Excel origen mezcla
+    // «TERRACERÍA» y «TERRACERIA» y el cliente no debe adivinar la grafía exacta.
+    const candidatas = params.variante
+      ? todas.filter((t) => normalizarVariante(t.variante) === normalizarVariante(params.variante))
+      : todas;
     const [tarifa] = filtrarMasEspecificas(candidatas, {
       administracionId: params.administracionId,
       claseTarifaId: params.claseTarifaId ?? null,
@@ -981,4 +985,14 @@ export class TarifaVersionesService {
   private nombreAdmin(admins: Map<string, string>, administracionId: string | null): string | null {
     return administracionId ? admins.get(administracionId) ?? null : null;
   }
+}
+
+/** Normaliza una variante para comparación: sin acentos, mayúsculas, espacios colapsados. */
+function normalizarVariante(v: string | null | undefined): string {
+  return (v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }

@@ -21,7 +21,7 @@ import { CalcularMontoQueryDto } from './dto/calcular-monto.dto';
 import { CotizarContratacionQueryDto } from './dto/cotizar-contratacion.dto';
 import { AplicarMasivaDto, PreviewMasivaDto } from './dto/actualizacion-masiva.dto';
 import { UpdateCategoriaTarifaDto, UpdateClaseTarifaDto } from './dto/catalogo-fiscal.dto';
-import { Roles, ROLES_ADMIN } from '../auth/roles.decorator';
+import { Roles, ROLES_ADMIN, ROLES_SERVICIOS } from '../auth/roles.decorator';
 
 @Roles(...ROLES_ADMIN)
 @Controller('tarifas')
@@ -45,6 +45,8 @@ export class TarifasController {
   }
 
   /** Tarifas vigentes a una fecha con su clasificación (sin la tabla de precios). */
+  // Lectura permitida a los roles que operan solicitudes (cotización en ventanilla)
+  @Roles(...ROLES_SERVICIOS)
   @Get('vigentes')
   findVigentes(@Query() query: ListarVigentesQueryDto) {
     const { fecha, ...filtro } = query;
@@ -52,6 +54,8 @@ export class TarifasController {
   }
 
   /** Servicios / conceptos distintos entre las tarifas vigentes (por catálogo). */
+  // Lectura permitida a los roles que operan solicitudes (cotización en ventanilla)
+  @Roles(...ROLES_SERVICIOS)
   @Get('servicios')
   findServicios() {
     return this.versiones.listarServicios();
@@ -62,6 +66,8 @@ export class TarifasController {
    * Se declara antes de `GET :id` (y de las rutas de un solo segmento) para
    * dejar explícito el orden de resolución de rutas de Nest.
    */
+  // Lectura permitida a los roles que operan solicitudes (cotización en ventanilla)
+  @Roles(...ROLES_SERVICIOS)
   @Get('contratacion/cotizar')
   cotizarContratacion(@Query() query: CotizarContratacionQueryDto) {
     return this.versiones.cotizarContratacion(query);
@@ -85,6 +91,8 @@ export class TarifasController {
    * tarifas vigentes del servicio; con ellos resuelve la tarifa como lo haría
    * la facturación del contrato.
    */
+  // Lectura permitida a los roles que operan solicitudes (cotización en ventanilla)
+  @Roles(...ROLES_SERVICIOS)
   @Get('calcular')
   calcularMonto(@Query() query: CalcularMontoQueryDto) {
     return this.service.calcularMonto(query);
@@ -92,6 +100,8 @@ export class TarifasController {
 
   // ─── Configurador fiscal (categorías / clases) ────────────────────────────
 
+  // Lectura permitida a los roles que operan solicitudes (cotización en ventanilla)
+  @Roles(...ROLES_SERVICIOS)
   @Get('catalogo/categorias')
   findCategorias() {
     return this.versiones.listarCategorias();

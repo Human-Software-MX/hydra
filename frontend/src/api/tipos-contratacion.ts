@@ -19,6 +19,14 @@ export interface TipoContratacion {
   diasPlazoAprobacion: number | null;
   periodicidadesPermitidas: string | null;
   tiposClientePermitidos: string | null;
+  claseTarifaId?: string | null;
+  claseTarifa?: {
+    id?: string;
+    codigo: string;
+    nombre: string;
+    ivaPct?: number | string | null;
+    categoria?: { id?: string; codigo: string; nombre: string; ivaPct?: number | string | null } | null;
+  } | null;
   _count?: { contratos: number };
 }
 

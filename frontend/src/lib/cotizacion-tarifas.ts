@@ -223,3 +223,42 @@ export function getTarifasAgua(adminNombre: string): string[] {
   const admin = resolveAdminContratacion(adminNombre) ?? 'QUERÉTARO';
   return Object.keys(tarifas[admin]?.longitud?.agua ?? {});
 }
+
+// ── Variantes válidas del catálogo Feb-2026 (normalizadas sin acentos) ────────
+// Fuente: backend/prisma/data/tarifas-contratacion.json. Si la combinación
+// calle-banqueta capturada no está aquí, no existe tarifa que cotizar y la UI
+// debe decirlo como "combinación no tarifada", no como error de administración.
+export const VARIANTES_CONEXION_AGUA = new Set([
+  'ADOQUIN-ADOQUIN', 'CONCRETO-CONCRETO', 'CONCRETO-ASFALTO', 'CONCRETO-ADOCRETO',
+  'CONCRETO-EMPEDRADO', 'CONCRETO-TERRACERIA', 'LOSA-ADOQUIN', 'LOSA-CANTERA',
+  'TERRACERIA-EMPEDRADO', 'TERRACERIA-TERRACERIA',
+]);
+export const VARIANTES_CONEXION_DRENAJE = new Set([
+  'ADOQUIN-ADOQUIN', 'CONCRETO-CONCRETO', 'CONCRETO-ASFALTO', 'CONCRETO-ADOCRETO',
+  'CONCRETO-EMPEDRADO', 'LOSA-ADOQUIN', 'LOSA-CANTERA',
+  'TERRACERIA-EMPEDRADO', 'TERRACERIA-TERRACERIA',
+]);
+
+/** Normaliza una variante para comparar contra los sets (sin acentos, mayúsculas). */
+export function normalizarVariante(v: string): string {
+  return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+}
+
+export function varianteConexionValida(key: string, servicio: 'agua' | 'drenaje'): boolean {
+  const set = servicio === 'agua' ? VARIANTES_CONEXION_AGUA : VARIANTES_CONEXION_DRENAJE;
+  return set.has(normalizarVariante(key));
+}
+
+/**
+ * Variante de instalación de medidor del catálogo de contratación en BD.
+ * Gemela de `diamToInstalacionKey` (claves del JSON local); esta produce los
+ * strings exactos de `tarifas-contratacion.json`. 1.5" no existe en el catálogo
+ * y cae al grupo 1/2-3/4-1 (mismo criterio documentado arriba).
+ */
+export function varianteInstalacionMedidor(diametro: string): string {
+  const d = diametro.replace(/"/g, '').trim();
+  if (d === '2') return 'Instalación Med 2 pulg';
+  if (d === '3') return 'Instalación Med 3 pulg';
+  if (d === '4') return 'Instalación Med 4 pulg';
+  return 'Instalación Med 1/2, 3/4 y 1 pulg';
+}
