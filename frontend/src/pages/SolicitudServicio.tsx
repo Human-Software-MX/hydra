@@ -1045,6 +1045,13 @@ function StepContratacion({
         </Field>
       )}
 
+      {selectedTipo && (selectedTipo.esIndividualizacion || selectedTipo.requiereInspeccion === false) && (
+        <p className="rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
+          Este tipo {selectedTipo.esIndividualizacion ? 'es de individualización y ' : ''}no requiere
+          inspección: la solicitud pasará <span className="font-medium">directo a cotización</span>.
+        </p>
+      )}
+
       {/* Variables de Contratación */}
       <div className="space-y-3">
         <p className="text-sm font-medium">Variables de Contratación:</p>

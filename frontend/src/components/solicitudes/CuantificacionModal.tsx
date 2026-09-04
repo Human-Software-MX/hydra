@@ -313,6 +313,12 @@ export function CuantificacionModal({
   const [aplicaAlcantarillado, setAplicaAlcantarillado] = useState(true);
   const [aplicaSaneamiento, setAplicaSaneamiento]       = useState(true);
   const [editandoInspeccion, setEditandoInspeccion]     = useState(false);
+  // Sin inspección (tipos de individualización que saltan directo a cotización)
+  // no hay datos de inspector que proteger: los campos abren editables.
+  useEffect(() => {
+    if (open) setEditandoInspeccion(!tieneInspeccion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, record?.id]);
 
   // ── Motor de tarifas versionado (API) con fallback offline ────────────────
 
@@ -574,13 +580,19 @@ export function CuantificacionModal({
           {/* ── Ubicación del servicio ─────────────────────────────────── */}
           <div className="flex items-center justify-between">
             <SectionTitle>Ubicación del servicio</SectionTitle>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
               onClick={() => setEditandoInspeccion((v) => !v)}
-              className="text-xs text-blue-600 hover:underline"
             >
-              {editandoInspeccion ? 'Bloquear' : 'Editar datos de inspección'}
-            </button>
+              {editandoInspeccion
+                ? 'Bloquear datos'
+                : tieneInspeccion
+                  ? 'Editar datos de inspección'
+                  : 'Editar datos'}
+            </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
