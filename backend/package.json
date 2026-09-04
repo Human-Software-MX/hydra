@@ -42,7 +42,8 @@
     "verify:clima": "node -r ts-node/register/transpile-only scripts/verify-clima.ts",
     "verify:espacial": "node -r ts-node/register/transpile-only scripts/verify-espacial.ts",
     "seed:mapeo-documentos": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-mapeo-documentos.ts",
-    "seed:conceptos-clausulas": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-conceptos-clausulas.ts"
+    "seed:conceptos-clausulas": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-conceptos-clausulas.ts",
+    "seed:variables-tipos": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node scripts/seed-variables-tipos.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
