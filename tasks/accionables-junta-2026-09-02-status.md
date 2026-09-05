@@ -18,14 +18,14 @@
 | 1.2 | Vigencia inicio/fin, cierre automático al crear nueva | ✅ modelo versionado (PR #55) |
 | 1.3 | Historial inmutable (refacturar con tarifa de entonces) | ✅ versionado + Kardex |
 | 1.4 | Incremento masivo (N tarifas × N admins, hoy 4 días) | ✅ actualización masiva con preview |
-| 1.5 | Exigir documento soporte (memo Finanzas / vocal) al cambiar | ⏳ 👤 (definir cuál documento con Jessica) |
+| 1.5 | Exigir documento soporte (memo Finanzas / vocal) al cambiar | 👤 Jessica NO maneja el memo → conseguir contacto en Finanzas (pendiente de Ian) |
 | 1.6 | Saneamiento/alcantarillado como % del agua, no tarifa | ✅ regla en BD (`porcentaje_de_servicio`+`porcentaje`, sembrada 10/12 y editable por CEA); cuantificación, modal y PDF de cobro la leen dinámicamente con fallback offline. Facturación periódica la consumirá después (documentado en motor-tarifas.md) |
 | 1.7 | IVA determinístico (doméstico 0, resto 16, no capturable) | ✅ CategoriaTarifa + clasificación fiscal por concepto (AMBAS / NO_OBJETO) |
 | 1.8 | Tarifas por administración | ✅ (13 admins, 1,570 tarifas en BD) |
 | 1.9 | Precios fijos aparte (reconexión, recargos) | ✅ |
 | 1.10 | Estructura base + m³ adicional + IVA en una tabla | ✅ |
-| 1.11 | Depurar catálogo de conceptos | ✅ importado el real SIGE (21 + 12) · 👤 cotejo final CEA |
-| 1.12 | ¿Excel feb-2026 vigente? | 👤 en TKT-144 |
+| 1.11 | Depurar catálogo de conceptos | ✅ Jessica confirma: el catálogo de la carpeta ES el de conceptos = «Cat conceptos contrat» del xlsx que ya importamos (21 con fiscal). Cotejo cerrado |
+| 1.12 | ¿Excel feb-2026 vigente? | ✅ Jessica (2026-09-05): feb-2026 es la BASE correcta; aplicando los incrementales se llega a las facturas actuales — valida el modelo versionado. Pendiente: extraer los % de los acuerdos PDF del Drive (carpeta Tarifas) |
 
 ## 2. Cuantificación / Cotización
 | # | Acción | Estado |
@@ -102,3 +102,10 @@
 Filtro Doméstico/No Doméstico (admins + tipos) · conceptos y cláusulas SIGE importados con fiscal real ·
 variables por tipo (1,433) · tarifas cotizadas en vivo en la solicitud · entrega de archivos por documento ·
 precarga de administración desde el pin · dirección fiscal desde predio · búsqueda en todos los dropdowns con catálogo
+
+
+## Respuestas de Jessica (correo 2026-09-05) — acciones derivadas
+1. Tarifas feb-2026 + incrementales = facturas actuales → **extraer los % de los acuerdos** (PDFs en Drive/Tarifas: art13, art14, art20, Acuerdo modificatorio) y aplicarlos vía actualización masiva para validar contra facturas reales
+2. Catálogo de conceptos = el ya importado ✓
+3. Memo de Finanzas → falta contacto en Finanzas (Ian)
+4. Hallazgo Drive: `Tarifas_varios.xlsx` NO importado aún (recargos/varios) + carpeta «Cuantificación del costo de contratación» + PDF «Inspección para Contratar — Datos ejemplo» (útil para el form de inspección)
