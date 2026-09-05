@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  buscarSugerenciasDireccion,
   coordenadasDesde,
   coordenadasDifieren,
   formatearCoordenadas,
   geocodificarDireccion,
   nominatimSearchUrl,
+  nominatimSuggestUrl,
   redondearCoord,
 } from './geo-picker';
 
@@ -92,5 +94,53 @@ describe('geocodificarDireccion', () => {
     const noLlamado = vi.fn();
     expect(await geocodificarDireccion('   ', { fetchImpl: noLlamado })).toBeNull();
     expect(noLlamado).not.toHaveBeenCalled();
+  });
+});
+
+describe('nominatimSuggestUrl', () => {
+  it('pide varias opciones en español, acotadas a Querétaro', () => {
+    const url = new URL(nominatimSuggestUrl('tec de monterrey'));
+    expect(url.searchParams.get('limit')).toBe('6');
+    expect(url.searchParams.get('bounded')).toBe('1');
+    expect(url.searchParams.get('viewbox')).toBe('-100.6,20.2,-99.8,21.0');
+    expect(url.searchParams.get('accept-language')).toBe('es');
+  });
+});
+
+describe('buscarSugerenciasDireccion', () => {
+  const respuesta = (body: unknown, ok = true) =>
+    ({ ok, json: async () => body }) as unknown as Response;
+
+  it('mapea resultados con etiqueta y coordenadas redondeadas, deduplicando', async () => {
+    const fetchImpl = vi.fn(async () =>
+      respuesta([
+        { display_name: 'Tec de Monterrey, Epigmenio González, Querétaro', lat: '20.61234567891', lon: '-100.4034' },
+        { display_name: 'Tec de Monterrey, Epigmenio González, Querétaro', lat: '20.61234567891', lon: '-100.4034' },
+        { display_name: 'Sin coords', lat: null, lon: null },
+      ]),
+    );
+    const s = await buscarSugerenciasDireccion('tec de monterrey', { fetchImpl });
+    expect(s).toEqual([
+      {
+        etiqueta: 'Tec de Monterrey, Epigmenio González, Querétaro',
+        coords: { lat: 20.6123457, lng: -100.4034 },
+      },
+    ]);
+  });
+
+  it('devuelve lista vacía con texto corto, error HTTP o excepción de red', async () => {
+    const noLlamado = vi.fn();
+    expect(await buscarSugerenciasDireccion('ab', { fetchImpl: noLlamado })).toEqual([]);
+    expect(noLlamado).not.toHaveBeenCalled();
+    expect(
+      await buscarSugerenciasDireccion('centro qro', { fetchImpl: vi.fn(async () => respuesta([], false)) }),
+    ).toEqual([]);
+    expect(
+      await buscarSugerenciasDireccion('centro qro', {
+        fetchImpl: vi.fn(async () => {
+          throw new Error('red');
+        }),
+      }),
+    ).toEqual([]);
   });
 });
