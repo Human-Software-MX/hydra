@@ -427,8 +427,14 @@ function OrdenInspeccionSheet({
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!record) return;
-    // Use real inspection data if available, otherwise fall back to current mock
+    setEditandoCampo(false);
+  }, [record?.id]);
+
+  useEffect(() => {
+    if (!record || editandoCampo) return;
+    // Use real inspection data if available, otherwise fall back to current mock.
+    // Depends on ordenInspeccion (not just the id): cuando el sync con Agora trae
+    // datos nuevos el registro cambia sin cambiar de id y hay que resembrar.
     const o = record.ordenInspeccion ?? MOCK_INSPECCIONES[mockIdx];
     setFMatCalle(o?.materialCalle ?? '');
     setFMatBanqueta(o?.materialBanqueta ?? '');
@@ -436,8 +442,7 @@ function OrdenInspeccionSheet({
     setFMlAguaBanqueta(o?.metrosRupturaAguaBanqueta != null ? String(o.metrosRupturaAguaBanqueta) : '');
     setFMlDrenajeCalle(o?.metrosRupturaDrenajeCalle != null ? String(o.metrosRupturaDrenajeCalle) : '');
     setFMlDrenajeBanqueta(o?.metrosRupturaDrenajeBanqueta != null ? String(o.metrosRupturaDrenajeBanqueta) : '');
-    setEditandoCampo(false);
-  }, [record?.id, mockIdx]);
+  }, [record, editandoCampo, mockIdx]);
 
   const guardarCampoMut = useMutation({
     mutationFn: () => {
