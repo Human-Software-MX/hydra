@@ -148,8 +148,13 @@ export class AgoraService {
     tipoContratacion: string;
     camposRequeridos: string[];
     creadoPor: string;
+    /** Pin del mapa de la solicitud + dirección (para el feed geo / Sentinel). */
+    geo?: Partial<Pick<CrearTicketDto,
+      'latitude' | 'longitude' | 'addressStreet' | 'addressExteriorNumber' |
+      'addressColony' | 'addressPostalCode' | 'addressCity' | 'addressState'>>;
   }): Promise<{ displayId: string | null; ref: string | null; mock: boolean }> {
     const dto: CrearTicketDto = {
+      ...(params.geo ?? {}),
       titulo: `Orden de inspección — ${params.folio}`,
       descripcion:
         `Inspección de campo para la solicitud ${params.folio}.\n` +

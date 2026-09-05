@@ -244,6 +244,59 @@ export class SolicitudesService {
     }
   }
 
+  /**
+   * Geolocalización y dirección del predio (pin del mapa de la solicitud) para
+   * que la orden llegue georreferenciada a Agora → visible en el feed geo que
+   * consume Sentinel. Best-effort: lo que no se pueda resolver, se omite.
+   */
+  private async geoDesdePredio(formData: Record<string, unknown> | null): Promise<{
+    latitude?: number;
+    longitude?: number;
+    addressStreet?: string;
+    addressExteriorNumber?: string;
+    addressColony?: string;
+    addressPostalCode?: string;
+    addressCity?: string;
+    addressState?: string;
+  }> {
+    const dir = (formData?.predioDir ?? null) as Record<string, unknown> | null;
+    if (!dir) return {};
+    const num = (v: unknown): number | undefined => {
+      const n = parseFloat(String(v ?? ''));
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const str = (v: unknown): string | undefined => {
+      const t = String(v ?? '').trim();
+      return t !== '' ? t : undefined;
+    };
+    const out: Record<string, unknown> = {
+      latitude: num(dir.gpsLat),
+      longitude: num(dir.gpsLng),
+      addressStreet: str(dir.calle),
+      addressExteriorNumber: str(dir.numExterior),
+      addressPostalCode: str(dir.codigoPostal),
+    };
+    try {
+      const [colonia, localidad, estado] = await Promise.all([
+        str(dir.coloniaINEGIId)
+          ? this.prisma.catalogoColoniaINEGI.findUnique({ where: { id: String(dir.coloniaINEGIId) }, select: { nombre: true } })
+          : null,
+        str(dir.localidadINEGIId)
+          ? this.prisma.catalogoLocalidadINEGI.findUnique({ where: { id: String(dir.localidadINEGIId) }, select: { nombre: true } })
+          : null,
+        str(dir.estadoINEGIId)
+          ? this.prisma.catalogoEstadoINEGI.findUnique({ where: { id: String(dir.estadoINEGIId) }, select: { nombre: true } })
+          : null,
+      ]);
+      if (colonia?.nombre) out.addressColony = colonia.nombre;
+      if (localidad?.nombre) out.addressCity = localidad.nombre;
+      if (estado?.nombre) out.addressState = estado.nombre;
+    } catch {
+      // catálogos INEGI no disponibles: la orden viaja con lo que haya
+    }
+    return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
+  }
+
   /** Variables de inspección del tipo (lo que la orden pide levantar en campo). */
   private async camposInspeccionDelTipo(tipoContratacionId?: string | null): Promise<string[]> {
     if (!tipoContratacionId) return [];
@@ -272,6 +325,7 @@ export class SolicitudesService {
           select: { nombre: true },
         })
       : null;
+    const geo = await this.geoDesdePredio(solicitud.formData as Record<string, unknown> | null);
     const orden = await this.agora.crearOrdenInspeccion({
       solicitudId: solicitud.id,
       folio: solicitud.folio,
@@ -279,6 +333,7 @@ export class SolicitudesService {
       tipoContratacion: tipo?.nombre ?? '',
       camposRequeridos: campos,
       creadoPor: 'hydra',
+      geo,
     });
     const ref = orden.displayId ?? orden.ref;
     await this.prisma.solicitudInspeccion.upsert({

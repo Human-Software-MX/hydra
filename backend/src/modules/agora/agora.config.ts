@@ -136,6 +136,16 @@ export interface CrearTicketDto {
   ceaContractNumber?: string;
   /** Atributos extra que viajan en custom_attributes (p. ej. orden de inspección). */
   customAttributes?: Record<string, unknown>;
+  /** Geolocalización y dirección del predio (pin del mapa de la solicitud) —
+   *  alimentan el feed geo de tickets que consume Sentinel. */
+  latitude?: number;
+  longitude?: number;
+  addressStreet?: string;
+  addressExteriorNumber?: string;
+  addressColony?: string;
+  addressPostalCode?: string;
+  addressCity?: string;
+  addressState?: string;
 }
 
 export interface AgoraTicketPayload {
@@ -162,6 +172,17 @@ export function construirPayloadTicket(
     channel: AGORA_CHANNEL,
     custom_attributes: customAttributes,
   };
+
+  if (dto.latitude != null && dto.longitude != null) {
+    ticket.latitude = dto.latitude;
+    ticket.longitude = dto.longitude;
+  }
+  if (dto.addressStreet) ticket.address_street = dto.addressStreet;
+  if (dto.addressExteriorNumber) ticket.address_exterior_number = dto.addressExteriorNumber;
+  if (dto.addressColony) ticket.address_colony = dto.addressColony;
+  if (dto.addressPostalCode) ticket.address_postal_code = dto.addressPostalCode;
+  if (dto.addressCity) ticket.address_city = dto.addressCity;
+  if (dto.addressState) ticket.address_state = dto.addressState;
 
   if (cfg.defaultCategoryId) ticket.ticket_category_id = cfg.defaultCategoryId;
   if (cfg.defaultSubcategoryId) ticket.ticket_subcategory_id = cfg.defaultSubcategoryId;
