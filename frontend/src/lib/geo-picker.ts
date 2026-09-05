@@ -110,6 +110,63 @@ export async function geocodificarDireccion(
   }
 }
 
+// ── Búsqueda con sugerencias (autocomplete estilo Google Maps) ───────────────
+
+/** Resultado de búsqueda libre: lugar/POI/dirección con su etiqueta legible. */
+export interface SugerenciaDireccion {
+  etiqueta: string;
+  coords: Coordenadas;
+}
+
+/** URL de sugerencias: misma caja de Querétaro, varias opciones, etiquetas en español. */
+export function nominatimSuggestUrl(q: string, email?: string): string {
+  const params = new URLSearchParams({
+    q,
+    format: 'json',
+    countrycodes: 'mx',
+    viewbox: GEO_VIEWBOX_QRO,
+    bounded: '1',
+    limit: '6',
+    'accept-language': 'es',
+  });
+  if (email) params.set('email', email);
+  return `${NOMINATIM_SEARCH_URL}?${params.toString()}`;
+}
+
+/**
+ * Busca lugares por texto libre (POIs, calles, colonias) dentro de Querétaro.
+ * Devuelve lista vacía si no hay resultados o si la petición falla; deduplica
+ * por etiqueta (Nominatim repite el mismo lugar con distintos osm_type).
+ */
+export async function buscarSugerenciasDireccion(
+  q: string,
+  opts: { email?: string; fetchImpl?: FetchLike } = {},
+): Promise<SugerenciaDireccion[]> {
+  const texto = q.trim();
+  if (texto.length < 3) return [];
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(nominatimSuggestUrl(texto, opts.email), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) return [];
+    const vistas = new Set<string>();
+    const sugerencias: SugerenciaDireccion[] = [];
+    for (const item of data as Array<{ display_name?: unknown; lat?: unknown; lon?: unknown }>) {
+      const etiqueta = typeof item.display_name === 'string' ? item.display_name : '';
+      const c = coordenadasDesde(item.lat, item.lon);
+      if (!etiqueta || !c || vistas.has(etiqueta)) continue;
+      vistas.add(etiqueta);
+      sugerencias.push({ etiqueta, coords: { lat: redondearCoord(c.lat), lng: redondearCoord(c.lng) } });
+    }
+    return sugerencias;
+  } catch {
+    return [];
+  }
+}
+
 // ── Geocodificación inversa (pin → dirección) ────────────────────────────────
 
 export const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';

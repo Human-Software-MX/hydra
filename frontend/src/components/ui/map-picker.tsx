@@ -15,11 +15,13 @@ import {
   GEO_CENTRO_DEFAULT,
   GEO_ZOOM_DEFAULT,
   GEO_ZOOM_SELECCION,
+  buscarSugerenciasDireccion,
   coordenadasDesde,
   coordenadasDifieren,
   geocodificarDireccion,
   redondearCoord,
   type Coordenadas,
+  type SugerenciaDireccion,
 } from '@/lib/geo-picker';
 
 /**
@@ -133,6 +135,42 @@ export default function MapPicker({
   const [ubicando, setUbicando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
 
+  // Buscador libre con sugerencias (lugares/POIs, no solo direcciones).
+  const [textoBusqueda, setTextoBusqueda] = useState('');
+  const [sugerencias, setSugerencias] = useState<SugerenciaDireccion[]>([]);
+  const [sugerenciasAbiertas, setSugerenciasAbiertas] = useState(false);
+  const [buscandoSugerencias, setBuscandoSugerencias] = useState(false);
+  // Descarta respuestas fuera de orden: solo la última petición pinta resultados.
+  const busquedaSeq = useRef(0);
+
+  useEffect(() => {
+    const q = textoBusqueda.trim();
+    if (q.length < 3) {
+      setSugerencias([]);
+      setBuscandoSugerencias(false);
+      return;
+    }
+    const seq = ++busquedaSeq.current;
+    setBuscandoSugerencias(true);
+    // Debounce de 600 ms: respeta la política de uso de Nominatim (≤1 req/s).
+    const t = setTimeout(async () => {
+      const resultados = await buscarSugerenciasDireccion(q, { email: NOMINATIM_EMAIL });
+      if (seq !== busquedaSeq.current) return;
+      setSugerencias(resultados);
+      setBuscandoSugerencias(false);
+      setSugerenciasAbiertas(true);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [textoBusqueda]);
+
+  const elegirSugerencia = (s: SugerenciaDireccion) => {
+    setTextoBusqueda(s.etiqueta);
+    setSugerencias([]);
+    setSugerenciasAbiertas(false);
+    setErrorBusqueda(null);
+    emitir(s.coords, { recentrar: true, zoom: GEO_ZOOM_SELECCION });
+  };
+
   const emitir = (c: Coordenadas | null, opts: { recentrar?: boolean; zoom?: number } = {}) => {
     const redondeado = c ? { lat: redondearCoord(c.lat), lng: redondearCoord(c.lng) } : null;
     ultimoEmitido.current = opts.recentrar ? null : redondeado;
@@ -230,6 +268,54 @@ export default function MapPicker({
             : 'Haga clic en el mapa para fijar la ubicación exacta del predio.'}
         </span>
       </div>
+
+      {!disabled && (
+        <div className="relative max-w-md">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-8 pl-8 pr-8 text-xs"
+            placeholder='Buscar lugar o dirección — ej. "Tec de Monterrey"'
+            value={textoBusqueda}
+            onChange={(e) => setTextoBusqueda(e.target.value)}
+            onFocus={() => sugerencias.length > 0 && setSugerenciasAbiertas(true)}
+            onBlur={() => setTimeout(() => setSugerenciasAbiertas(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (sugerencias.length > 0) elegirSugerencia(sugerencias[0]);
+              }
+              if (e.key === 'Escape') setSugerenciasAbiertas(false);
+            }}
+          />
+          {buscandoSugerencias && (
+            <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+          {sugerenciasAbiertas && sugerencias.length > 0 && (
+            <ul className="absolute z-[1000] mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+              {sugerencias.map((s) => (
+                <li key={s.etiqueta}>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-xs hover:bg-accent"
+                    // onMouseDown (no onClick): gana al onBlur del input, que cierra la lista.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      elegirSugerencia(s);
+                    }}
+                  >
+                    {s.etiqueta}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {sugerenciasAbiertas && !buscandoSugerencias && sugerencias.length === 0 && textoBusqueda.trim().length >= 3 && (
+            <p className="absolute z-[1000] mt-1 w-full rounded-md border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+              Sin resultados en Querétaro — intente con el nombre completo del lugar o coloque el pin manualmente.
+            </p>
+          )}
+        </div>
+      )}
 
       {errorBusqueda && <p className="text-xs text-destructive">{errorBusqueda}</p>}
 
