@@ -70,6 +70,8 @@ import {
   calcularInstalacionMedidor,
   resolveMatCalle,
   resolveMatBanqueta,
+  buildTarifaKey,
+  varianteConexionValida,
 } from '@/lib/cotizacion-tarifas';
 import {
   calcularDerechosAguaApi,
@@ -1456,6 +1458,19 @@ function CotizacionModal({
   const cuantData: CuantificacionData | undefined =
     cuantificacionData ?? (record.formData as any)?.cuantificacionData;
 
+  // Combinaciones calle-banqueta sin tarifa en el catálogo Feb-2026: avisar en vez de omitir en silencio.
+  const avisoNoTarifado = (() => {
+    const c = cuantData;
+    if (!c?.matCalle || !c?.matBanqueta) return null;
+    const clave = buildTarifaKey(c.matCalle, c.matBanqueta);
+    const faltantes: string[] = [];
+    if (!varianteConexionValida(clave, 'agua')) faltantes.push('derechos de conexión de agua');
+    if (!varianteConexionValida(clave, 'drenaje')) faltantes.push('derechos de conexión de drenaje');
+    if (faltantes.length === 0) return null;
+    return `La combinación ${clave} no está tarifada en el catálogo Feb-2026 de CEA: se omiten ${faltantes.join(' y ')}. Verificar el caso con CEA.`;
+  })();
+
+
   // Inspección real (sin fallback a mock)
   const ordenData = record.ordenInspeccion;
 
@@ -1563,6 +1578,11 @@ function CotizacionModal({
         </div>
 
         <p className="text-xs text-muted-foreground">* Los precios son estimados y pueden ajustarse según las condiciones del terreno.</p>
+        {avisoNoTarifado && (
+          <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+            {avisoNoTarifado}
+          </p>
+        )}
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
