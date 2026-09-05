@@ -343,6 +343,28 @@ export class AgoraService {
     return { id: actualizado.id, estado: actualizado.estado };
   }
 
+  /**
+   * Si el payload del webhook corresponde a una ORDEN DE INSPECCIÓN de Hydra,
+   * devuelve su solicitudId y si el ticket llegó resuelto/cerrado o con la
+   * inspección marcada (realizada con valor). El sync posterior es idempotente,
+   * así que ante la duda conviene sincronizar.
+   */
+  extraerOrdenInspeccion(body: unknown): { solicitudId: string; listo: boolean } | null {
+    if (!body || typeof body !== 'object') return null;
+    const raiz = body as Record<string, unknown>;
+    const nodo =
+      raiz.ticket && typeof raiz.ticket === 'object'
+        ? (raiz.ticket as Record<string, unknown>)
+        : raiz;
+    const attrs = (nodo.custom_attributes ?? {}) as Record<string, unknown>;
+    if (attrs.hydra_tipo !== 'orden_inspeccion') return null;
+    const solicitudId = typeof attrs.hydra_solicitud_id === 'string' ? attrs.hydra_solicitud_id : null;
+    if (!solicitudId) return null;
+    const status = typeof nodo.status === 'string' ? nodo.status.toLowerCase() : '';
+    const realizada = String(attrs.realizada ?? '').trim() !== '';
+    return { solicitudId, listo: ['resolved', 'closed'].includes(status) || realizada };
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /** display_id guardado en la respuesta de Agora (lookup del controlador Rails). */

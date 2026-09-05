@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AgoraService } from '../agora/agora.service';
@@ -41,6 +42,7 @@ export class SolicitudesService {
     private readonly domiciliosService: DomiciliosService,
     private readonly puntosServicioService: PuntosServicioService,
   
+    @Inject(forwardRef(() => AgoraService))
     private readonly agora: AgoraService,) {}
 
   /**
@@ -217,6 +219,31 @@ export class SolicitudesService {
   }
 
   // ── Inspection upsert ──────────────────────────────────────────────────────
+  /**
+   * Respaldo del push por webhook: cada 5 min sincroniza las órdenes de
+   * inspección abiertas con Agora. Idempotente (el sync solo escribe lo que
+   * cambió) y acotado para no golpear la API.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async pollInspeccionesAgora(): Promise<void> {
+    const pendientes = await this.prisma.solicitudInspeccion.findMany({
+      where: { agoraOrdenRef: { not: null }, estado: { not: 'completada' } },
+      select: { solicitudId: true },
+      take: 20,
+      orderBy: { solicitudId: 'asc' },
+    });
+    for (const p of pendientes) {
+      try {
+        const r = await this.syncInspeccionDesdeAgora(p.solicitudId);
+        if (r.camposRecibidos.length > 0) {
+          this.logger.log(`Poll Agora: ${p.solicitudId} recibió ${r.camposRecibidos.length} campo(s)`);
+        }
+      } catch {
+        // sin config de Agora o ticket sin datos: silencioso, reintenta al siguiente ciclo
+      }
+    }
+  }
+
   /** Variables de inspección del tipo (lo que la orden pide levantar en campo). */
   private async camposInspeccionDelTipo(tipoContratacionId?: string | null): Promise<string[]> {
     if (!tipoContratacionId) return [];
